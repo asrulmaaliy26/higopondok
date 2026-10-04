@@ -36,7 +36,7 @@ return [
     ],
 
     'sync' => [
-        'vps_url' => env('SYNC_VPS_URL', 'https://higo.lpialhidayah.or.id/api/db-sync/export'),
+        'vps_url' => env('SYNC_VPS_URL', 'https://higopondok.id/api/db-sync/export'),
         'secret' => env('SYNC_SECRET_KEY', 'higo_pondok_sync_secret_key_2026_secure'),
     ],
 

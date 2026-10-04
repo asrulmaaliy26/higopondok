@@ -55,7 +55,7 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           port: 22
           source: "release.tar.gz"
-          target: "/home/staialmannan/higo.lpialhidayah.or.id"
+          target: "/home/staialmannan/higopondok.id"
 
       - name: ♻️ Extract & Setup di Server
         uses: appleboy/ssh-action@v1.0.3
@@ -65,7 +65,7 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           port: 22
           script: |
-            cd /home/staialmannan/higo.lpialhidayah.or.id
+            cd /home/staialmannan/higopondok.id
 
             # Ekstrak file
             tar -xzf release.tar.gz
@@ -82,7 +82,7 @@ jobs:
             fi
 
             # Setup Ownership dan Permission Laravel
-            chown -R staialmannan:staialmannan /home/staialmannan/higo.lpialhidayah.or.id
+            chown -R staialmannan:staialmannan /home/staialmannan/higopondok.id
             chmod -R 775 storage bootstrap/cache
 
             # Link storage jika belum ada

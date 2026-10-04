@@ -25,7 +25,7 @@ class DatabaseSyncService
     public static function getVpsUrl(): string
     {
         return config('services.sync.vps_url') 
-            ?: env('SYNC_VPS_URL', 'https://higo.lpialhidayah.or.id/api/db-sync/export');
+            ?: env('SYNC_VPS_URL', 'https://higopondok.id/api/db-sync/export');
     }
 
     /**

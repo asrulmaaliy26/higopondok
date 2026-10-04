@@ -37,7 +37,7 @@ export default function SyncDatabaseModal() {
   const resultData = pullMutation.data;
   const errorObj = pullMutation.error;
 
-  const vpsUrl = statusData?.vps_url || 'https://higo.lpialhidayah.or.id/api/db-sync/export';
+  const vpsUrl = statusData?.vps_url || 'https://higopondok.id/api/db-sync/export';
   const dbName = statusData?.database || 'staialmannan_higo';
 
   return (
