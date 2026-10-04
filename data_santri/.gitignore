@@ -1,0 +1,26 @@
+# =============================================================================
+# DATA SANTRI - GIT IGNORE
+# =============================================================================
+
+# Python Bytecode & Cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Chrome Browser User Profile & Storage Cache (Binary & Session Data)
+.chrome_simkeu_profile/
+*.crx
+
+# Sensitive Authentication & Session Cookies
+simkeu_cookies.json
+
+# Temporary Scraping Files & Logs
+sample_detail.html
+*.html
+*.log
+*.tmp
+*.temp
+
+# OS Generated Files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,2 @@
+Jenjang: ['MA', 'MI', 'PPTQ', 'SMP']
+Kelas: ['1', '1 / أ', '10 / X', '11 / XI', '12 / XII', '2 / ب', '3 / ت', '4 / ث', '5 / ج', '6 / ح', '7 / VII', '8 / VIII', '9 / IX', 'Lulus / Alumni', 'PASCA MAJLISAN', 'PRA MAJLISAN']
