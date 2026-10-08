@@ -17,6 +17,10 @@ export default function ImpersonationBanner() {
 
   const getRoleLabel = (r) => {
     switch (r) {
+      case ROLES.SUPER_ADMIN:
+        return 'Super Admin';
+      case ROLES.ADMIN:
+        return 'Admin';
       case ROLES.KANTIN:
         return 'Kantin';
       case ROLES.KURIR:
@@ -29,14 +33,37 @@ export default function ImpersonationBanner() {
   };
 
   const handleReturnToAdmin = async () => {
+    const adminUser = originalAdmin;
+    const adminToken = useAuthStore.getState().originalToken;
+
     try {
       await api.post('/logout');
     } catch (e) {
       console.error('Gagal membatalkan token penyamaran di server:', e);
     }
+
     // Bersihkan cache query agar data target user tidak tercampur ke akun admin
     queryClient.clear();
     stopImpersonating();
+
+    // Pastikan tersimpan sinkron di localStorage sebelum navigasi
+    try {
+      const storageKey = 'auth-storage';
+      const raw = localStorage.getItem(storageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed.state) {
+          parsed.state.user = adminUser;
+          parsed.state.token = adminToken;
+          parsed.state.originalAdmin = null;
+          parsed.state.originalToken = null;
+          localStorage.setItem(storageKey, JSON.stringify(parsed));
+        }
+      }
+    } catch (err) {
+      console.error('Sync auth-storage error:', err);
+    }
+
     window.location.href = '/dashboard/users';
   };
 

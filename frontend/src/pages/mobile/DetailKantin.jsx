@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useParams, useNavigate } from '@tanstack/react-router';
@@ -26,6 +26,7 @@ import { SkeletonCard } from '../../components/ui/Skeleton';
 import { useAuthStore } from '../../store/authStore';
 import { useCartStore } from '../../store/cartStore';
 import AppImage from '../../components/common/AppImage';
+import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { ProductOptionModal } from '../../components/modals/ProductOptionModal';
 
 const hasVariants = (product) => {
@@ -45,6 +46,7 @@ export default function DetailKantin() {
   const navigate = useNavigate();
   const token = useAuthStore((state) => state.token);
   const user = useAuthStore((state) => state.user);
+  const originalAdmin = useAuthStore((state) => state.originalAdmin);
   const { addItem, removeItem, getCanteenItems, getTotalItems } = useCartStore();
 
   const [selectedProduct, setSelectedProduct] = useState(null);
@@ -53,6 +55,15 @@ export default function DetailKantin() {
   const [selectedCategory, setSelectedCategory] = useState('Semua');
   const [searchQuery, setSearchQuery] = useState('');
   const [imageError, setImageError] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 60);
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   // Custom Order state (HiSend Titip Barang)
   const [showCustomModal, setShowCustomModal] = useState(false);
@@ -80,10 +91,27 @@ export default function DetailKantin() {
 
   if (isLoadingCanteen) {
     return (
-      <div className="space-y-3 bg-white dark:bg-gray-900 p-4 border border-gray-200 dark:border-gray-800 max-w-4xl mx-auto">
-        {[1, 2, 3].map((i) => (
-          <SkeletonCard key={i} />
-        ))}
+      <div className="bg-slate-50 dark:bg-gray-950 min-h-screen font-sans">
+        <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 p-2 sm:p-2.5 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => (window.history.length > 1 ? window.history.back() : navigate({ to: '/kantin' }))}
+            className="p-1 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-none border border-gray-200 dark:border-gray-700 cursor-pointer"
+            title="Kembali"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <span className="text-xs font-bold text-gray-700 dark:text-gray-300">Detail Toko & Menu</span>
+        </div>
+        <div className="p-3 sm:p-4 max-w-4xl mx-auto">
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-4 rounded-none shadow-xs">
+            <LoadingSpinner 
+              text="Memuat Menu Toko..." 
+              subtext="Mengambil daftar sajian dan ketersediaan menu" 
+              minHeight="min-h-[160px]"
+            />
+          </div>
+        </div>
       </div>
     );
   }
@@ -146,7 +174,7 @@ export default function DetailKantin() {
   };
 
   const handleGoToCart = () => {
-    navigate({ to: '/dashboard/keranjang' });
+    navigate({ to: token ? '/dashboard/keranjang' : '/keranjang' });
   };
 
   const filteredProducts =
@@ -163,28 +191,51 @@ export default function DetailKantin() {
 
   return (
     <div className="bg-slate-50 dark:bg-gray-950 min-h-screen pb-32 font-sans relative">
-      {/* FLOATING TOP NAVIGATION (Fixed & Sharp) */}
-      <div className="fixed top-0 left-0 right-0 z-40 p-2.5 sm:p-3 pointer-events-none flex items-center justify-between max-w-4xl mx-auto">
-        <button
-          type="button"
-          onClick={() => (window.history.length > 1 ? window.history.back() : navigate({ to: '/dashboard/kantin' }))}
-          className="pointer-events-auto w-8 h-8 bg-black/70 hover:bg-black text-white flex items-center justify-center rounded-none border border-white/20 transition-all shadow-md active:scale-95"
-          title="Kembali"
-        >
-          <ChevronLeft className="w-5 h-5" />
-        </button>
+      {/* FLOATING & SOLID STICKY TOP NAVIGATION */}
+      <div
+        className={`fixed left-0 right-0 z-40 transition-all duration-200 ${
+          originalAdmin ? 'top-[36px] sm:top-[40px]' : 'top-0'
+        } ${
+          isScrolled
+            ? 'bg-gradient-to-r from-green-900 via-green-800 to-green-900 dark:from-gray-950 dark:via-emerald-950 dark:to-gray-950 border-b border-green-700/80 dark:border-gray-800 shadow-md py-2 px-3 sm:px-4'
+            : 'bg-transparent p-2.5 sm:p-3 pointer-events-none'
+        }`}
+      >
+        <div className="max-w-4xl mx-auto flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <button
+              type="button"
+              onClick={() => (window.history.length > 1 ? window.history.back() : navigate({ to: '/kantin' }))}
+              className="pointer-events-auto w-8 h-8 bg-black/70 hover:bg-black text-white flex items-center justify-center rounded-none border border-white/20 transition-all shadow-md active:scale-95 shrink-0 cursor-pointer"
+              title="Kembali"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
 
-        {totalItems > 0 && (
-          <button
-            type="button"
-            onClick={handleGoToCart}
-            className="pointer-events-auto px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-none flex items-center gap-1.5 shadow-md border border-white/20 transition-all relative text-xs font-bold"
-            title="Lihat Keranjang"
-          >
-            <ShoppingCart className="w-4 h-4" />
-            <span>Keranjang ({totalItems})</span>
-          </button>
-        )}
+            {isScrolled && (
+              <div className="min-w-0 animate-fade-in">
+                <h2 className="font-extrabold text-sm text-white tracking-tight leading-none drop-shadow-xs truncate">
+                  {canteen.name}
+                </h2>
+                <p className="text-[10px] text-green-200 font-medium mt-0.5 truncate">
+                  Antar ke Kamar • Rp {parseFloat(canteen.delivery_fee || 3000).toLocaleString('id-ID')}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {totalItems > 0 && (
+            <button
+              type="button"
+              onClick={handleGoToCart}
+              className="pointer-events-auto px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-none flex items-center gap-1.5 shadow-md border border-white/20 transition-all text-xs font-bold shrink-0 cursor-pointer"
+              title="Lihat Keranjang"
+            >
+              <ShoppingCart className="w-4 h-4" />
+              <span>Keranjang ({totalItems})</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* 1. STORE HERO BANNER (GoFood Resto Header) */}

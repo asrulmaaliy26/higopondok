@@ -35,12 +35,14 @@ class Canteen extends Model
         'longitude',
         'rating',
         'rating_count',
-        'whatsapp_number'
+        'whatsapp_number',
+        'balance'
     ];
 
     protected function casts(): array
     {
         return [
+            'balance' => 'float',
             'delivery_fee' => 'float',
             'delivery_rates' => 'array',
             'admin_fee' => 'float',

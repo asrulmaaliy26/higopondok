@@ -188,12 +188,52 @@ class AdminController extends Controller
             ];
         });
 
+        // 1. Metrik Finansial & Pembayaran
+        $totalOmzet = (float) Order::where('status', 'completed')->sum('total_price');
+        $totalAdminFee = (float) Order::where('status', 'completed')->sum('admin_fee');
+        $totalDeliveryFee = (float) Order::where('status', 'completed')->sum('delivery_fee');
+
+        $todayOmzet = (float) Order::whereDate('created_at', today())->where('status', 'completed')->sum('total_price');
+        $todayOrders = Order::whereDate('created_at', today())->count();
+
+        $paidOrdersCount = Order::where('payment_status', 'paid')->count();
+        $unpaidOrdersCount = Order::where('payment_status', '!=', 'paid')->count();
+
+        // 2. Daftar Transaksi / Pembayaran Terbaru (Terakhir 4 transaksi)
+        $recentPayments = Order::with(['user:id,name', 'canteen:id,name'])
+            ->latest()
+            ->take(4)
+            ->get()
+            ->map(function ($order) {
+                return [
+                    'id' => $order->id,
+                    'user_name' => $order->user?->name ?? 'Santri',
+                    'canteen_name' => $order->canteen?->name ?? 'Kantin',
+                    'total_price' => (float) $order->total_price,
+                    'admin_fee' => (float) $order->admin_fee,
+                    'delivery_fee' => (float) $order->delivery_fee,
+                    'payment_status' => $order->payment_status ?? 'unpaid',
+                    'order_status' => $order->status,
+                    'time' => $order->created_at?->diffForHumans() ?? 'Baru saja',
+                ];
+            });
+
         return response()->json([
             'total_santri' => $totalSantri,
             'total_transactions' => $totalTransactions,
             'pending_approvals' => $pendingApprovals,
             'total_admin_debt' => $totalAdminDebt,
-            'recent_activities' => $recentActivities
+            'recent_activities' => $recentActivities,
+            'payment_summary' => [
+                'total_omzet' => $totalOmzet,
+                'total_admin_fee' => $totalAdminFee,
+                'total_delivery_fee' => $totalDeliveryFee,
+                'today_omzet' => $todayOmzet,
+                'today_orders' => $todayOrders,
+                'paid_orders_count' => $paidOrdersCount,
+                'unpaid_orders_count' => $unpaidOrdersCount,
+                'recent_payments' => $recentPayments,
+            ]
         ]);
     }
 
@@ -237,18 +277,29 @@ class AdminController extends Controller
 
     public function impersonateUser(Request $request, $id)
     {
-        // 1. Pastikan yang meminta ini adalah ADMIN sejati
-        if (!$request->user()->hasRole('admin')) {
-            return response()->json(['message' => 'Unauthorized. Hanya Admin yang dapat menyamar.'], 403);
+        // 1. Pastikan yang meminta ini adalah Super Admin / Admin
+        if (!$request->user()->hasRole('super_admin') && !$request->user()->hasRole('admin')) {
+            return response()->json(['message' => 'Unauthorized. Hanya Super Admin dan Admin yang dapat menyamar.'], 403);
         }
 
-        // 2. Cegah admin menyamar menjadi admin lain untuk keamanan
         $targetUser = User::findOrFail($id);
-        if ($targetUser->hasRole('admin')) {
-            return response()->json(['message' => 'Tidak dapat menyamar sebagai sesama Admin.'], 403);
+
+        // 2. Cegah menyamar ke akun sendiri
+        if ($targetUser->id === $request->user()->id) {
+            return response()->json(['message' => 'Tidak dapat menyamar ke akun sendiri.'], 422);
         }
 
-        // 3. Buatkan token Sanctum baru khusus untuk penyamaran ini
+        // 3. Cegah menyamar menjadi sesama Super Admin untuk keamanan
+        if ($targetUser->hasRole('super_admin')) {
+            return response()->json(['message' => 'Tidak dapat menyamar sebagai Super Admin.'], 403);
+        }
+
+        // 4. Jika requester bukan Super Admin (Admin biasa), cegah menyamar sebagai sesama Admin
+        if (!$request->user()->hasRole('super_admin') && $targetUser->hasRole('admin')) {
+            return response()->json(['message' => 'Admin tidak diizinkan menyamar sebagai sesama Admin.'], 403);
+        }
+
+        // 5. Buatkan token Sanctum baru khusus untuk penyamaran ini
         // Kita beri nama token 'impersonation_token'
         $token = $targetUser->createToken('impersonation_token')->plainTextToken;
 
@@ -328,13 +379,13 @@ class AdminController extends Controller
 
     public function activityLogs(Request $request)
     {
-        $logs = \App\Domains\Admin\ActivityLog::with('user:id,name,role')->orderBy('created_at', 'desc')->paginate(50);
+        $logs = \App\Domains\Admin\ActivityLog::with(['user:id,name', 'user.roles'])->orderBy('created_at', 'desc')->paginate(50);
         return response()->json($logs);
     }
 
     public function paymentLogs(Request $request)
     {
-        $logs = \App\Domains\Admin\PaymentLog::with(['user:id,name,role', 'order:id,total_price,status'])->orderBy('created_at', 'desc')->paginate(50);
+        $logs = \App\Domains\Admin\PaymentLog::with(['user:id,name', 'user.roles', 'order:id,total_price,status'])->orderBy('created_at', 'desc')->paginate(50);
         return response()->json($logs);
     }
 

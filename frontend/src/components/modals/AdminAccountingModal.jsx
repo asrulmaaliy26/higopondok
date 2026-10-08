@@ -176,23 +176,29 @@ export default function AdminAccountingModal({ isOpen, onClose }) {
                     <ArrowRightLeft className="w-3.5 h-3.5" />
                   </div>
                   <h3 className="font-bold text-xs sm:text-sm text-gray-900 dark:text-white">
-                    3. Pengalihan Ongkir Toko Harian (&gt; 3 User di Toko yang Sama)
+                    3. Pengalihan Ongkir Bertingkat (Santri ke-2 &amp; ke-3+)
                   </h3>
                 </div>
                 <p className="text-[11px] text-gray-600 dark:text-gray-300 leading-relaxed">
-                  Efisiensi rute pengantaran driver di toko yang sama dalam 1 hari kalender diatur dengan pembagian kas adil:
+                  Efisiensi rute pengantaran driver di toko yang sama dalam 1 hari kalender diatur dengan pembagian kas bertingkat:
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 text-xs">
                   <div className="p-2 rounded-none bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700">
-                    <span className="font-bold text-green-700 dark:text-green-400 block text-[11px]">User ke-1, 2, dan 3:</span>
+                    <span className="font-bold text-green-700 dark:text-green-400 block text-[11px]">User ke-1:</span>
                     <p className="text-[10px] text-gray-600 dark:text-gray-300 mt-0.5">
-                      Ongkir kurir <strong>100% UTUH</strong> tanpa potongan pengalihan (Rp 0).
+                      Ongkir kurir <strong>100% UTUH</strong> tanpa potongan (Kurir Rp 3.000 / Admin Rp 2.000).
+                    </p>
+                  </div>
+                  <div className="p-2 rounded-none bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/50">
+                    <span className="font-bold text-blue-700 dark:text-blue-400 block text-[11px]">User ke-2:</span>
+                    <p className="text-[10px] text-gray-600 dark:text-gray-300 mt-0.5">
+                      Ongkir <strong>dialihkan Rp 1.000</strong> ke admin (Kurir Rp 2.000 / Admin Rp 3.000).
                     </p>
                   </div>
                   <div className="p-2 rounded-none bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50">
-                    <span className="font-bold text-amber-700 dark:text-amber-400 block text-[11px]">User ke-4 dan seterusnya:</span>
+                    <span className="font-bold text-amber-700 dark:text-amber-400 block text-[11px]">User ke-3+:</span>
                     <p className="text-[10px] text-gray-600 dark:text-gray-300 mt-0.5">
-                      Ongkir kurir <strong>dipotong Rp 2.000</strong> dan dialihkan menjadi pendapatan kas Admin.
+                      Ongkir <strong>dialihkan Rp 2.000</strong> ke admin (Kurir Rp 1.000 / Admin Rp 4.000).
                     </p>
                   </div>
                 </div>
@@ -236,7 +242,7 @@ export default function AdminAccountingModal({ isOpen, onClose }) {
                 <div className="text-xs font-mono bg-black/40 p-2 rounded-none border border-white/10 space-y-0.5">
                   <div>Grand Total = Total HPJ + Total Ongkir Kurir + Total Kas Admin</div>
                   <div className="text-gray-400 text-[10px] pt-0.5 border-t border-white/10">
-                    Kas Admin = Biaya Admin Pokok + Pindahan Ongkir Kurir (User &gt; 3)
+                    Kas Admin = Biaya Admin Pokok + Pindahan Ongkir Kurir (User Ke-2 &amp; Ke-3+)
                   </div>
                 </div>
               </div>
@@ -299,11 +305,9 @@ export default function AdminAccountingModal({ isOpen, onClose }) {
                       onChange={(e) => setSimUserRank(Number(e.target.value))}
                       className="w-full px-2 py-1 border rounded-none font-semibold text-xs bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-700 focus:ring-1 focus:ring-green-500 outline-none"
                     >
-                      <option value="1">User ke-1 (Utuh)</option>
-                      <option value="2">User ke-2 (Utuh)</option>
-                      <option value="3">User ke-3 (Utuh)</option>
-                      <option value="4">User ke-4+ (Potong 2.000 ke Admin)</option>
-                      <option value="5">User ke-5+ (Potong 2.000 ke Admin)</option>
+                      <option value="1">User ke-1 (Utuh: Kurir Rp 3rb / Admin Rp 2rb)</option>
+                      <option value="2">User ke-2 (Dialihkan 1.000: Kurir Rp 2rb / Admin Rp 3rb)</option>
+                      <option value="3">User ke-3+ (Dialihkan 2.000: Kurir Rp 1rb / Admin Rp 4rb)</option>
                     </select>
                   </div>
                 </div>
@@ -386,7 +390,9 @@ export default function AdminAccountingModal({ isOpen, onClose }) {
                   </div>
                   <div className="text-right text-[10px] text-green-100">
                     <div>{simQuantity} Produk</div>
-                    <div className="font-semibold">{simUserRank > 3 ? 'Status: User > 3 Toko' : 'Status: User 1-3'}</div>
+                    <div className="font-semibold">
+                      {simUserRank === 1 ? 'Status: User Ke-1 (Utuh)' : (simUserRank === 2 ? 'Status: User Ke-2 (-1.000)' : 'Status: User Ke-3+ (-2.000)')}
+                    </div>
                   </div>
                 </div>
 
@@ -407,8 +413,9 @@ export default function AdminAccountingModal({ isOpen, onClose }) {
                     <tr>
                       <th className="p-2">Jumlah Produk</th>
                       <th className="p-2 text-right">Total Jasa</th>
-                      <th className="p-2 text-right text-blue-700 dark:text-blue-400">User 1–3 (Kurir/Admin)</th>
-                      <th className="p-2 text-right text-amber-700 dark:text-amber-400">User 4+ (Kurir/Admin)</th>
+                      <th className="p-2 text-right text-green-700 dark:text-green-400">User 1 (Utuh)</th>
+                      <th className="p-2 text-right text-blue-700 dark:text-blue-400">User 2 (-1.000)</th>
+                      <th className="p-2 text-right text-amber-700 dark:text-amber-400">User 3+ (-2.000)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 dark:divide-gray-700 font-medium font-mono">
@@ -419,7 +426,8 @@ export default function AdminAccountingModal({ isOpen, onClose }) {
                       { label: '16 s/d 20 Item', qty: 16 },
                     ].map((b, idx) => {
                       const f1 = calculateOrderFees(b.qty, 1, true);
-                      const f4 = calculateOrderFees(b.qty, 4, true);
+                      const f2 = calculateOrderFees(b.qty, 2, true);
+                      const f3 = calculateOrderFees(b.qty, 3, true);
                       const grandTotal = f1.deliveryFee + f1.adminFee;
                       return (
                         <tr key={b.label} className={`hover:bg-gray-50 dark:hover:bg-gray-800/50 ${idx % 2 === 1 ? 'bg-gray-50/50 dark:bg-gray-900/30' : ''}`}>
@@ -429,7 +437,10 @@ export default function AdminAccountingModal({ isOpen, onClose }) {
                             <span className="text-blue-600 font-bold">{f1.deliveryFee.toLocaleString('id-ID')}</span> / <span className="text-purple-600 font-bold">{f1.adminFee.toLocaleString('id-ID')}</span>
                           </td>
                           <td className="p-2 text-right">
-                            <span className="text-blue-600 font-bold">{f4.deliveryFee.toLocaleString('id-ID')}</span> / <span className="text-purple-600 font-bold">{f4.adminFee.toLocaleString('id-ID')}</span>
+                            <span className="text-blue-600 font-bold">{f2.deliveryFee.toLocaleString('id-ID')}</span> / <span className="text-purple-600 font-bold">{f2.adminFee.toLocaleString('id-ID')}</span>
+                          </td>
+                          <td className="p-2 text-right">
+                            <span className="text-blue-600 font-bold">{f3.deliveryFee.toLocaleString('id-ID')}</span> / <span className="text-purple-600 font-bold">{f3.adminFee.toLocaleString('id-ID')}</span>
                           </td>
                         </tr>
                       );
@@ -440,7 +451,8 @@ export default function AdminAccountingModal({ isOpen, onClose }) {
 
               <div className="p-2 rounded-none bg-gray-50 dark:bg-gray-800 text-[10px] text-gray-500 dark:text-gray-400 space-y-0.5 border border-gray-200 dark:border-gray-700">
                 <div>• Format pembagian: <span className="text-blue-600 font-bold font-mono">Ongkir Kurir</span> / <span className="text-purple-600 font-bold font-mono">Kas Admin</span></div>
-                <div>• Pada User ke-4+, kas admin menerima tambahan +Rp 2.000 dari pengalihan ongkir kurir.</div>
+                <div>• User ke-2: kas admin menerima tambahan +Rp 1.000 dari pengalihan ongkir kurir.</div>
+                <div>• User ke-3+: kas admin menerima tambahan +Rp 2.000 dari pengalihan ongkir kurir.</div>
               </div>
             </div>
           )}

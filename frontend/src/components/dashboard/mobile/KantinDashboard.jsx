@@ -4,11 +4,14 @@ import { useQuery } from '@tanstack/react-query';
 import api from '../../../lib/axios';
 import { useCanteenStore } from '../../../store/canteenStore';
 import { useNavigate } from '@tanstack/react-router';
+import { ROLES } from '../../../config/roles';
 import AppImage from '../../common/AppImage';
+import LoadingSpinner from '../../common/LoadingSpinner';
 
 export default function KantinDashboard({ user }) {
   const navigate = useNavigate();
   const { setActiveCanteenId, setIsStoreSelected } = useCanteenStore();
+  const isAdmin = user?.role === ROLES.ADMIN || user?.role === ROLES.SUPER_ADMIN;
 
   // Fetch Global Analytics
   const { data: analytics, isLoading } = useQuery({
@@ -26,10 +29,16 @@ export default function KantinDashboard({ user }) {
     navigate({ to: '/dashboard/toko-saya/pesanan' });
   };
 
-  if (isLoading) {
+  if (isLoading && !analytics) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+      <div className="space-y-3 font-sans">
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-5 rounded-none shadow-xs">
+          <LoadingSpinner 
+            text="Memuat Data Kas & Toko..." 
+            subtext="Mengalkulasi saldo, pendapatan, dan ranking toko mitra" 
+            minHeight="min-h-[160px]"
+          />
+        </div>
       </div>
     );
   }
@@ -51,7 +60,7 @@ export default function KantinDashboard({ user }) {
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-none bg-green-400 animate-pulse"></span>
               <span className="text-[10px] sm:text-xs text-green-200/90 uppercase font-black tracking-widest">
-                Saldo Aktif Merchant
+                {isAdmin ? 'Saldo Kas Seluruh Toko' : 'Saldo Aktif Merchant'}
               </span>
             </div>
             <button 
@@ -78,7 +87,7 @@ export default function KantinDashboard({ user }) {
               </div>
               <div className="flex items-center gap-1.5">
                 <Store className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="text-[11px] text-green-100/80">Outlet:</span>
+                <span className="text-[11px] text-green-100/80">{isAdmin ? 'Mitra Toko:' : 'Outlet:'}</span>
                 <span className="font-bold font-mono text-white">{analytics?.store_performance?.length || 0}</span>
               </div>
             </div>
@@ -87,7 +96,7 @@ export default function KantinDashboard({ user }) {
               onClick={() => navigate({ to: '/dashboard/toko-saya' })}
               className="text-[11px] font-bold text-emerald-300 hover:text-white flex items-center gap-0.5 transition-colors cursor-pointer"
             >
-              <span>Toko Saya</span>
+              <span>{isAdmin ? 'Katalog & Toko' : 'Toko Saya'}</span>
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -168,10 +177,10 @@ export default function KantinDashboard({ user }) {
         <div className="p-2.5 sm:p-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
           <h3 className="text-xs font-bold text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
             <TrendingUp className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
-            Performa Toko Anda
+            {isAdmin ? 'Peringkat Seluruh Toko Mitra' : 'Performa Toko Anda'}
           </h3>
           <span className="text-[10px] font-bold text-gray-500 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.2 rounded-none border border-gray-200 dark:border-gray-700">
-            {analytics?.store_performance?.length || 0} Outlet
+            {analytics?.store_performance?.length || 0} {isAdmin ? 'Toko' : 'Outlet'}
           </span>
         </div>
         <div className="divide-y divide-gray-100 dark:divide-gray-800">

@@ -62,10 +62,10 @@ class DatabaseSyncController extends Controller
     public function pull(Request $request): JsonResponse
     {
         $user = $request->user();
-        if (!$user || !$user->hasRole('admin')) {
+        if (!$user || !$user->hasRole('super_admin')) {
             return response()->json([
                 'success' => false,
-                'error'   => 'Hanya Administrator yang memiliki izin untuk menyinkronkan database dari VPS.',
+                'error'   => 'Hanya Super Administrator yang memiliki izin untuk menyinkronkan database dari VPS.',
             ], 403);
         }
 

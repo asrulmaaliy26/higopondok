@@ -15,28 +15,35 @@ class UserSeeder extends Seeder
      */
     public function run(): void
     {
-        $password = Hash::make('password');
+        $password = 'password';
 
-        // Create Admin
-        $admin = User::firstOrCreate(
-            ['email' => 'admin@higopondok.com'],
-            ['name' => 'Administrator', 'password' => $password]
+        // Create Super Admin
+        $superAdmin = User::firstOrCreate(
+            ['email' => 'superadmin@higopondok.id'],
+            ['name' => 'Super Administrator', 'password' => $password]
         );
-        $admin->assignRole('admin');
+        $superAdmin->syncRoles(['super_admin']);
+
+        // Create Admin (Pengelola Seluruh Kantin)
+        $canteenAdmin = User::firstOrCreate(
+            ['email' => 'admin@higopondok.id'],
+            ['name' => 'Admin Pengelola Kantin', 'password' => $password]
+        );
+        $canteenAdmin->syncRoles(['admin']);
 
         // Create Santri
         $santri = User::firstOrCreate(
-            ['email' => 'santri@higopondok.com'],
+            ['email' => 'santri@higopondok.id'],
             ['name' => 'Santri Dummy', 'password' => $password]
         );
-        $santri->assignRole('user');
+        $santri->syncRoles(['user']);
 
-        // Create Kantin
+        // Create Mitra Kantin Mandiri
         $kantin = User::firstOrCreate(
-            ['email' => 'kantin@higopondok.com'],
+            ['email' => 'kantin@higopondok.id'],
             ['name' => 'Kantin Dummy', 'password' => $password]
         );
-        $kantin->assignRole('kantin');
+        $kantin->syncRoles(['kantin']);
 
         // Seed Canteen for Kantin Dummy
         $canteen = Canteen::firstOrCreate(
@@ -45,7 +52,8 @@ class UserSeeder extends Seeder
                 'name' => 'Kantin Barokah Pusat',
                 'description' => 'Menyediakan berbagai macam makanan dan minuman segar untuk para santri.',
                 'status' => 'approved',
-                'is_open' => true,
+                'open_time' => '07:00:00',
+                'close_time' => '21:00:00',
                 'delivery_fee' => 5000,
                 'admin_fee' => 2000,
                 'sold_count' => 1250,
@@ -93,12 +101,53 @@ class UserSeeder extends Seeder
 
         // Create Kurir
         $kurir = User::firstOrCreate(
-            ['email' => 'kurir@higopondok.com'],
+            ['email' => 'kurir@higopondok.id'],
             ['name' => 'Kurir Dummy', 'password' => $password]
         );
         $kurir->assignRole('kurir');
         if ($canteen) {
             $kurir->assignedCanteens()->syncWithoutDetaching([$canteen->id]);
         }
+
+        // Create Guru / Staff Dummy
+        $guru = User::firstOrCreate(
+            ['email' => 'guru@higopondok.id'],
+            [
+                'name' => 'Ustadz Ahmad Fauzi, M.Pd.',
+                'password' => $password,
+                'phone' => '081299887766',
+                'is_teacher' => true,
+                'niy' => 'NIY. 1988.02.045',
+                'teacher_unit' => 'MA',
+                'balance' => 250000,
+            ]
+        );
+        $guru->update([
+            'is_teacher' => true,
+            'niy' => 'NIY. 1988.02.045',
+            'teacher_unit' => 'MA',
+            'balance' => 250000,
+        ]);
+        $guru->assignRole('user');
+
+        $guruSmp = User::firstOrCreate(
+            ['email' => 'guru.smp@higopondok.id'],
+            [
+                'name' => 'Ustadzah Siti Maryam, S.Pd.',
+                'password' => $password,
+                'phone' => '081377889900',
+                'is_teacher' => true,
+                'niy' => 'NIY. 1993.07.088',
+                'teacher_unit' => 'SMP',
+                'balance' => 250000,
+            ]
+        );
+        $guruSmp->update([
+            'is_teacher' => true,
+            'niy' => 'NIY. 1993.07.088',
+            'teacher_unit' => 'SMP',
+            'balance' => 250000,
+        ]);
+        $guruSmp->assignRole('user');
     }
 }

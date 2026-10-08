@@ -1,11 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../lib/axios';
 import toast from 'react-hot-toast';
-import { ROLES, getUserRole } from '../config/roles';
+import { ROLES, getUserRole, isAdminLevel } from '../config/roles';
 
 export function useSyncStatus(user) {
   const role = getUserRole(user);
-  const isAdmin = role === ROLES.ADMIN;
+  const isSuperAdmin = role === ROLES.SUPER_ADMIN;
 
   return useQuery({
     queryKey: ['db_sync_status'],
@@ -13,7 +13,7 @@ export function useSyncStatus(user) {
       const res = await api.get('/db-sync/status');
       return res.data;
     },
-    enabled: !!isAdmin,
+    enabled: !!isSuperAdmin,
     staleTime: 1000 * 60 * 10, // 10 menit
   });
 }

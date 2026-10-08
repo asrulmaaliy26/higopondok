@@ -13,8 +13,12 @@ class CanteenAnalyticsController extends Controller
     {
         $user = $request->user();
         
-        // Dapatkan semua kantin milik pengguna
-        $canteens = $user->canteens()->get();
+        // Dapatkan semua kantin milik pengguna atau seluruh kantin jika admin/super_admin
+        if ($user && ($user->hasRole('admin') || $user->hasRole('super_admin'))) {
+            $canteens = \App\Domains\Canteen\Canteen::all();
+        } else {
+            $canteens = $user ? $user->canteens()->get() : collect();
+        }
         $canteenIds = $canteens->pluck('id');
 
         if ($canteenIds->isEmpty()) {

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, Link } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ShoppingCart, Trash2, Plus, Minus, Store, ChevronRight, ChevronLeft, MapPin, AlertCircle, LogIn, X, Ticket, Check } from 'lucide-react';
+import { ShoppingCart, Trash2, Plus, Minus, Store, ChevronRight, ChevronLeft, MapPin, AlertCircle, LogIn, X, Ticket, Check, Sparkles } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../lib/axios';
 import { getStorageUrl } from '../../lib/axios';
@@ -26,7 +26,26 @@ export default function Keranjang() {
     return user?.santri_room || '';
   });
 
+  // Validasi apakah akun guru sudah memiliki data santri di profil
+  const hasSantriProfile = Boolean(
+    user?.santri_name && 
+    user?.santri_room && 
+    user?.santri_room !== 'Kamar Santri Pondok' &&
+    user?.santri_room.trim() !== ''
+  );
+
+  const [showTeacherSantriModal, setShowTeacherSantriModal] = useState(false);
+
   const handleToggleOrderFor = (target) => {
+    // Jika guru ingin memesan untuk santri tapi belum isi profil santri
+    if (target === 'santri' && user?.is_teacher) {
+      if (!hasSantriProfile) {
+        setShowTeacherSantriModal(true);
+        toast.error('Silakan lengkapi data santri di menu Profil terlebih dahulu.');
+        return;
+      }
+    }
+
     setOrderFor(target);
     if (target === 'guru') {
       setDeliveryLocation(`Ruang Guru / Kantor ${user?.teacher_unit || 'Yayasan'}`);
@@ -169,7 +188,7 @@ export default function Keranjang() {
         {/* Header with back button */}
         <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-4 py-4 flex items-center gap-3 sticky top-0 z-20">
           <button
-            onClick={() => window.history.length > 1 ? window.history.back() : navigate({ to: '/dashboard/kantin' })}
+            onClick={() => window.history.length > 1 ? window.history.back() : navigate({ to: token ? '/dashboard/kantin' : '/kantin' })}
             className="w-8 h-8 flex items-center justify-center rounded-none border border-gray-200 dark:border-gray-800 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
           >
             <ChevronLeft className="w-5 h-5 text-gray-600 dark:text-gray-300" />
@@ -199,7 +218,7 @@ export default function Keranjang() {
       <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-4 py-3.5 flex items-center justify-between sticky top-0 z-20">
         <div className="flex items-center gap-2">
           <button
-            onClick={() => window.history.length > 1 ? window.history.back() : navigate({ to: '/dashboard/kantin' })}
+            onClick={() => window.history.length > 1 ? window.history.back() : navigate({ to: token ? '/dashboard/kantin' : '/kantin' })}
             className="w-8 h-8 flex items-center justify-center rounded-none border border-gray-200 dark:border-gray-800 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
           >
             <ChevronLeft className="w-5 h-5 text-gray-600 dark:text-gray-300" />
@@ -400,7 +419,9 @@ export default function Keranjang() {
                 className={`p-2.5 rounded-none border text-left flex flex-col gap-1 transition-all ${
                   orderFor === 'santri'
                     ? 'border-emerald-600 bg-white dark:bg-gray-900 ring-2 ring-emerald-500 shadow-xs'
-                    : 'border-emerald-200 dark:border-emerald-800/60 bg-emerald-100/50 dark:bg-emerald-900/20 text-gray-600 dark:text-gray-400'
+                    : hasSantriProfile
+                    ? 'border-emerald-200 dark:border-emerald-800/60 bg-emerald-100/50 dark:bg-emerald-900/20 text-gray-600 dark:text-gray-400'
+                    : 'border-amber-300 dark:border-amber-800/80 bg-amber-50/50 dark:bg-amber-950/20 text-gray-600 dark:text-gray-400'
                 }`}
               >
                 <div className="flex items-center justify-between">
@@ -409,11 +430,15 @@ export default function Keranjang() {
                   </span>
                   {orderFor === 'santri' && <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
                 </div>
-                <span className="text-[10.5px] text-gray-500 dark:text-gray-400 line-clamp-1">
-                  {user.santri_room || 'Kamar Santri Pondok'}
+                <span className="text-[10.5px] text-gray-600 dark:text-gray-300 line-clamp-1">
+                  {hasSantriProfile ? `${user.santri_name} (${user.santri_room})` : 'Belum diisi di Profil'}
                 </span>
-                <span className="text-[9.5px] font-semibold text-gray-600 dark:text-gray-400 self-start mt-0.5">
-                  Pengantaran Reguler
+                <span className={`text-[9px] font-bold self-start mt-0.5 px-1 py-0.2 rounded-none ${
+                  hasSantriProfile 
+                    ? 'text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800'
+                    : 'text-amber-800 dark:text-amber-300 bg-amber-200/80 dark:bg-amber-900/60'
+                }`}>
+                  {hasSantriProfile ? 'Pengantaran Reguler' : '⚠️ Wajib Isi Profil Dulu'}
                 </span>
               </button>
             </div>
@@ -452,6 +477,81 @@ export default function Keranjang() {
             />
           </div>
         </div>
+
+        {/* VOUCHER THRESHOLD MOTIVATION BANNER (DI ATAS 40RB / LEBIH DARI 5 ITEM) */}
+        {totalSubtotal < 40000 && totalSubtotal >= 20000 ? (
+          <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/80 p-3 rounded-none shadow-xs">
+            <div className="flex items-start justify-between gap-2 mb-1.5">
+              <div className="flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                <h4 className="text-xs font-black text-amber-900 dark:text-amber-200 uppercase tracking-wider">
+                  Dikit Lagi Dapat Diskon Rp 10.000!
+                </h4>
+              </div>
+              <span className="text-[10px] font-mono font-bold text-amber-800 dark:text-amber-300 bg-amber-200/60 dark:bg-amber-900/60 px-1.5 py-0.5 rounded-none">
+                Kurang Rp {(40000 - totalSubtotal).toLocaleString('id-ID')}
+              </span>
+            </div>
+            <p className="text-[11px] text-amber-800/90 dark:text-amber-300 leading-snug mb-2 font-medium">
+              Tambah belanja Rp {(40000 - totalSubtotal).toLocaleString('id-ID')} lagi untuk mengaktifkan voucher diskon Rp 10.000 (Min. Rp 40.000).
+            </p>
+            {/* Progress bar */}
+            <div className="w-full bg-amber-200/60 dark:bg-amber-900/60 h-1.5 rounded-none overflow-hidden mb-2">
+              <div 
+                className="bg-amber-500 h-full rounded-none transition-all duration-300"
+                style={{ width: `${Math.min(100, Math.round((totalSubtotal / 40000) * 100))}%` }}
+              />
+            </div>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => navigate({ to: '/kantin' })}
+                className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-black text-[10.5px] uppercase tracking-wider rounded-none cursor-pointer"
+              >
+                + Tambah Menu Santri
+              </button>
+            </div>
+          </div>
+        ) : totalSubtotal >= 40000 ? (
+          <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700/80 p-2.5 rounded-none shadow-xs flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <div>
+                <p className="text-xs font-black text-emerald-950 dark:text-emerald-100 uppercase tracking-wider">
+                  🎉 Belanja Di Atas Rp 40.000!
+                </p>
+                <p className="text-[10.5px] text-emerald-700 dark:text-emerald-300">
+                  Kamu berhak menggunakan voucher diskon potongan belanja Rp 10.000.
+                </p>
+              </div>
+            </div>
+            {!selectedVoucher && (
+              <button
+                type="button"
+                onClick={() => setShowVoucherDrawer(true)}
+                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10.5px] uppercase tracking-wider shrink-0 cursor-pointer rounded-none"
+              >
+                Pilih Voucher
+              </button>
+            )}
+          </div>
+        ) : totalItems >= 3 && totalItems < 5 ? (
+          <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-300 dark:border-blue-700/80 p-2.5 rounded-none shadow-xs flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5">
+              <Sparkles className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+              <p className="text-[11px] font-bold text-blue-950 dark:text-blue-100">
+                Pilih {5 - totalItems} menu lagi untuk menikmati promo santri 5+ item!
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate({ to: '/kantin' })}
+              className="px-2 py-0.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] uppercase rounded-none shrink-0"
+            >
+              + Menu
+            </button>
+          </div>
+        ) : null}
 
         {/* Voucher Promo Selection Card (Gojek Flat Sharp) */}
         <div className="bg-white dark:bg-gray-900 rounded-none border border-gray-200 dark:border-gray-800 p-3 shadow-xs">
@@ -637,6 +737,57 @@ export default function Keranjang() {
                   navigate({ to: '/dashboard/profile' });
                 }}
                 className="flex-1 py-2 rounded-none font-bold text-xs text-white bg-green-600 hover:bg-green-700 transition-colors"
+              >
+                Ke Profil
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Modal Wajib Isi Data Santri di Profil (Khusus Akun Guru) */}
+      {showTeacherSantriModal && createPortal(
+        <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-none w-full max-w-sm p-4 sm:p-5 text-center my-auto shadow-2xl animate-in zoom-in-95 duration-150">
+            <div className="w-12 h-12 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-none flex items-center justify-center mx-auto mb-3 text-2xl">
+              👦
+            </div>
+            
+            <h3 className="text-sm sm:text-base font-black text-gray-900 dark:text-white uppercase tracking-wide mb-1.5">
+              Isi Data Santri di Profil Dulu
+            </h3>
+            
+            <p className="text-xs text-gray-600 dark:text-gray-300 mb-3.5 leading-relaxed">
+              Akun Guru/Staff Anda saat ini belum memiliki data santri. Silakan lengkapi data santri (nama dan kamar) di menu <strong className="text-green-600 dark:text-green-400">Profil</strong> terlebih dahulu jika ingin memesankan makanan untuk santri.
+            </p>
+
+            <div className="bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/60 p-2.5 rounded-none mb-4 text-left text-[11px] space-y-1">
+              <div className="flex justify-between items-center text-gray-600 dark:text-gray-400">
+                <span>Akun Guru:</span>
+                <span className="font-bold text-gray-900 dark:text-gray-100">{user?.name} (Unit {user?.teacher_unit || 'Yayasan'})</span>
+              </div>
+              <div className="flex justify-between items-center text-amber-700 dark:text-amber-400 font-bold">
+                <span>Data Santri:</span>
+                <span className="bg-amber-100 dark:bg-amber-900/60 px-1 py-0.2 rounded-none">⚠️ Belum Terhubung</span>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <button 
+                type="button"
+                onClick={() => setShowTeacherSantriModal(false)}
+                className="flex-1 py-2 rounded-none font-bold text-xs text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors border border-gray-200 dark:border-gray-700 cursor-pointer"
+              >
+                Tetap Untuk Guru
+              </button>
+              <button 
+                type="button"
+                onClick={() => {
+                  setShowTeacherSantriModal(false);
+                  navigate({ to: token ? '/dashboard/profile?tab=santri' : '/profile?tab=santri' });
+                }}
+                className="flex-1 py-2 rounded-none font-black text-xs text-white bg-green-600 hover:bg-green-700 active:bg-green-800 transition-colors uppercase tracking-wider cursor-pointer shadow-xs"
               >
                 Ke Profil
               </button>

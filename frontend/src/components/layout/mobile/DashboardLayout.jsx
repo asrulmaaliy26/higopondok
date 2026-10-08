@@ -2,12 +2,11 @@ import React from 'react';
 import { Outlet, useLocation } from '@tanstack/react-router';
 import { useAuthStore } from '../../../store/authStore';
 import { allMenus } from '../../../config/menus';
-import { getUserRole } from '../../../config/roles';
+import { getUserRole, ROLES } from '../../../config/roles';
 
 import TopHeader from './TopHeader';
 import MobileBottomNav from './MobileBottomNav';
 import DesktopSidebar from './DesktopSidebar';
-import ActiveCartFloatingBanner from '../../cart/ActiveCartFloatingBanner';
 import SyncDatabaseModal from '../../modals/SyncDatabaseModal';
 
 export default function DashboardLayout() {
@@ -28,9 +27,10 @@ export default function DashboardLayout() {
   const isPesanan = location.pathname.startsWith('/dashboard/pesanan');
   const isPerkuriran = location.pathname.startsWith('/dashboard/perkuriran') || location.pathname.startsWith('/dashboard/tugas-kurir');
   const isKeranjang = location.pathname === '/dashboard/keranjang';
+  const isVouchers = location.pathname.startsWith('/dashboard/vouchers') || location.pathname === '/vouchers';
   
-  // Pages that manage their own full-bleed layout
-  const isEdgeToEdgePage = isKantinDetail || isKantinList || isProfile || isPembayaran || isTokoSaya || isPesanan || isPerkuriran || isKeranjang;
+  // All mobile pages in Higo Pondok manage their own high-density container & padding
+  const isEdgeToEdgePage = true;
   const hideBottomNav = isKantinDetail || isKeranjang;
 
   return (
@@ -46,7 +46,7 @@ export default function DashboardLayout() {
 
         {/* Main Content Area */}
         <main className="flex-1 overflow-y-auto bg-slate-50 dark:bg-gray-950">
-          <div className={`${isEdgeToEdgePage ? 'min-h-full' : 'p-4 sm:p-6 lg:p-8 pb-28 sm:pb-32 lg:pb-8 min-h-full'}`}>
+          <div className="min-h-full">
             <Outlet />
           </div>
         </main>
@@ -56,11 +56,8 @@ export default function DashboardLayout() {
           <MobileBottomNav sidebarMenus={sidebarMenus} location={location} />
         )}
 
-        {/* Floating Active Cart Banner (Muncul saat user keluar dari detail toko & masih ada item di keranjang) */}
-        <ActiveCartFloatingBanner />
-
-        {/* Modal Sinkronisasi Database VPS (Admin) */}
-        {userRole === 'admin' && <SyncDatabaseModal />}
+        {/* Modal Sinkronisasi Database VPS (Super Admin Only) */}
+        {userRole === ROLES.SUPER_ADMIN && <SyncDatabaseModal />}
       </div>
     </div>
   );

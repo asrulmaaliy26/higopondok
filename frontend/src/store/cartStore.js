@@ -180,9 +180,23 @@ export const useCartStore = create(
       // Getters
       getTotalItems: () => {
         const { cart } = get();
+        if (!cart) return 0;
         return Object.values(cart).reduce((sum, c) =>
-          sum + Object.values(c.items).reduce((s, i) => s + i.quantity, 0), 0
+          sum + Object.values(c?.items || {}).reduce((s, i) => s + (i?.quantity || 0), 0), 0
         );
+      },
+
+      getTotalPrice: () => {
+        const { cart } = get();
+        if (!cart) return 0;
+        let grandTotal = 0;
+        Object.values(cart).forEach((c) => {
+          Object.values(c?.items || {}).forEach((item) => {
+            const price = parseFloat(item.product?.price || 0);
+            grandTotal += price * (item.quantity || 1);
+          });
+        });
+        return grandTotal;
       },
 
       getCanteenItems: (canteenId) => {

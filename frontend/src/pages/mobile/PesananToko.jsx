@@ -2,15 +2,18 @@ import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { ChevronLeft, ShoppingBag, CheckCircle, Clock, Truck, MessageCircle, X, Image as ImageIcon, ChevronDown, ChevronRight, Store, Upload, Trash2, RotateCcw, FileText, Filter, Search, AlertTriangle, AlertCircle, Download, ExternalLink, Printer, User, UploadCloud, Camera, FileUp, Plus, Calendar, Eye, Calculator } from 'lucide-react';
+import { ChevronLeft, ShoppingBag, CheckCircle, Clock, Truck, MessageCircle, X, Image as ImageIcon, ChevronDown, ChevronRight, Store, Upload, Trash2, RotateCcw, FileText, Filter, Search, AlertTriangle, AlertCircle, Download, ExternalLink, Printer, User, UploadCloud, Camera, FileUp, Plus, Calendar, Eye, Calculator, Copy, Check, Send } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api, { getStorageUrl } from '../../lib/axios';
 import { useCanteenStore } from '../../store/canteenStore';
+import { useAuthStore } from '../../store/authStore';
+import { ROLES } from '../../config/roles';
 import { getFileType, isImageFile, isHeifFile, isPdfFile, formatFileSize, getFileNameFromPath, compressImageFiles } from '../../lib/fileUtils';
 import ThermalReceiptModal from '../../components/receipt/ThermalReceiptModal';
 import AdminAccountingModal from '../../components/modals/AdminAccountingModal';
 import santriData from '../../data/santri.json';
 import { PRICING_CONFIG } from '../../config/pricing';
+import LoadingSpinner from '../../components/common/LoadingSpinner';
 
 function getWeeksInMonth(year, month) {
   // month is 0-indexed
@@ -174,9 +177,11 @@ const rollbackCaches = (queryClient, context, failedId = null) => {
   }
 };
 
-export default function PesananToko() {
+export default function PesananToko({ allStores = false, isAdminView = false }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const currentUser = useAuthStore((state) => state.user);
+  const isAdmin = isAdminView || allStores || currentUser?.role === ROLES.ADMIN || currentUser?.role === ROLES.SUPER_ADMIN;
   const { activeCanteenId, setActiveCanteenId, isStoreSelected, setIsStoreSelected } = useCanteenStore();
   const [selectedCouriers, setSelectedCouriers] = useState({});
 
@@ -192,6 +197,27 @@ export default function PesananToko() {
   const canteensList = Array.isArray(rawCanteensList)
     ? rawCanteensList
     : (Array.isArray(rawCanteensList?.data) ? rawCanteensList.data : []);
+
+  // Fetch all canteens list for canteen assigning custom orders & admin filters
+  const { data: rawAllCanteens } = useQuery({
+    queryKey: ['all_canteens_for_custom', isAdmin],
+    queryFn: async () => {
+      if (isAdmin) {
+        try {
+          const adminRes = await api.get('/admin/canteens');
+          const data = adminRes.data?.data || adminRes.data || [];
+          if (Array.isArray(data) && data.length > 0) return data;
+        } catch {
+          // fallback to public canteens
+        }
+      }
+      const res = await api.get('/canteens');
+      return res.data?.data || res.data || [];
+    }
+  });
+  const allCanteensList = Array.isArray(rawAllCanteens) && rawAllCanteens.length > 0
+    ? rawAllCanteens
+    : canteensList;
 
 
   const [showCourierModal, setShowCourierModal] = useState(false);
@@ -214,6 +240,12 @@ export default function PesananToko() {
     orders: [],
     title: ''
   });
+
+  // WhatsApp Template Modal State for Canteen
+  const [waModalOrder, setWaModalOrder] = useState(null);
+  const [waTemplateType, setWaTemplateType] = useState('detail'); // 'detail' | 'out_of_stock' | 'delivering' | 'payment_reminder'
+  const [waCustomMessage, setWaCustomMessage] = useState('');
+  const [copiedWaMessage, setCopiedWaMessage] = useState(false);
 
   const handlePrintSingleReceipt = (orderToPrint) => {
     setReceiptModalConfig({
@@ -241,14 +273,18 @@ export default function PesananToko() {
 
   // Manual Order by Canteen State
   const [showManualModal, setShowManualModal] = useState(false);
+  const [manualCanteenId, setManualCanteenId] = useState('');
   const [manualUserId, setManualUserId] = useState('');
   const [manualNotes, setManualNotes] = useState('');
   const [manualPrice, setManualPrice] = useState('');
+  const [santriSearchQuery, setSantriSearchQuery] = useState('');
+  const [isSantriDropdownOpen, setIsSantriDropdownOpen] = useState(false);
 
   // Set Custom Order Price State
   const [showSetPriceModal, setShowSetPriceModal] = useState(false);
   const [activeOrderForSetPrice, setActiveOrderForSetPrice] = useState(null);
   const [newPriceInput, setNewPriceInput] = useState('');
+  const [selectedCanteenForSetPrice, setSelectedCanteenForSetPrice] = useState('');
   
   // Recap Modal State
   const [showRecapModal, setShowRecapModal] = useState(false);
@@ -267,7 +303,7 @@ export default function PesananToko() {
   });
 
   const createManualOrderMutation = useMutation({
-    mutationFn: (data) => api.post('/canteen/orders/manual', data),
+    mutationFn: (data) => api.post(`/canteen/orders/manual${data.canteen_id ? `?canteen_id=${data.canteen_id}` : ''}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['canteen_orders'] });
       toast.success('Pesanan manual berhasil dibuat untuk santri!');
@@ -275,6 +311,9 @@ export default function PesananToko() {
       setManualUserId('');
       setManualNotes('');
       setManualPrice('');
+      setSantriSearchQuery('');
+      setIsSantriDropdownOpen(false);
+      setManualCanteenId('');
     },
     onError: (err) => {
       toast.error(err.response?.data?.message || 'Gagal membuat pesanan manual');
@@ -282,7 +321,7 @@ export default function PesananToko() {
   });
 
   const setCustomPriceMutation = useMutation({
-    mutationFn: ({ id, price, canteen_id }) => api.put(`/canteen/orders/${id}/custom-price?canteen_id=${canteen_id || ''}`, { total_price: price }),
+    mutationFn: ({ id, price, canteen_id }) => api.put(`/canteen/orders/${id}/custom-price?canteen_id=${canteen_id || ''}`, { total_price: price, canteen_id }),
     onMutate: async (variables) => {
       const deliveryFee = parseFloat(activeOrderForSetPrice?.delivery_fee || 0);
       const adminFee = parseFloat(activeOrderForSetPrice?.admin_fee || 0);
@@ -319,7 +358,7 @@ export default function PesananToko() {
     return getCurrentWeekIndex(today.getFullYear(), today.getMonth());
   });
 
-  const selectedCanteenFilter = 'all';
+  const [selectedCanteenFilter, setSelectedCanteenFilter] = useState('all');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -498,10 +537,11 @@ export default function PesananToko() {
         const userMatch = order.user?.name?.toLowerCase().includes(q);
         const santriMatch = order.user?.santri_name?.toLowerCase().includes(q);
         const canteenMatch = order.canteen?.name?.toLowerCase().includes(q);
+        const canteenOwnerMatch = order.canteen?.user?.name?.toLowerCase().includes(q);
         const notesMatch = order.custom_notes?.toLowerCase().includes(q);
         const itemsMatch = order.items?.some(i => i.product?.name?.toLowerCase().includes(q));
 
-        if (!idMatch && !userMatch && !santriMatch && !canteenMatch && !notesMatch && !itemsMatch) {
+        if (!idMatch && !userMatch && !santriMatch && !canteenMatch && !canteenOwnerMatch && !notesMatch && !itemsMatch) {
           return false;
         }
       }
@@ -845,9 +885,124 @@ export default function PesananToko() {
     }
   });
 
-  const handleContact = (phone, name) => {
+  const buildCanteenWaMessage = (order, type = 'detail') => {
+    if (!order) return '';
+    const meta = getSantriMeta(order.user, order.delivery_location, order.order_for);
+    const isTeacher = meta.isTeacher;
+    const canteenName = order.canteen?.name || 'Kantin';
+    const santriName = meta.santriName;
+    const santriRoom = meta.santriRoom || '-';
+    
+    // Format Jenjang & Kelas: "(SMP - Kelas 8)" atau "(MA - Kelas 10)"
+    let classLabel = '';
+    if (isTeacher) {
+      classLabel = order.user?.teacher_unit ? ` (Unit ${order.user.teacher_unit})` : '';
+    } else {
+      const level = meta.santriLevel || order.user?.santri_level || '';
+      let cls = meta.santriClass || order.user?.santri_class || '';
+      if (cls && !cls.toLowerCase().startsWith('kelas')) {
+        cls = `Kelas ${cls}`;
+      }
+      if (level && cls) {
+        classLabel = ` (${level} - ${cls})`;
+      } else if (level) {
+        classLabel = ` (${level})`;
+      } else if (cls) {
+        classLabel = ` (${cls})`;
+      }
+    }
+    const displayName = `${santriName}${classLabel}`;
+
+    // Format Tgl Ringkas: misal "05 Okt 2026, 20:15"
+    let orderDateStr = '';
+    if (order.created_at) {
+      const d = new Date(order.created_at);
+      if (!isNaN(d.getTime())) {
+        orderDateStr = d.toLocaleDateString('id-ID', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      }
+    }
+
+    // Format Menu Ringkas & Padat
+    let itemsListText = '';
+    if (order.is_custom) {
+      itemsListText = `• Custom: ${order.custom_notes || '-'}`;
+    } else if (order.items && order.items.length > 0) {
+      itemsListText = order.items.map((it) => {
+        const pName = it.product?.name || 'Menu';
+        const qty = it.quantity || 1;
+        const notes = it.notes ? ` (${it.notes})` : '';
+        return `• ${pName} x${qty}${notes}`;
+      }).join('\n');
+    } else {
+      itemsListText = '• -';
+    }
+
+    const totalPrice = parseFloat(order.total_price || 0);
+    const isPaid = order.payment_status === 'paid';
+    const paymentStatusText = isPaid ? 'Lunas' : 'Belum Bayar';
+
+    if (type === 'out_of_stock') {
+      return `*Pesanan Santri:* ${displayName}
+*Tgl:* ${orderDateStr}
+*Toko:* ${canteenName}
+
+*Menu:*
+${itemsListText}
+
+Mohon maaf ada menu yang kosong, mau diganti atau diproses besok nggih?`;
+    }
+
+    if (type === 'delivering') {
+      return `*Pesanan Santri:* ${displayName}
+*Tgl:* ${orderDateStr}
+*Toko:* ${canteenName}
+
+*Menu:*
+${itemsListText}
+
+Pesanan sedang diantar ke ${santriRoom}.`;
+    }
+
+    if (type === 'payment_reminder') {
+      return `*Pesanan Santri:* ${displayName}
+*Tgl:* ${orderDateStr}
+*Toko:* ${canteenName}
+
+*Menu:*
+${itemsListText}
+*Total:* Rp ${formatRupiah(totalPrice)}
+
+Mohon konfirmasi / kirim bukti transfernya nggih.`;
+    }
+
+    // Default: 'detail' (Ringkas: Nama Santri + Jenjang & Kelas, Tgl, Toko, Menu, Total, Kamar)
+    return `*Pesanan Santri:* ${displayName}
+*Tgl:* ${orderDateStr}
+*Toko:* ${canteenName}
+
+*Menu:*
+${itemsListText}
+
+*Total:* Rp ${formatRupiah(totalPrice)} (${paymentStatusText})
+*Kamar:* ${santriRoom}`;
+  };
+
+  const handleContact = (phone, name, order = null) => {
     if (!phone) {
       toast.error(`Nomor telepon ${name} tidak tersedia`);
+      return;
+    }
+    if (order) {
+      setWaModalOrder(order);
+      setWaTemplateType('detail');
+      setWaCustomMessage(buildCanteenWaMessage(order, 'detail'));
+      setCopiedWaMessage(false);
       return;
     }
     let formatted = phone.toString().replace(/\D/g, '');
@@ -855,6 +1010,36 @@ export default function PesananToko() {
     else if (formatted.startsWith('8')) formatted = '628' + formatted.substring(1);
     else if (formatted.startsWith('0')) formatted = '62' + formatted.substring(1);
     window.open(`https://wa.me/${formatted}`, '_blank');
+  };
+
+  const handleSelectWaTemplate = (type) => {
+    setWaTemplateType(type);
+    if (waModalOrder) {
+      setWaCustomMessage(buildCanteenWaMessage(waModalOrder, type));
+    }
+  };
+
+  const handleSendWa = () => {
+    if (!waModalOrder?.user?.phone) {
+      toast.error('Nomor WhatsApp pemesan tidak tersedia');
+      return;
+    }
+    let formatted = waModalOrder.user.phone.toString().replace(/\D/g, '');
+    if (formatted.startsWith('08')) formatted = '628' + formatted.substring(2);
+    else if (formatted.startsWith('8')) formatted = '628' + formatted.substring(1);
+    else if (formatted.startsWith('0')) formatted = '62' + formatted.substring(1);
+    
+    const encoded = encodeURIComponent(waCustomMessage);
+    window.open(`https://wa.me/${formatted}?text=${encoded}`, '_blank');
+  };
+
+  const handleCopyWaMessage = () => {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(waCustomMessage);
+      setCopiedWaMessage(true);
+      toast.success('Pesan WhatsApp disalin ke clipboard');
+      setTimeout(() => setCopiedWaMessage(false), 2000);
+    }
   };
 
   const couriers = couriersRes || [];
@@ -955,12 +1140,9 @@ export default function PesananToko() {
     };
   }, [rawOrders]);
 
-  if (isLoading) {
-    return <div className="flex justify-center items-center h-screen"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div></div>;
-  }
 
-  // Jika Kantin Baru Belum Memiliki Toko
-  if (canteensList && canteensList.length === 0) {
+  // Jika Kantin Baru Belum Memiliki Toko (Hanya untuk akun non-Admin)
+  if (!isAdmin && canteensList && canteensList.length === 0) {
     return (
       <div className="bg-gray-50 h-full min-h-screen p-6 flex items-center justify-center dark:bg-gray-950 font-sans">
         <div className="bg-white dark:bg-gray-900 rounded-none p-6 sm:p-8 max-w-md w-full border border-gray-200 dark:border-gray-700 shadow-xl text-center space-y-4 animate-in zoom-in-95 duration-200">
@@ -1085,11 +1267,16 @@ export default function PesananToko() {
             </span>
           </div>
         )}
-        {/* 1. Header: Toko, ID, Jam & Status Badges */}
+        {/* 1. Header: Toko, Pemilik Kantin, ID, Jam & Status Badges */}
         <div className="flex items-center justify-between gap-1 border-b border-gray-200 dark:border-gray-700/80 pb-1 flex-wrap">
           <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-            <span className="text-[10px] sm:text-[11px] font-bold px-1.5 py-0.5 rounded-none bg-blue-50 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200 dark:border-blue-800 truncate">
-              🏪 {order.canteen?.name || 'Toko'}
+            <span className="text-[10px] sm:text-[11px] font-bold px-1.5 py-0.5 rounded-none bg-emerald-50 text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-700 flex items-center gap-1 shadow-2xs">
+              <Store className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span className="font-extrabold">{order.canteen?.name || 'Toko'}</span>
+              <span className="text-emerald-400 dark:text-emerald-600 font-normal">•</span>
+              <span className="text-emerald-700 dark:text-emerald-300 font-medium">
+                Kantin: {order.canteen?.user?.name || (order.canteen?.user_id ? `User #${order.canteen.user_id}` : 'Mitra Kantin')}
+              </span>
             </span>
             <span className="text-xs sm:text-sm font-bold text-gray-800 dark:text-gray-200 font-mono">
               #{order.id}
@@ -1164,7 +1351,7 @@ export default function PesananToko() {
                     {order.user?.phone && (
                       <button
                         type="button"
-                        onClick={() => handleContact(order.user?.phone, order.user?.name)}
+                        onClick={() => handleContact(order.user?.phone, order.user?.name, order)}
                         className="text-green-600 dark:text-green-400 font-bold hover:underline flex items-center gap-0.5 cursor-pointer"
                       >
                         <MessageCircle className="w-2.5 h-2.5" /> WA
@@ -1195,7 +1382,7 @@ export default function PesananToko() {
                     {order.user?.phone && (
                       <button
                         type="button"
-                        onClick={() => handleContact(order.user?.phone, order.user?.name)}
+                        onClick={() => handleContact(order.user?.phone, order.user?.name, order)}
                         className="text-green-600 dark:text-green-400 font-bold hover:underline flex items-center gap-0.5 cursor-pointer"
                       >
                         <MessageCircle className="w-2.5 h-2.5" /> WA
@@ -1341,9 +1528,22 @@ export default function PesananToko() {
               {order.items && order.items.length > 0 ? (
                 order.items.map(item => (
                   <div key={item.id} className="flex justify-between items-center text-[11px] sm:text-xs py-0.5 border-b border-gray-200/40 dark:border-gray-700/40 last:border-b-0">
-                    <span className="text-gray-800 dark:text-gray-200 truncate pr-2">
-                      <strong className="text-gray-900 dark:text-white font-bold">{item.quantity}x</strong> {item.product?.name || 'Produk'}
-                      {item.notes && <span className="text-gray-400 italic text-[10px]"> ({item.notes})</span>}
+                    <span className="text-gray-800 dark:text-gray-200 truncate pr-2 flex items-center gap-1">
+                      {item.product?.category && (
+                        <span className={`text-[8.5px] font-extrabold px-1 py-0.2 rounded-none uppercase shrink-0 border ${
+                          item.product.category.toLowerCase().includes('minum')
+                            ? 'bg-sky-100 text-sky-800 dark:bg-sky-950/60 dark:text-sky-300 border-sky-300 dark:border-sky-800'
+                            : item.product.category.toLowerCase().includes('snack') || item.product.category.toLowerCase().includes('camilan')
+                            ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border-rose-300 dark:border-rose-800'
+                            : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300 dark:border-amber-800'
+                        }`}>
+                          {item.product.category}
+                        </span>
+                      )}
+                      <span className="truncate">
+                        <strong className="text-gray-900 dark:text-white font-bold">{item.quantity}x</strong> {item.product?.name || 'Produk'}
+                        {item.notes && <span className="text-gray-400 italic text-[10px]"> ({item.notes})</span>}
+                      </span>
                     </span>
                     <span className="font-bold text-gray-900 dark:text-white shrink-0 font-mono text-[11px] sm:text-xs">
                       Rp {formatRupiah(item.subtotal || (parseFloat(item.price) * item.quantity))}
@@ -1404,6 +1604,7 @@ export default function PesananToko() {
               <button 
                 onClick={() => {
                   setActiveOrderForSetPrice(order);
+                  setSelectedCanteenForSetPrice(order.canteen_id ? String(order.canteen_id) : '');
                   const deliveryFee = parseFloat(order.delivery_fee || 0);
                   const adminFee = parseFloat(order.admin_fee || 0);
                   const curProductPrice = Math.max(0, parseFloat(order.total_price || 0) - deliveryFee - adminFee);
@@ -1643,7 +1844,7 @@ export default function PesananToko() {
                   {pOrder.user?.phone && (
                     <button
                       type="button"
-                      onClick={() => handleContact(pOrder.user?.phone, pOrder.user?.name)}
+                      onClick={() => handleContact(pOrder.user?.phone, pOrder.user?.name, pOrder)}
                       className="text-green-600 dark:text-green-400 font-bold hover:underline flex items-center gap-0.5 cursor-pointer"
                     >
                       <MessageCircle className="w-2.5 h-2.5" /> WA
@@ -1830,6 +2031,7 @@ export default function PesananToko() {
                       <button 
                         onClick={() => {
                           setActiveOrderForSetPrice(o);
+                          setSelectedCanteenForSetPrice(o.canteen_id ? String(o.canteen_id) : '');
                           const deliveryFee = parseFloat(o.delivery_fee || 0);
                           const adminFee = parseFloat(o.admin_fee || 0);
                           const curProductPrice = Math.max(0, parseFloat(o.total_price || 0) - deliveryFee - adminFee);
@@ -2006,55 +2208,49 @@ export default function PesananToko() {
     );
   };
 
+
+
   return (
     <div className="bg-gray-50 min-h-screen pb-28 dark:bg-gray-950 font-sans animate-fade-in-up">
-      <div className="max-w-7xl mx-auto p-2.5 sm:p-4 space-y-2.5">
+      <div className="max-w-7xl mx-auto px-1.5 py-1.5 sm:px-3 sm:py-2.5 space-y-1.5 sm:space-y-2">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-2 bg-white dark:bg-gray-900 p-2 sm:p-2.5 rounded-none border border-gray-200 dark:border-gray-800 shadow-xs">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-1.5 bg-white dark:bg-gray-900 p-1.5 sm:p-2 rounded-none border border-gray-200 dark:border-gray-800 shadow-xs">
+          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
             <button 
               onClick={() => navigate({ to: '/dashboard' })} 
-              className="p-1.5 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-none transition-colors border border-gray-200 dark:border-gray-700 cursor-pointer shrink-0"
+              className="p-1 sm:p-1.5 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-none transition-colors border border-gray-200 dark:border-gray-700 cursor-pointer shrink-0"
               title="Kembali ke Dashboard"
             >
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </button>
             <div className="min-w-0">
-              <h1 className="text-sm sm:text-base font-black text-gray-900 dark:text-white leading-tight">
-                Pesanan Masuk & Rekap Toko
-              </h1>
-              <p className="text-[10px] sm:text-[11px] text-gray-500 dark:text-gray-400 leading-tight">
-                Kelola pesanan santri, atur harga titip beli, dan pantau omzet toko.
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <h1 className="text-xs sm:text-sm font-black text-gray-900 dark:text-white leading-tight truncate">
+                  {isAdmin ? 'Pesanan & Rekap Semua Toko' : 'Pesanan Masuk & Rekap Toko'}
+                </h1>
+                <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 bg-green-50 text-green-700 dark:bg-green-950/60 dark:text-green-300 border border-green-200 dark:border-green-800">
+                  {orders.length} Pesanan
+                </span>
+              </div>
+              <p className="text-[10px] text-gray-500 dark:text-gray-400 leading-tight truncate mt-0.5">
+                {isAdmin
+                  ? `Kelola pesanan dari seluruh mitra kantin (${allCanteensList?.length || 0} Toko), validasi bayar, & pantau omzet.`
+                  : 'Kelola pesanan santri, atur harga titip beli, & pantau omzet toko.'}
               </p>
             </div>
           </div>
-          <div className="grid grid-cols-2 sm:flex sm:items-center gap-1.5 w-full sm:w-auto">
-            <button
-              onClick={() => setShowAccountingModal(true)}
-              className="w-full sm:w-auto px-2 py-1.5 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-none text-xs font-bold transition-all flex items-center justify-center gap-1 shadow-xs cursor-pointer"
-              title="Lihat Logika & Rumus Akuntansi"
-            >
-              <Calculator className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-              <span className="truncate">Akuntansi & Ongkir</span>
-            </button>
+          <div className="grid grid-cols-2 sm:flex sm:items-center gap-1 sm:gap-1.5 w-full sm:w-auto shrink-0">
             <button
               onClick={handlePrintBatchReceipt}
-              className="w-full sm:w-auto px-2 py-1.5 bg-gray-900 hover:bg-black text-white dark:bg-gray-800 dark:hover:bg-gray-700 rounded-none text-xs font-bold transition-all flex items-center justify-center gap-1 shadow-xs cursor-pointer"
+              className="w-full sm:w-auto px-2.5 h-[29px] bg-gray-900 hover:bg-black text-white dark:bg-gray-800 dark:hover:bg-gray-700 rounded-none text-[11px] sm:text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
               title="Cetak Rekap Pesanan Toko ke Printer Thermal"
             >
-              <Printer className="w-3.5 h-3.5 text-green-400 shrink-0" />
-              <span className="truncate">Cetak Rekap ({orders.length})</span>
-            </button>
-            <button
-              onClick={() => setShowRecapModal(true)}
-              className="w-full sm:w-auto px-2 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-none text-xs font-bold transition-colors flex items-center justify-center gap-1 shadow-xs border border-gray-200 dark:border-gray-700 cursor-pointer"
-            >
-              <ShoppingBag className="w-3.5 h-3.5 text-green-600 shrink-0" />
-              <span className="truncate">Rekap per Produk</span>
+              <Printer className="w-3 h-3 text-green-400 shrink-0" />
+              <span className="truncate">Cetak Rekap</span>
             </button>
             <button 
               onClick={() => setShowManualModal(true)}
-              className="w-full sm:w-auto px-2 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-none text-xs font-bold transition-colors shadow-xs flex items-center justify-center gap-1 cursor-pointer"
+              className="w-full sm:w-auto px-2.5 h-[29px] bg-green-600 hover:bg-green-700 text-white rounded-none text-[11px] sm:text-xs font-bold transition-colors shadow-xs flex items-center justify-center gap-1 cursor-pointer"
             >
               <span className="text-sm leading-none">＋</span>
               <span className="truncate">Pesanan Manual</span>
@@ -2062,52 +2258,60 @@ export default function PesananToko() {
           </div>
         </div>
 
-        {/* UNIFIED GLOBAL FILTER SECTION */}
-        <div className="bg-white dark:bg-gray-900 p-2 sm:p-2.5 rounded-none border border-gray-200 dark:border-gray-800 shadow-xs space-y-1.5">
-          <div className="flex items-center justify-between flex-wrap gap-1 border-b border-gray-100 dark:border-gray-800 pb-1">
-            <h3 className="text-xs font-bold text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-              <Filter className="w-3.5 h-3.5 text-green-600" />
-              Filter Periode
+        {/* UNIFIED GLOBAL FILTER SECTION (3 KOTAK PADAT & FLAT) */}
+        <div className="bg-white dark:bg-gray-900 p-1.5 sm:p-2 rounded-none border border-gray-200 dark:border-gray-800 shadow-xs space-y-1">
+          {/* Header Bar with Integrated Search */}
+          <div className="flex items-center justify-between gap-1.5 border-b border-gray-100 dark:border-gray-800 pb-1">
+            <h3 className="text-[11px] sm:text-xs font-bold text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5 shrink-0">
+              <Filter className="w-3 h-3 text-green-600" />
+              Filter Pesanan
             </h3>
-            <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded-none bg-green-50 text-green-700 dark:bg-green-950/60 dark:text-green-300 border border-green-200 dark:border-green-800">
-              📅 Periode: <strong>{getFilterLabel()}</strong>
-            </span>
+            
+            {/* Quick Search - Compact in header */}
+            <div className="relative flex-1 max-w-[180px] sm:max-w-xs">
+              <Search className="w-3 h-3 text-gray-400 absolute left-2 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Cari santri, menu, ID..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-6 pr-2 py-0.5 border border-gray-300 dark:border-gray-700 rounded-none text-[11px] bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white focus:ring-1 focus:ring-green-500 font-medium h-[24px]"
+              />
+            </div>
           </div>
 
-          {/* Mode Filter Selector */}
-          <div className="flex gap-1 overflow-x-auto pb-0.5 no-scrollbar">
-            {[
-              { id: 'day', label: 'Harian (Per Tanggal)' },
-              { id: 'week', label: 'Mingguan' },
-              { id: 'month', label: 'Bulanan' },
-              { id: 'year', label: 'Tahunan' },
-              { id: 'all', label: 'Semua Waktu' }
-            ].map((m) => (
-              <button
-                key={m.id}
-                onClick={() => {
-                  setFilterMode(m.id);
-                  if (m.id === 'week') {
+          {/* 3 Kotak Filter Sejajar - Padat & Ringkas */}
+          <div className={`grid ${isAdmin ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'} gap-1 pt-0.5`}>
+            {/* 1. Kotak Filter Periode */}
+            <div className="col-span-1">
+              <label className="block text-[8.5px] sm:text-[9.5px] font-bold text-gray-500 uppercase tracking-wider mb-0.5 truncate flex items-center gap-0.5">
+                <Calendar className="w-2.5 h-2.5 text-green-600 shrink-0" />
+                FILTER PERIODE:
+              </label>
+              <select
+                value={filterMode}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setFilterMode(val);
+                  if (val === 'week') {
                     setFilterWeekIndex(getCurrentWeekIndex(filterYear, filterMonth));
                   }
                 }}
-                className={`px-2 py-0.5 rounded-none text-[11px] font-bold whitespace-nowrap transition-all shadow-xs cursor-pointer ${
-                  filterMode === m.id
-                    ? 'bg-green-600 text-white shadow-xs'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 border border-gray-200 dark:border-gray-700'
-                }`}
+                className="w-full px-1 sm:px-2 py-1 border border-gray-300 dark:border-gray-700 rounded-none text-[11px] sm:text-xs font-semibold bg-gray-50 text-gray-800 dark:bg-gray-800 dark:text-gray-200 focus:ring-1 focus:ring-green-500 h-[29px] cursor-pointer"
               >
-                {m.label}
-              </button>
-            ))}
-          </div>
+                <option value="day">📅 Harian</option>
+                <option value="week">📆 Mingguan</option>
+                <option value="month">🗓️ Bulanan</option>
+                <option value="year">📊 Tahunan</option>
+                <option value="all">⏳ Semua Waktu</option>
+              </select>
+            </div>
 
-          {/* Dynamic Inputs & Filters Grid - Kanan-Kiri Padat */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1.5 pt-0.5">
-            {/* 1. Date Input (Per Tanggal / Datepicker) */}
+            {/* 2. Kotak Pilih Tanggal / Sub-selector Sesuai Periode */}
             {filterMode === 'day' && (
               <div className="col-span-1">
-                <label className="block text-[9.5px] sm:text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-0.5 truncate">
+                <label className="block text-[8.5px] sm:text-[9.5px] font-bold text-gray-500 uppercase tracking-wider mb-0.5 truncate flex items-center gap-0.5">
+                  <Calendar className="w-2.5 h-2.5 text-green-600 shrink-0" />
                   PILIH TANGGAL:
                 </label>
                 <div className="relative group">
@@ -2118,30 +2322,26 @@ export default function PesananToko() {
                     onClick={(e) => {
                       try {
                         e.target.showPicker();
-                      } catch {
-                        // Fallback for older browsers
-                      }
+                      } catch {}
                     }}
                     className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
-                    title="Klik untuk memilih hari / tanggal / bulan / tahun"
+                    title="Klik untuk memilih hari / tanggal"
                   />
-                  <div className="w-full flex items-center justify-between px-2 py-1 border border-gray-300 dark:border-gray-700 rounded-none text-xs bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-semibold group-hover:border-green-500 transition-all shadow-xs">
-                    <span className="truncate">
-                      {formatFullDate(filterDate)}
-                    </span>
-                    <Calendar className="w-3.5 h-3.5 text-green-600 dark:text-green-400 shrink-0 ml-1" />
+                  <div className="w-full flex items-center justify-between px-1.5 sm:px-2 py-1 border border-gray-300 dark:border-gray-700 rounded-none text-[11px] sm:text-xs bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-semibold group-hover:border-green-500 transition-all shadow-xs h-[29px]">
+                    <span className="truncate">{formatFullDate(filterDate)}</span>
+                    <Calendar className="w-3 h-3 text-green-600 dark:text-green-400 shrink-0 ml-1" />
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Week Mode Inputs: Bulan & Tahun Berdampingan */}
             {filterMode === 'week' && (
-              <>
-                <div className="col-span-1">
-                  <label className="block text-[9.5px] sm:text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-0.5 truncate">
-                    PILIH BULAN:
-                  </label>
+              <div className="col-span-1">
+                <label className="block text-[8.5px] sm:text-[9.5px] font-bold text-gray-500 uppercase tracking-wider mb-0.5 truncate flex items-center gap-0.5">
+                  <Calendar className="w-2.5 h-2.5 text-green-600 shrink-0" />
+                  BULAN & MINGGU:
+                </label>
+                <div className="grid grid-cols-2 gap-0.5">
                   <select
                     value={filterMonth}
                     onChange={(e) => {
@@ -2149,65 +2349,32 @@ export default function PesananToko() {
                       setFilterMonth(newMonth);
                       setFilterWeekIndex(getCurrentWeekIndex(filterYear, newMonth));
                     }}
-                    className="w-full px-2 py-1 border border-gray-300 dark:border-gray-700 rounded-none text-xs bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-medium focus:ring-1 focus:ring-green-500"
+                    className="w-full px-1 py-1 border border-gray-300 dark:border-gray-700 rounded-none text-[10px] sm:text-xs bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-medium focus:ring-1 focus:ring-green-500 h-[29px]"
                   >
-                    {['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'].map(
-                      (m, i) => (
-                        <option key={i} value={i}>
-                          {m}
-                        </option>
-                      )
-                    )}
-                  </select>
-                </div>
-
-                <div className="col-span-1">
-                  <label className="block text-[9.5px] sm:text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-0.5 truncate">
-                    PILIH TAHUN:
-                  </label>
-                  <select
-                    value={filterYear}
-                    onChange={(e) => {
-                      const newYear = parseInt(e.target.value);
-                      setFilterYear(newYear);
-                      setFilterWeekIndex(getCurrentWeekIndex(newYear, filterMonth));
-                    }}
-                    className="w-full px-2 py-1 border border-gray-300 dark:border-gray-700 rounded-none text-xs bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-medium focus:ring-1 focus:ring-green-500"
-                  >
-                    {[2024, 2025, 2026, 2027, 2028].map((y) => (
-                      <option key={y} value={y}>
-                        {y}
-                      </option>
+                    {['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'].map((m, i) => (
+                      <option key={i} value={i}>{m}</option>
                     ))}
                   </select>
-                </div>
-
-                <div className="col-span-1">
-                  <label className="block text-[9.5px] sm:text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-0.5 truncate">
-                    RENTANG MINGGU:
-                  </label>
                   <select
                     value={filterWeekIndex < getWeeksInMonth(filterYear, filterMonth).length ? filterWeekIndex : 0}
                     onChange={(e) => setFilterWeekIndex(parseInt(e.target.value))}
-                    className="w-full px-2 py-1 border border-gray-300 dark:border-gray-700 rounded-none text-xs bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-medium focus:ring-1 focus:ring-green-500"
+                    className="w-full px-1 py-1 border border-gray-300 dark:border-gray-700 rounded-none text-[10px] sm:text-xs bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-medium focus:ring-1 focus:ring-green-500 h-[29px]"
                   >
                     {getWeeksInMonth(filterYear, filterMonth).map((w, i) => (
-                      <option key={i} value={i}>
-                        {w.name}
-                      </option>
+                      <option key={i} value={i}>Mgg {i + 1}</option>
                     ))}
                   </select>
                 </div>
-              </>
+              </div>
             )}
 
-            {/* Month Mode Input */}
             {filterMode === 'month' && (
-              <>
-                <div className="col-span-1">
-                  <label className="block text-[9.5px] sm:text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-0.5 truncate">
-                    PILIH BULAN:
-                  </label>
+              <div className="col-span-1">
+                <label className="block text-[8.5px] sm:text-[9.5px] font-bold text-gray-500 uppercase tracking-wider mb-0.5 truncate flex items-center gap-0.5">
+                  <Calendar className="w-2.5 h-2.5 text-green-600 shrink-0" />
+                  BULAN & TAHUN:
+                </label>
+                <div className="grid grid-cols-2 gap-0.5">
                   <select
                     value={filterMonth}
                     onChange={(e) => {
@@ -2215,22 +2382,12 @@ export default function PesananToko() {
                       setFilterMonth(newMonth);
                       setFilterWeekIndex(getCurrentWeekIndex(filterYear, newMonth));
                     }}
-                    className="w-full px-2 py-1 border border-gray-300 dark:border-gray-700 rounded-none text-xs bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-medium focus:ring-1 focus:ring-green-500"
+                    className="w-full px-1 py-1 border border-gray-300 dark:border-gray-700 rounded-none text-[10px] sm:text-xs bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-medium focus:ring-1 focus:ring-green-500 h-[29px]"
                   >
-                    {['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'].map(
-                      (m, i) => (
-                        <option key={i} value={i}>
-                          {m}
-                        </option>
-                      )
-                    )}
+                    {['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'].map((m, i) => (
+                      <option key={i} value={i}>{m}</option>
+                    ))}
                   </select>
-                </div>
-
-                <div className="col-span-1">
-                  <label className="block text-[9.5px] sm:text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-0.5 truncate">
-                    PILIH TAHUN:
-                  </label>
                   <select
                     value={filterYear}
                     onChange={(e) => {
@@ -2238,22 +2395,20 @@ export default function PesananToko() {
                       setFilterYear(newYear);
                       setFilterWeekIndex(getCurrentWeekIndex(newYear, filterMonth));
                     }}
-                    className="w-full px-2 py-1 border border-gray-300 dark:border-gray-700 rounded-none text-xs bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-medium focus:ring-1 focus:ring-green-500"
+                    className="w-full px-1 py-1 border border-gray-300 dark:border-gray-700 rounded-none text-[10px] sm:text-xs bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-medium focus:ring-1 focus:ring-green-500 h-[29px]"
                   >
                     {[2024, 2025, 2026, 2027, 2028].map((y) => (
-                      <option key={y} value={y}>
-                        {y}
-                      </option>
+                      <option key={y} value={y}>{y}</option>
                     ))}
                   </select>
                 </div>
-              </>
+              </div>
             )}
 
-            {/* Year Mode Selector */}
             {filterMode === 'year' && (
               <div className="col-span-1">
-                <label className="block text-[9.5px] sm:text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-0.5 truncate">
+                <label className="block text-[8.5px] sm:text-[9.5px] font-bold text-gray-500 uppercase tracking-wider mb-0.5 truncate flex items-center gap-0.5">
+                  <Calendar className="w-2.5 h-2.5 text-green-600 shrink-0" />
                   PILIH TAHUN:
                 </label>
                 <select
@@ -2263,57 +2418,69 @@ export default function PesananToko() {
                     setFilterYear(newYear);
                     setFilterWeekIndex(getCurrentWeekIndex(newYear, filterMonth));
                   }}
-                  className="w-full px-2 py-1 border border-gray-300 dark:border-gray-700 rounded-none text-xs bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-medium focus:ring-1 focus:ring-green-500"
+                  className="w-full px-1.5 sm:px-2 py-1 border border-gray-300 dark:border-gray-700 rounded-none text-[11px] sm:text-xs bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-semibold focus:ring-1 focus:ring-green-500 h-[29px]"
                 >
                   {[2024, 2025, 2026, 2027, 2028].map((y) => (
-                    <option key={y} value={y}>
-                      {y}
+                    <option key={y} value={y}>Tahun {y}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {filterMode === 'all' && (
+              <div className="col-span-1">
+                <label className="block text-[8.5px] sm:text-[9.5px] font-bold text-gray-500 uppercase tracking-wider mb-0.5 truncate flex items-center gap-0.5">
+                  <Clock className="w-2.5 h-2.5 text-green-600 shrink-0" />
+                  RENTANG WAKTU:
+                </label>
+                <div className="w-full flex items-center justify-between px-1.5 sm:px-2 py-1 border border-gray-300 dark:border-gray-700 rounded-none text-[11px] sm:text-xs bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-semibold h-[29px]">
+                  <span className="truncate">Semua Data</span>
+                  <Clock className="w-3 h-3 text-gray-400 shrink-0 ml-1" />
+                </div>
+              </div>
+            )}
+
+            {/* Filter Toko (Khusus Admin / Super Admin) */}
+            {isAdmin && (
+              <div className="col-span-1">
+                <label className="block text-[8.5px] sm:text-[9.5px] font-bold text-gray-500 uppercase tracking-wider mb-0.5 truncate flex items-center gap-0.5">
+                  <Store className="w-2.5 h-2.5 text-green-600 shrink-0" />
+                  FILTER TOKO:
+                </label>
+                <select
+                  value={selectedCanteenFilter}
+                  onChange={(e) => setSelectedCanteenFilter(e.target.value)}
+                  className="w-full px-1.5 sm:px-2 py-1 border border-gray-300 dark:border-gray-700 rounded-none text-[11px] sm:text-xs font-semibold bg-gray-50 text-gray-800 dark:bg-gray-800 dark:text-gray-200 focus:ring-1 focus:ring-green-500 h-[29px]"
+                >
+                  <option value="all">🏪 Semua Toko ({allCanteensList?.length || 0})</option>
+                  {(allCanteensList || []).map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} {c.user?.name ? `(Kantin: ${c.user.name})` : ''}
                     </option>
                   ))}
                 </select>
               </div>
             )}
 
-            {/* Status Filter */}
+            {/* 3. Kotak Filter Status */}
             <div className="col-span-1">
-              <label className="block text-[9.5px] sm:text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-0.5 truncate">
+              <label className="block text-[8.5px] sm:text-[9.5px] font-bold text-gray-500 uppercase tracking-wider mb-0.5 truncate">
                 FILTER STATUS:
               </label>
               <select
                 value={selectedStatusFilter}
                 onChange={(e) => setSelectedStatusFilter(e.target.value)}
-                className="w-full px-2 py-1 border border-gray-300 dark:border-gray-700 rounded-none text-xs font-semibold bg-gray-50 text-gray-800 dark:bg-gray-800 dark:text-gray-200 focus:ring-1 focus:ring-green-500"
+                className="w-full px-1 sm:px-2 py-1 border border-gray-300 dark:border-gray-700 rounded-none text-[11px] sm:text-xs font-semibold bg-gray-50 text-gray-800 dark:bg-gray-800 dark:text-gray-200 focus:ring-1 focus:ring-green-500 h-[29px]"
               >
                 <option value="all">📋 Semua Status</option>
-                <option value="waiting_confirmation">⏳ Menunggu Validasi Bayar</option>
-                <option value="paid">💳 Sudah Bayar (Lunas)</option>
+                <option value="waiting_confirmation">⏳ Verifikasi Bayar</option>
+                <option value="paid">💳 Lunas</option>
                 <option value="unpaid">⚠️ Belum Bayar</option>
-                <option value="pending">⏳ Belum Dikonfirmasi (Pending)</option>
-                <option value="processing">🚚 Sedang Diproses</option>
+                <option value="pending">⏳ Pending (Baru)</option>
+                <option value="processing">🚚 Diproses</option>
                 <option value="completed">✅ Selesai</option>
-                <option value="cancelled">❌ Ditolak / Dibatalkan</option>
+                <option value="cancelled">❌ Dibatalkan</option>
               </select>
-            </div>
-
-            {/* Search Box - Fleksibel Mengisi Kanan-Kiri Padat */}
-            <div className={
-              filterMode === 'month' || filterMode === 'all'
-                ? 'col-span-1'
-                : 'col-span-2 sm:col-span-2 lg:col-span-2'
-            }>
-              <label className="block text-[9.5px] sm:text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-0.5 truncate">
-                PENCARIAN CEPAT:
-              </label>
-              <div className="relative">
-                <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Ketik nama Santri / Wali / Toko / Order ID..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-8 pr-2.5 py-1 border border-gray-300 dark:border-gray-700 rounded-none text-xs bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white focus:ring-1 focus:ring-green-500 font-medium"
-                />
-              </div>
             </div>
           </div>
         </div>
@@ -2322,7 +2489,7 @@ export default function PesananToko() {
         <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-1 flex gap-1 rounded-none shadow-xs">
           <button
             onClick={() => setActiveTab('orders')}
-            className={`py-1.5 px-3 text-xs font-bold rounded-none flex items-center gap-1.5 transition-all cursor-pointer ${
+            className={`flex-1 py-1.5 px-3 text-xs font-bold rounded-none flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
               activeTab === 'orders'
                 ? 'bg-green-600 text-white shadow-xs'
                 : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800/60'
@@ -2343,7 +2510,7 @@ export default function PesananToko() {
           </button>
           <button
             onClick={() => setActiveTab('recap')}
-            className={`py-1.5 px-3 text-xs font-bold rounded-none flex items-center gap-1.5 transition-all cursor-pointer ${
+            className={`flex-1 py-1.5 px-3 text-xs font-bold rounded-none flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
               activeTab === 'recap'
                 ? 'bg-green-600 text-white shadow-xs'
                 : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800/60'
@@ -2370,9 +2537,12 @@ export default function PesananToko() {
         {activeTab === 'recap' ? (
           <div className="space-y-2">
             {isLoadingRecap && !recapData ? (
-              <div className="bg-white dark:bg-gray-900 rounded-none border border-gray-200 dark:border-gray-800 py-12 flex flex-col items-center justify-center gap-2 text-gray-500">
-                <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-green-600"></div>
-                <span className="text-xs font-semibold">Memuat data rekapitulasi...</span>
+              <div className="bg-white dark:bg-gray-900 rounded-none border border-gray-200 dark:border-gray-800 shadow-xs">
+                <LoadingSpinner 
+                  text="Memuat Data Rekapitulasi..." 
+                  subtext="Mengalkulasi omzet, HPP, laba, dan bagi hasil" 
+                  minHeight="min-h-[160px]"
+                />
               </div>
             ) : (
               <>
@@ -2580,15 +2750,30 @@ export default function PesananToko() {
         ) : (
           <div className="space-y-2.5">
             {isLoading && !ordersRes ? (
-              <div className="bg-white dark:bg-gray-900 rounded-none border border-gray-200 dark:border-gray-800 text-center py-12 text-gray-500 flex flex-col items-center justify-center">
-                <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-green-600 mb-2"></div>
-                <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">Memuat daftar pesanan...</p>
+              <div className="bg-white dark:bg-gray-900 rounded-none border border-gray-200 dark:border-gray-800 shadow-xs">
+                <LoadingSpinner 
+                  text="Memuat Data Pesanan..." 
+                  subtext="Sinkronisasi seluruh antrean pesanan & kurir" 
+                  minHeight="min-h-[160px]"
+                />
               </div>
             ) : orders.length === 0 ? (
-              <div className="bg-white dark:bg-gray-900 rounded-none border border-gray-200 dark:border-gray-800 text-center py-8 text-gray-500 flex flex-col items-center">
-                <ShoppingBag className="w-10 h-10 mb-2 opacity-20 text-green-600" />
-                <p className="font-bold text-xs sm:text-sm text-gray-700 dark:text-gray-300">Belum ada pesanan yang sesuai filter.</p>
-                <p className="text-[11px] text-gray-400 mt-0.5">Coba ganti filter tanggal, toko, status, atau kata kunci pencarian.</p>
+              <div className="bg-white dark:bg-gray-900 rounded-none border border-gray-200 dark:border-gray-800 text-center py-6 px-3 text-gray-500 flex flex-col items-center shadow-xs">
+                <ShoppingBag className="w-8 h-8 mb-1.5 opacity-25 text-green-600" />
+                <p className="font-bold text-xs sm:text-sm text-gray-800 dark:text-gray-200">Belum ada pesanan yang sesuai filter.</p>
+                <p className="text-[11px] text-gray-400 mt-0.5 max-w-sm">Coba ganti filter tanggal, toko, status, atau kata kunci pencarian.</p>
+                {(searchQuery || selectedStatusFilter !== 'all' || (isAdmin && selectedCanteenFilter !== 'all')) && (
+                  <button
+                    onClick={() => {
+                      setSearchQuery('');
+                      setSelectedStatusFilter('all');
+                      if (isAdmin) setSelectedCanteenFilter('all');
+                    }}
+                    className="mt-2.5 px-2.5 py-1 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs font-bold rounded-none border border-gray-300 dark:border-gray-700 transition-colors cursor-pointer"
+                  >
+                    Reset Filter
+                  </button>
+                )}
               </div>
             ) : selectedStatusFilter === 'all' && !searchQuery.trim() ? (
               (() => {
@@ -3147,7 +3332,11 @@ export default function PesananToko() {
             <div className="flex justify-between items-center p-3 sm:p-3.5 border-b border-gray-200 dark:border-gray-700">
               <h3 className="text-sm font-bold text-gray-900 dark:text-white">Buat Pesanan Manual</h3>
               <button 
-                onClick={() => setShowManualModal(false)} 
+                onClick={() => {
+                  setShowManualModal(false);
+                  setSantriSearchQuery('');
+                  setIsSantriDropdownOpen(false);
+                }} 
                 className="w-7 h-7 bg-gray-100 dark:bg-gray-800 rounded-none border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 cursor-pointer"
               >
                 <X className="w-4 h-4" />
@@ -3161,20 +3350,170 @@ export default function PesananToko() {
                 </p>
               </div>
 
+              {/* SELECT STORE (IF ADMIN) */}
+              {isAdmin && (
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-0.5">
+                    Pilih Toko Penyedia <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={manualCanteenId || (selectedCanteenFilter !== 'all' ? selectedCanteenFilter : (allCanteensList[0]?.id || ''))}
+                    onChange={(e) => setManualCanteenId(e.target.value)}
+                    className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-700 rounded-none text-xs bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-medium focus:ring-1 focus:ring-green-500"
+                  >
+                    {(allCanteensList || []).map((c) => (
+                      <option key={c.id} value={c.id}>
+                        🏪 {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* SELECT SANTRI WITH SEARCH */}
               <div>
-                <label className="block text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-0.5">Pilih Santri <span className="text-red-500">*</span></label>
-                <select
-                  value={manualUserId}
-                  onChange={e => setManualUserId(e.target.value)}
-                  className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded-none text-xs dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-1 focus:ring-green-500 focus:outline-hidden"
-                >
-                  <option value="">-- Pilih Santri --</option>
-                  {santriList.map(s => (
-                    <option key={s.id} value={s.id}>
-                      {s.santri_name || s.name} ({s.santri_room || 'Asrama?'} - {s.santri_class || ''}/{s.santri_level || ''})
-                    </option>
-                  ))}
-                </select>
+                <label className="block text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-0.5">
+                  Pilih Santri <span className="text-red-500">*</span>
+                </label>
+
+                {(() => {
+                  const selectedSantri = santriList.find(s => String(s.id) === String(manualUserId));
+
+                  if (selectedSantri && !isSantriDropdownOpen) {
+                    return (
+                      <div className="flex items-center justify-between p-2 bg-green-50/80 dark:bg-green-950/40 border border-green-300 dark:border-green-800 rounded-none">
+                        <div className="min-w-0 pr-2">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-bold text-xs text-gray-900 dark:text-white truncate">
+                              👤 {selectedSantri.santri_name || selectedSantri.name}
+                            </span>
+                            {(selectedSantri.santri_level || selectedSantri.santri_class) && (
+                              <span className="text-[9.5px] font-bold px-1 py-0.2 bg-green-100 dark:bg-green-900/60 text-green-800 dark:text-green-300 border border-green-200 dark:border-green-800 rounded-none">
+                                {selectedSantri.santri_level ? `${selectedSantri.santri_level} ` : ''}{selectedSantri.santri_class ? `Kelas ${selectedSantri.santri_class}` : ''}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 truncate">
+                            📍 {selectedSantri.santri_room || 'Kamar belum diisi'} • Wali: {selectedSantri.name || '-'}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsSantriDropdownOpen(true);
+                            setSantriSearchQuery('');
+                          }}
+                          className="px-2 py-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-[10.5px] font-semibold rounded-none hover:bg-gray-100 dark:hover:bg-gray-700 shrink-0 cursor-pointer"
+                        >
+                          Ganti
+                        </button>
+                      </div>
+                    );
+                  }
+
+                  // Searchable input + list
+                  const filtered = santriList.filter(s => {
+                    if (!santriSearchQuery.trim()) return true;
+                    const q = santriSearchQuery.toLowerCase().trim();
+                    const name = (s.santri_name || s.name || '').toLowerCase();
+                    const wali = (s.name || '').toLowerCase();
+                    const room = (s.santri_room || '').toLowerCase();
+                    const cls = (s.santri_class || '').toLowerCase();
+                    const lvl = (s.santri_level || '').toLowerCase();
+                    return name.includes(q) || wali.includes(q) || room.includes(q) || cls.includes(q) || lvl.includes(q);
+                  });
+
+                  return (
+                    <div className="space-y-1">
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={santriSearchQuery}
+                          onChange={e => setSantriSearchQuery(e.target.value)}
+                          onFocus={() => setIsSantriDropdownOpen(true)}
+                          placeholder="Cari nama santri / asrama / kelas..."
+                          className="w-full pl-8 pr-7 py-1.5 border border-gray-300 dark:border-gray-700 rounded-none text-xs dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-1 focus:ring-green-500 focus:outline-hidden"
+                          autoFocus={isSantriDropdownOpen}
+                        />
+                        <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        {santriSearchQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setSantriSearchQuery('')}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 cursor-pointer"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Dropdown Results */}
+                      <div className="max-h-48 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-none bg-white dark:bg-gray-900 divide-y divide-gray-100 dark:divide-gray-800 shadow-inner">
+                        {filtered.length === 0 ? (
+                          <div className="p-3 text-center text-xs text-gray-400 dark:text-gray-500 bg-white dark:bg-gray-900">
+                            Santri tidak ditemukan untuk &quot;{santriSearchQuery}&quot;
+                          </div>
+                        ) : (
+                          filtered.slice(0, 80).map(s => {
+                            const isSelected = String(s.id) === String(manualUserId);
+                            return (
+                              <button
+                                key={s.id}
+                                type="button"
+                                onClick={() => {
+                                  setManualUserId(s.id);
+                                  setIsSantriDropdownOpen(false);
+                                  setSantriSearchQuery('');
+                                }}
+                                className={`w-full text-left p-2 transition-colors flex items-center justify-between gap-1.5 cursor-pointer ${
+                                  isSelected 
+                                    ? 'bg-green-50 dark:bg-green-950/60 text-green-900 dark:text-green-200 border-l-2 border-green-600' 
+                                    : 'bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-900 dark:text-gray-100'
+                                }`}
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="font-bold text-xs text-gray-900 dark:text-gray-100">
+                                      {s.santri_name || s.name}
+                                    </span>
+                                    {(s.santri_level || s.santri_class) && (
+                                      <span className="text-[9px] font-semibold px-1 py-0.2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-none">
+                                        {s.santri_level ? `${s.santri_level} ` : ''}{s.santri_class ? `Kelas ${s.santri_class}` : ''}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 truncate">
+                                    📍 {s.santri_room || 'Kamar belum diisi'} {s.name ? `• Wali: ${s.name}` : ''}
+                                  </div>
+                                </div>
+                                {isSelected && (
+                                  <Check className="w-3.5 h-3.5 text-green-600 dark:text-green-400 shrink-0" />
+                                )}
+                              </button>
+                            );
+                          })
+                        )}
+                        {filtered.length > 80 && (
+                          <div className="p-1.5 text-center text-[10px] text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-950 border-t border-gray-100 dark:border-gray-800">
+                            Menampilkan 80 dari {filtered.length} santri. Ketik untuk mempersempit.
+                          </div>
+                        )}
+                      </div>
+
+                      {manualUserId && (
+                        <div className="flex justify-end pt-0.5">
+                          <button
+                            type="button"
+                            onClick={() => setIsSantriDropdownOpen(false)}
+                            className="text-[10px] text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 underline cursor-pointer"
+                          >
+                            Tutup pencarian
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
 
               <div>
@@ -3232,7 +3571,11 @@ export default function PesananToko() {
 
             <div className="p-3 border-t border-gray-200 dark:border-gray-700 flex gap-2">
               <button 
-                onClick={() => setShowManualModal(false)}
+                onClick={() => {
+                  setShowManualModal(false);
+                  setSantriSearchQuery('');
+                  setIsSantriDropdownOpen(false);
+                }}
                 className="flex-1 py-1.5 rounded-none font-bold text-xs text-gray-600 bg-gray-100 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-200 border border-gray-200 dark:border-gray-700 transition-colors cursor-pointer"
               >
                 Batal
@@ -3240,10 +3583,12 @@ export default function PesananToko() {
               <button 
                 disabled={!manualUserId || !manualNotes.trim() || !manualPrice || createManualOrderMutation.isPending}
                 onClick={() => {
+                  const targetCanteenId = manualCanteenId || (selectedCanteenFilter !== 'all' ? selectedCanteenFilter : (canteensList[0]?.id || allCanteensList[0]?.id));
                   createManualOrderMutation.mutate({
                     user_id: manualUserId,
                     custom_notes: manualNotes,
                     total_price: manualPrice,
+                    canteen_id: targetCanteenId,
                   });
                 }}
                 className="flex-[2] py-1.5 rounded-none font-bold text-xs text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 transition-colors flex justify-center items-center gap-1.5 shadow-xs cursor-pointer"
@@ -3612,6 +3957,24 @@ export default function PesananToko() {
                 </p>
               </div>
 
+              {/* Pilihan Toko Pelaksana yang Dipilihkan Kantin */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  Pilihkan Toko Pelaksana <span className="text-[10px] text-gray-500 font-normal">(Kantin yang menentukan toko)</span>
+                </label>
+                <select
+                  value={selectedCanteenForSetPrice}
+                  onChange={e => setSelectedCanteenForSetPrice(e.target.value)}
+                  className="w-full p-2 border border-gray-300 dark:border-gray-700 rounded-none text-xs dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-1 focus:ring-green-500 focus:outline-none"
+                >
+                  {allCanteensList.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} {c.id === 173 ? '(Kantin Pusat)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Harga Produk / Barang Asli (Rp) <span className="text-red-500">*</span></label>
                 <input
@@ -3672,7 +4035,7 @@ export default function PesananToko() {
                   setCustomPriceMutation.mutate({
                     id: activeOrderForSetPrice.id,
                     price: newPriceInput,
-                    canteen_id: activeOrderForSetPrice.canteen_id
+                    canteen_id: selectedCanteenForSetPrice ? parseInt(selectedCanteenForSetPrice) : activeOrderForSetPrice.canteen_id
                   });
                 }}
                 className="flex-[2] py-1.5 rounded-none font-bold text-xs text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 transition-colors flex justify-center items-center gap-1.5 shadow-xs"
@@ -4284,6 +4647,173 @@ export default function PesananToko() {
                   </>
                 )}
               </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* MODAL TEMPLATE CHAT WHATSAPP UNTUK KANTIN */}
+      {waModalOrder && createPortal(
+        <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-none w-full max-w-xl shadow-2xl flex flex-col max-h-[94vh] overflow-hidden animate-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="px-3.5 py-2.5 bg-green-50/70 dark:bg-green-950/40 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-7 h-7 rounded-none bg-green-600 text-white flex items-center justify-center shrink-0">
+                  <MessageCircle className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-xs sm:text-sm font-bold text-gray-900 dark:text-white flex items-center gap-1.5 truncate">
+                    Template WhatsApp Pemesan
+                    <span className="font-mono text-[10px] text-green-700 dark:text-green-300 font-bold bg-green-100 dark:bg-green-900/60 px-1 py-0.2 border border-green-200 dark:border-green-800">
+                      #ORD-{waModalOrder.id}
+                    </span>
+                  </h3>
+                  <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate">
+                    Tujuan: <span className="font-semibold text-gray-800 dark:text-gray-200">{waModalOrder.user?.name || 'Wali'}</span> ({waModalOrder.user?.phone || '-'})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setWaModalOrder(null)}
+                className="p-1 rounded-none border border-gray-200 dark:border-gray-700 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-3 sm:p-4 overflow-y-auto space-y-3 text-left">
+              {/* Info Ringkas Santri / Pemesan */}
+              <div className="p-2 bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-none text-[11px] grid grid-cols-2 gap-1.5">
+                <div>
+                  <span className="text-gray-400 text-[10px] block">Santri / Penerima:</span>
+                  <span className="font-bold text-gray-900 dark:text-white truncate block">
+                    {(() => {
+                      const m = getSantriMeta(waModalOrder.user, waModalOrder.delivery_location, waModalOrder.order_for);
+                      if (m.isTeacher) return `🎓 ${m.santriName} ${waModalOrder.user?.teacher_unit ? `(${waModalOrder.user.teacher_unit})` : ''}`;
+                      const lvl = m.santriLevel || waModalOrder.user?.santri_level || '';
+                      let c = m.santriClass || waModalOrder.user?.santri_class || '';
+                      if (c && !c.toLowerCase().startsWith('kelas')) c = `Kelas ${c}`;
+                      const lbl = (lvl && c) ? ` (${lvl} - ${c})` : (lvl ? ` (${lvl})` : (c ? ` (${c})` : ''));
+                      return `👤 ${m.santriName}${lbl}`;
+                    })()}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-400 text-[10px] block">Kamar / Lokasi:</span>
+                  <span className="font-semibold text-gray-900 dark:text-white truncate block">
+                    📍 {waModalOrder.delivery_location || waModalOrder.user?.santri_room || '-'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-400 text-[10px] block">Waktu Pesanan:</span>
+                  <span className="font-mono text-gray-800 dark:text-gray-200 text-[10px] block">
+                    {waModalOrder.created_at ? new Date(waModalOrder.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-400 text-[10px] block">Total Belanja:</span>
+                  <span className="font-mono font-bold text-green-700 dark:text-green-300 block">
+                    Rp {formatRupiah(waModalOrder.total_price)} ({waModalOrder.payment_status === 'paid' ? 'Lunas' : 'Belum Lunas'})
+                  </span>
+                </div>
+              </div>
+
+              {/* Pilihan Template (Flat Chips) */}
+              <div>
+                <label className="text-[10.5px] font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider block mb-1.5">
+                  Pilih Format Pesan Cepat:
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                  {[
+                    { id: 'detail', label: '📋 Rincian Lengkap', desc: 'Menu, santri & tgl' },
+                    { id: 'out_of_stock', label: '⚠️ Menu Habis', desc: 'Ganti / proses besok' },
+                    { id: 'delivering', label: '🛵 Sedang Diantar', desc: 'Pesanan otw santri' },
+                    { id: 'payment_reminder', label: '💳 Tagihan / TF', desc: 'Konfirmasi bukti bayar' },
+                  ].map((tpl) => {
+                    const isSelected = waTemplateType === tpl.id;
+                    return (
+                      <button
+                        key={tpl.id}
+                        type="button"
+                        onClick={() => handleSelectWaTemplate(tpl.id)}
+                        className={`p-1.5 rounded-none border text-left transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-green-600 text-white border-green-600 shadow-xs'
+                            : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-750'
+                        }`}
+                      >
+                        <div className="font-bold text-[11px] truncate">{tpl.label}</div>
+                        <div className={`text-[9px] truncate ${isSelected ? 'text-green-100' : 'text-gray-400 dark:text-gray-500'}`}>
+                          {tpl.desc}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Textarea Pesan (Editable) */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[10.5px] font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                    Isi Pesan WhatsApp (Bisa diedit langsung):
+                  </label>
+                  <span className="text-[10px] text-gray-400 font-mono">
+                    {waCustomMessage.length} karakter
+                  </span>
+                </div>
+                <textarea
+                  value={waCustomMessage}
+                  onChange={(e) => setWaCustomMessage(e.target.value)}
+                  rows={9}
+                  className="w-full p-2.5 rounded-none font-mono text-[11px] leading-relaxed bg-gray-50 dark:bg-gray-950 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-green-500 focus:border-green-500 focus:outline-none resize-y"
+                  placeholder="Ketik pesan..."
+                />
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-3.5 py-2.5 bg-gray-50 dark:bg-gray-950 border-t border-gray-200 dark:border-gray-800 flex items-center justify-between gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setWaModalOrder(null)}
+                className="py-1.5 px-3 rounded-none text-xs font-semibold text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-750 border border-gray-300 dark:border-gray-700 transition-colors cursor-pointer"
+              >
+                Tutup
+              </button>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleCopyWaMessage}
+                  className="py-1.5 px-3 rounded-none text-xs font-semibold text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-750 border border-gray-300 dark:border-gray-700 flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  {copiedWaMessage ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
+                      <span className="text-green-600 dark:text-green-400 font-bold">Tersalin!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5 text-gray-500" />
+                      <span>Salin Pesan</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleSendWa}
+                  className="py-1.5 px-3.5 rounded-none text-xs font-bold text-white bg-green-600 hover:bg-green-700 flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Kirim ke WhatsApp</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>,

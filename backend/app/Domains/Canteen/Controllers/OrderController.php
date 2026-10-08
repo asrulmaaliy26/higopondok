@@ -27,7 +27,8 @@ class OrderController extends Controller
         ]);
 
         $canteen = Canteen::findOrFail($request->canteen_id);
-        if (!$canteen->is_open) {
+        $isCustom = (bool) $request->is_custom;
+        if (!$canteen->is_open && !$isCustom) {
             return response()->json(['message' => 'Maaf, Kantin sedang tutup. Tidak dapat memesan.'], 400);
         }
 
@@ -405,6 +406,13 @@ class OrderController extends Controller
     private function getActiveCanteen(Request $request)
     {
         $canteenId = $request->query('canteen_id') ?? $request->input('canteen_id');
+        $user = $request->user();
+        if ($user && ($user->hasRole('admin') || $user->hasRole('super_admin'))) {
+            if ($canteenId && $canteenId !== 'all') {
+                return Canteen::find($canteenId);
+            }
+            return Canteen::first();
+        }
         if ($canteenId && $canteenId !== 'all') {
             return $request->user()->canteens()->where('id', $canteenId)->first();
         }
@@ -420,7 +428,7 @@ class OrderController extends Controller
             $query->lockForUpdate();
         }
 
-        if ($user->hasRole('admin')) {
+        if ($user->hasRole('admin') || $user->hasRole('super_admin')) {
             return $query->findOrFail($id);
         }
 
@@ -469,12 +477,13 @@ class OrderController extends Controller
                 'items.product:id,name,price,discount_price,hpp,image',
                 'courier:id,name,phone',
                 'voucher:id,code,title,discount_type,discount_amount',
-                'canteen:id,name',
+                'canteen:id,name,user_id',
+                'canteen.user:id,name,phone',
                 'canteen.couriers:users.id,users.name'
             ])
             ->orderBy('created_at', 'desc');
 
-        $isAdmin = $request->user()->hasRole('admin');
+        $isAdmin = $request->user()->hasRole('admin') || $request->user()->hasRole('super_admin');
 
         if ($canteenId && $canteenId !== 'all') {
             if (!$isAdmin) {
@@ -586,7 +595,7 @@ class OrderController extends Controller
                 ->whereIn('id', $request->order_ids)
                 ->lockForUpdate();
 
-            if (!$user->hasRole('admin')) {
+            if (!$user->hasRole('admin') && !$user->hasRole('super_admin')) {
                 $userCanteenIds = $user->canteens()->pluck('id');
                 if ($userCanteenIds->isEmpty()) {
                     return response()->json(['message' => 'Anda belum memiliki kantin'], 403);
@@ -880,8 +889,16 @@ class OrderController extends Controller
     public function getCouriers(Request $request)
     {
         $canteenId = $request->query('canteen_id') ?? $request->input('canteen_id');
-        if (!$canteenId) {
-            $canteen = $request->user()->canteens()->first();
+        $user = $request->user();
+
+        if (!$canteenId || $canteenId === 'all') {
+            if ($user && ($user->hasRole('admin') || $user->hasRole('super_admin'))) {
+                $couriers = User::role('kurir')
+                    ->where('is_working', true)
+                    ->get(['users.id', 'users.name', 'users.phone']);
+                return response()->json($couriers);
+            }
+            $canteen = $user ? $user->canteens()->first() : null;
             $canteenId = $canteen?->id;
         }
 
@@ -994,7 +1011,7 @@ class OrderController extends Controller
     {
         $user = $request->user();
         $courierId = $user->id;
-        $scope = $request->query('scope', 'all'); // 'all', 'assigned', 'pending', 'processing', 'completed', 'cancelled'
+        $scope = $request->query('scope', 'all');
         $search = $request->query('search');
         $canteenId = $request->query('canteen_id');
         $startDate = $request->query('start_date');
@@ -1007,7 +1024,8 @@ class OrderController extends Controller
             }
         }
 
-        $query = Order::with(['canteen', 'user', 'items.product', 'courier', 'voucher'])
+        // Hanya muat relasi yang benar-benar dipakai di UI kurir (hapus voucher yang tidak diperlukan)
+        $query = Order::with(['canteen:id,name,category,whatsapp_number', 'user:id,name,santri_name,santri_room,santri_class,santri_level,phone,niy,teacher_unit,is_teacher', 'items.product:id,name,price,hpp,category,image', 'courier:id,name,phone'])
             ->orderByRaw("CASE 
                 WHEN status = 'processing' THEN 1 
                 WHEN status = 'pending' THEN 2 
@@ -1026,7 +1044,6 @@ class OrderController extends Controller
         if ($scope === 'assigned') {
             $query->where('courier_id', $courierId);
         } elseif ($scope === 'pending') {
-            // Pending orders belum diteruskan oleh kantin
             if (!$user->hasRole('admin')) {
                 return response()->json([]);
             }
@@ -1072,7 +1089,8 @@ class OrderController extends Controller
             });
         }
 
-        $orders = $query->get();
+        // Batasi maksimal 200 pesanan agar tidak overload (cukup untuk 1 hari operasi)
+        $orders = $query->limit(200)->get();
             
         return response()->json($orders);
     }
@@ -1667,10 +1685,13 @@ class OrderController extends Controller
 
         $request->validate([
             'total_price' => 'required|numeric|min:0',
+            'canteen_id' => 'nullable|exists:canteens,id',
         ]);
 
         $productPrice = (float) $request->total_price;
-        $canteen = $order->canteen;
+        $canteen = $request->filled('canteen_id')
+            ? Canteen::find($request->canteen_id)
+            : $order->canteen;
         $category = $canteen ? ($canteen->category ?? 'kauman') : 'kauman';
 
         // ✅ Gunakan getPricingConfig() agar konsisten dengan seluruh sistem
@@ -1680,15 +1701,21 @@ class OrderController extends Controller
 
         $total_price = $productPrice > 0 ? ($productPrice + $admin_fee + $delivery_fee) : 0;
 
-        $order->update([
+        $updateData = [
             'total_price' => $total_price,
             'admin_fee' => $admin_fee,
             'delivery_fee' => $delivery_fee,
-        ]);
+        ];
+
+        if ($request->filled('canteen_id')) {
+            $updateData['canteen_id'] = $request->canteen_id;
+        }
+
+        $order->update($updateData);
 
         return response()->json([
             'message' => 'Harga barang pesanan khusus berhasil diperbarui',
-            'order' => $order->load(['canteen', 'user', 'items.product', 'courier'])
+            'order' => $order->fresh()->load(['canteen', 'user', 'items.product', 'courier'])
         ]);
     }
 
@@ -1696,7 +1723,14 @@ class OrderController extends Controller
     public function recap(Request $request)
     {
         $canteenId = $request->query('canteen_id');
-        $userCanteenIds = $request->user()->canteens()->pluck('id');
+        $user = $request->user();
+        $isAdmin = $user && ($user->hasRole('admin') || $user->hasRole('super_admin'));
+
+        if ($isAdmin) {
+            $userCanteenIds = Canteen::pluck('id');
+        } else {
+            $userCanteenIds = $user ? $user->canteens()->pluck('id') : collect();
+        }
 
         if ($userCanteenIds->isEmpty()) {
             return response()->json(['message' => 'Kantin tidak ditemukan'], 404);
@@ -1709,7 +1743,7 @@ class OrderController extends Controller
         $query = Order::forRecap()->filterPeriod($period, $startDate, $endDate);
 
         if ($canteenId && $canteenId !== 'all') {
-            if (!$userCanteenIds->contains($canteenId)) {
+            if (!$isAdmin && !$userCanteenIds->contains($canteenId)) {
                 return response()->json(['message' => 'Anda tidak memiliki akses ke kantin ini'], 403);
             }
             $query->where('canteen_id', $canteenId);

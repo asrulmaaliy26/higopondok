@@ -1,45 +1,62 @@
-import React, { useRef, useEffect } from 'react';
-import {
-  Search,
-  Wallet,
-  Store,
-  Clock,
-  CheckCircle,
-  ShoppingBag,
-  ChevronRight,
-  ArrowRight,
-  UtensilsCrossed,
-  Bike,
-  Sparkles,
-  Plus,
-  Minus,
-  Star,
-  MapPin,
-  ClipboardList,
-  ShoppingCart,
-  HelpCircle,
-  ShieldCheck,
-  RefreshCw,
-  ExternalLink,
-  Ticket
-} from 'lucide-react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
+import {
+  Search,
+  MapPin,
+  Store,
+  ShoppingCart,
+  ChevronRight,
+  UtensilsCrossed,
+  Plus,
+  Minus,
+  Check,
+  Star,
+  Clock,
+  Sparkles,
+  BookOpen,
+  Coffee,
+  ShoppingBag,
+  ArrowRight,
+  ShieldCheck,
+  Bike,
+  Ticket,
+  Wallet,
+  Activity,
+  ClipboardList
+} from 'lucide-react';
 import toast from 'react-hot-toast';
 import api, { getStorageUrl } from '../../../lib/axios';
 import { useCartStore } from '../../../store/cartStore';
-import ThemeToggle from '../../ui/ThemeToggle';
 import AppImage from '../../common/AppImage';
+import { ProductOptionModal } from '../../modals/ProductOptionModal';
+
+const hasVariants = (product) => {
+  const cfg = product?.variant_config;
+  if (!cfg) return false;
+  return !!(
+    cfg.spicy?.enabled ||
+    cfg.temperature?.enabled ||
+    cfg.portion?.enabled ||
+    cfg.sugar?.enabled ||
+    (cfg.custom?.enabled && cfg.custom?.groups?.length > 0)
+  );
+};
 
 export default function UserDashboard({ user }) {
   const navigate = useNavigate();
   const { addItem, removeItem, getCanteenItems, getTotalItems } = useCartStore();
   const totalCartItems = getTotalItems();
 
-  const scrollBannerRef = useRef(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('semua');
+  const [selectedOptionProduct, setSelectedOptionProduct] = useState(null);
+  const [selectedOptionCanteen, setSelectedOptionCanteen] = useState(null);
+  const [isOptionModalOpen, setIsOptionModalOpen] = useState(false);
+  const scrollContainerRef = useRef(null);
 
-  // 1. Fetch Orders
-  const { data: orders = [], isLoading: loadingOrders } = useQuery({
+  // 1. Fetch Orders (active & completed)
+  const { data: orders = [] } = useQuery({
     queryKey: ['user_orders'],
     queryFn: async () => {
       const res = await api.get('/orders');
@@ -47,16 +64,7 @@ export default function UserDashboard({ user }) {
     }
   });
 
-  // 2. Fetch Canteens with products
-  const { data: canteens = [], isLoading: loadingCanteens } = useQuery({
-    queryKey: ['canteens'],
-    queryFn: async () => {
-      const res = await api.get('/canteens');
-      return res.data.data || res.data || [];
-    }
-  });
-
-  // 3. Fetch Banners
+  // 2. Fetch Banners (Approved)
   const { data: banners = [], isLoading: loadingBanners } = useQuery({
     queryKey: ['canteen-banners'],
     queryFn: async () => {
@@ -65,475 +73,601 @@ export default function UserDashboard({ user }) {
     }
   });
 
-  // Auto scroll banners
+  // 3. Fetch Canteens with products
+  const { data: canteens = [], isLoading: loadingCanteens } = useQuery({
+    queryKey: ['canteens'],
+    queryFn: async () => {
+      const res = await api.get('/canteens');
+      return res.data.data || res.data || [];
+    }
+  });
+
+  // Auto slide banner promo
   useEffect(() => {
     if (!banners || banners.length <= 1) return;
     const interval = setInterval(() => {
-      if (scrollBannerRef.current) {
-        const { scrollLeft, scrollWidth, clientWidth } = scrollBannerRef.current;
+      if (scrollContainerRef.current) {
+        const { scrollLeft, scrollWidth, clientWidth } = scrollContainerRef.current;
         if (scrollLeft + clientWidth >= scrollWidth - 10) {
-          scrollBannerRef.current.scrollTo({ left: 0, behavior: 'smooth' });
+          scrollContainerRef.current.scrollTo({ left: 0, behavior: 'smooth' });
         } else {
-          scrollBannerRef.current.scrollBy({ left: clientWidth, behavior: 'smooth' });
+          scrollContainerRef.current.scrollBy({ left: clientWidth, behavior: 'smooth' });
         }
       }
     }, 4500);
     return () => clearInterval(interval);
   }, [banners]);
 
-  // Active orders (pesanan aktif yang sedang diproses / diantar)
-  const activeOrders = Array.isArray(orders)
-    ? orders.filter((o) => ['pending', 'processing'].includes(o.status))
-    : [];
+  // Active orders (pesanan yang sedang berlangsung)
+  const activeOrders = useMemo(() => {
+    if (!Array.isArray(orders)) return [];
+    return orders.filter((o) => ['pending', 'processing'].includes(o.status));
+  }, [orders]);
 
-  const completedOrders = Array.isArray(orders)
-    ? orders.filter((o) => o.status === 'completed')
-    : [];
-
-  // Flatten popular products
-  const popularProducts = React.useMemo(() => {
+  // Flatten popular products across open canteens
+  const allProducts = useMemo(() => {
     if (!Array.isArray(canteens)) return [];
     const list = [];
-    canteens.forEach((c) => {
-      if (Array.isArray(c.products)) {
-        c.products.forEach((prod) => {
-          list.push({ ...prod, canteen: c });
+    canteens.forEach((canteen) => {
+      if (Array.isArray(canteen.products)) {
+        canteen.products.forEach((prod) => {
+          list.push({
+            ...prod,
+            canteen
+          });
         });
       }
     });
     return list;
   }, [canteens]);
 
-  const handleAddToCart = (canteen, product) => {
-    addItem(canteen, product);
-    toast.success(`${product.name} dimasukkan ke keranjang`, {
-      duration: 1800,
-      position: 'bottom-center'
+  // Filter canteens based on search and category
+  const filteredCanteens = useMemo(() => {
+    if (!Array.isArray(canteens)) return [];
+    return canteens.filter((c) => {
+      const matchSearch =
+        !searchQuery ||
+        c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (c.description && c.description.toLowerCase().includes(searchQuery.toLowerCase()));
+
+      let matchCategory = true;
+      if (selectedCategory === 'buka') {
+        matchCategory = c.is_open === 1 || c.is_open === true;
+      } else if (selectedCategory === 'makanan') {
+        matchCategory = c.category?.toLowerCase() === 'makanan' || c.products?.some(p => p.category?.toLowerCase() === 'makanan');
+      } else if (selectedCategory === 'minuman') {
+        matchCategory = c.category?.toLowerCase() === 'minuman' || c.products?.some(p => p.category?.toLowerCase() === 'minuman');
+      } else if (selectedCategory === 'snack') {
+        matchCategory = c.category?.toLowerCase() === 'snack' || c.products?.some(p => ['snack', 'camilan'].includes(p.category?.toLowerCase()));
+      }
+      return matchSearch && matchCategory;
     });
+  }, [canteens, searchQuery, selectedCategory]);
+
+  // Filter products based on search and category
+  const filteredProducts = useMemo(() => {
+    if (!Array.isArray(allProducts)) return [];
+    return allProducts.filter((p) => {
+      const matchSearch =
+        !searchQuery ||
+        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (p.description && p.description.toLowerCase().includes(searchQuery.toLowerCase()));
+
+      let matchCategory = true;
+      if (selectedCategory === 'makanan') {
+        matchCategory = p.category?.toLowerCase() === 'makanan';
+      } else if (selectedCategory === 'minuman') {
+        matchCategory = p.category?.toLowerCase() === 'minuman';
+      } else if (selectedCategory === 'snack') {
+        matchCategory = ['snack', 'camilan'].includes(p.category?.toLowerCase());
+      } else if (selectedCategory === 'buka') {
+        matchCategory = p.canteen?.is_open === 1 || p.canteen?.is_open === true;
+      }
+      return matchSearch && matchCategory;
+    });
+  }, [allProducts, searchQuery, selectedCategory]);
+
+  const handleAddToCart = (canteen, product) => {
+    if (hasVariants(product)) {
+      setSelectedOptionProduct(product);
+      setSelectedOptionCanteen(canteen);
+      setIsOptionModalOpen(true);
+      return;
+    }
+    addItem(canteen, product);
+    toast.success(`${product.name} dimasukkan ke keranjang`);
+  };
+
+  const handleConfirmVariant = ({ quantity, options, notes, extraPrice, variantKey }) => {
+    if (!selectedOptionProduct || !selectedOptionCanteen) return;
+    addItem(selectedOptionCanteen, selectedOptionProduct, quantity, { variantKey, extraPrice, labels: options }, notes);
+    toast.success(`${selectedOptionProduct.name} dimasukkan ke keranjang`);
+    setIsOptionModalOpen(false);
+    setSelectedOptionProduct(null);
+    setSelectedOptionCanteen(null);
   };
 
   return (
-    <div className="space-y-3 font-sans pb-16">
-      {/* 1. TOP SEARCH & GREETING BAR (Gojek Header Style) */}
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-2.5 sm:p-3 shadow-xs">
-        <div className="flex items-center justify-between gap-2 mb-2.5">
-          <div className="flex items-center gap-2 overflow-hidden">
-            <div className="w-8 h-8 bg-green-600 text-white font-bold text-sm flex items-center justify-center shrink-0">
-              {user?.name ? user.name.charAt(0).toUpperCase() : 'S'}
-            </div>
-            <div className="truncate">
-              <p className="text-[10px] text-gray-500 dark:text-gray-400 font-medium leading-none">
-                Ahlan wa Sahlan,
-              </p>
-              <h2 className="text-xs sm:text-sm font-bold text-gray-900 dark:text-white truncate">
-                {user?.santri_name || user?.name || 'Santri Al-Mannan'}
-              </h2>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1.5 shrink-0">
-            <div className="flex items-center gap-1 px-2 py-1 bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800 text-[10px] font-bold text-green-800 dark:text-green-300">
-              <MapPin className="w-3 h-3 text-green-600 shrink-0" />
-              <span className="truncate max-w-[120px]">{user?.santri_room || 'Kamar Santri'}</span>
-            </div>
-            <ThemeToggle size="sm" />
-          </div>
-        </div>
-
-        {/* Gojek Style Search Bar */}
-        <Link
-          to="/dashboard/kantin"
-          className="flex items-center gap-2 w-full px-3 py-2 bg-gray-50 dark:bg-gray-800/80 border border-gray-300 dark:border-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
-        >
-          <Search className="w-4 h-4 text-green-600 shrink-0" />
-          <span className="text-xs text-gray-500 dark:text-gray-400 font-medium truncate">
-            Lagi mau jajan apa hari ini di pondok?
-          </span>
-        </Link>
-      </div>
-
-      {/* 2. GOJEK WALLET BAR (Gopay / E-Money Santri Style) */}
-      <div className="bg-gradient-to-r from-green-700 via-green-600 to-emerald-700 text-white border border-green-800 shadow-sm p-3">
-        <div className="flex items-center justify-between gap-3">
-          {/* Sisi Kiri: Info Saldo & Asrama */}
-          <div className="flex-1 border-r border-green-600/60 pr-3">
-            <div className="flex items-center gap-1.5 mb-0.5">
-              <Wallet className="w-3.5 h-3.5 text-green-200" />
-              <span className="text-[10px] font-bold uppercase tracking-wider text-green-100">
-                HiPay Santri
-              </span>
-            </div>
-            <p className="text-sm sm:text-base font-extrabold font-mono leading-tight">
-              {user?.balance ? `Rp ${parseFloat(user.balance).toLocaleString('id-ID')}` : 'Limit Terpantau'}
-            </p>
-            <p className="text-[10px] text-green-100/90 truncate mt-0.5">
-              {user?.santri_class ? `Kelas: ${user.santri_class}` : 'Akun Terhubung Wali'}
-            </p>
-          </div>
-
-          {/* Sisi Kanan: Tombol Aksi Cepat Vertikal ala GoPay */}
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            <Link
-              to="/dashboard/kantin"
-              className="flex flex-col items-center justify-center p-1.5 text-white hover:text-green-200 transition-colors"
-            >
-              <div className="w-8 h-8 bg-white/20 border border-white/30 flex items-center justify-center mb-1">
-                <Store className="w-4 h-4" />
-              </div>
-              <span className="text-[10px] font-bold">Jajan</span>
-            </Link>
-
-            <Link
-              to="/dashboard/pembayaran"
-              className="flex flex-col items-center justify-center p-1.5 text-white hover:text-green-200 transition-colors"
-            >
-              <div className="w-8 h-8 bg-white/20 border border-white/30 flex items-center justify-center mb-1">
-                <ClipboardList className="w-4 h-4" />
-              </div>
-              <span className="text-[10px] font-bold">Riwayat</span>
-            </Link>
-
-            <Link
-              to="/dashboard/vouchers"
-              className="flex flex-col items-center justify-center p-1.5 text-white hover:text-green-200 transition-colors"
-            >
-              <div className="w-8 h-8 bg-white/20 border border-white/30 flex items-center justify-center mb-1">
-                <Ticket className="w-4 h-4" />
-              </div>
-              <span className="text-[10px] font-bold">Voucher</span>
-            </Link>
-
-            <Link
-              to="/dashboard/keranjang"
-              className="flex flex-col items-center justify-center p-1.5 text-white hover:text-green-200 transition-colors relative"
-            >
-              <div className="w-8 h-8 bg-white/20 border border-white/30 flex items-center justify-center mb-1 relative">
-                <ShoppingCart className="w-4 h-4" />
-                {totalCartItems > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white font-mono text-[9px] font-black w-4 h-4 flex items-center justify-center border border-green-800 leading-none">
-                    {totalCartItems > 99 ? '99+' : totalCartItems}
-                  </span>
-                )}
-              </div>
-              <span className="text-[10px] font-bold">Keranjang</span>
-            </Link>
-          </div>
-        </div>
-      </div>
-
-      {/* 3. PESANAN AKTIF BERJALAN (Gojek Floating Active Order Tracker) */}
-      {activeOrders.length > 0 && (
-        <div className="bg-amber-50 dark:bg-amber-950/40 border-l-4 border-l-amber-500 border border-amber-200 dark:border-amber-800/80 p-3 shadow-xs">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2.5 overflow-hidden">
-              <div className="w-8 h-8 bg-amber-500 text-white flex items-center justify-center shrink-0">
-                <Bike className="w-4 h-4" />
-              </div>
-              <div className="truncate">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[9px] font-black uppercase px-1 py-0.2 bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-200 tracking-wider">
-                    {activeOrders[0].status === 'pending' ? 'Menunggu Konfirmasi' : 'Sedang Diproses Kurir'}
-                  </span>
-                </div>
-                <p className="text-xs font-bold text-gray-900 dark:text-white truncate">
-                  {activeOrders[0].canteen?.name || 'Kantin Pondok'} • Rp{' '}
-                  {parseFloat(activeOrders[0].total_price).toLocaleString('id-ID')}
-                </p>
-                <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate">
-                  Tujuan: {activeOrders[0].delivery_location || user?.santri_room || 'Kamar Santri'}
-                </p>
-              </div>
-            </div>
-
-            <Link
-              to="/dashboard/pembayaran"
-              className="px-2.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shrink-0 flex items-center gap-1 transition-colors"
-            >
-              <span>Pantau</span>
-              <ChevronRight className="w-3 h-3" />
-            </Link>
-          </div>
-        </div>
-      )}
-
-      {/* 4. GOJEK 4-GRID SERVICES (Layanan Utama ala Gojek) */}
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-3 shadow-xs">
-        <h3 className="text-[11px] font-extrabold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2.5">
-          Layanan Santri Al-Mannan
-        </h3>
-        <div className="grid grid-cols-4 gap-2 text-center">
+    <div className="font-sans pb-16">
+      {/* 1. SUB-BANNER / STATUS LOKASI & SALDO SANTRI (ala Lokasi Pengantaran Gojek) */}
+      <div className="bg-green-700 dark:bg-green-950 text-white px-3 py-2 text-xs border-b border-green-800">
+        <div className="max-w-5xl mx-auto flex items-center justify-between gap-2">
           <Link
-            to="/dashboard/kantin"
-            className="flex flex-col items-center group"
+            to="/dashboard/profile"
+            className="flex items-center gap-2 overflow-hidden truncate hover:opacity-90 transition-opacity"
           >
-            <div className="w-12 h-12 bg-green-50 dark:bg-green-950/60 border border-green-200 dark:border-green-800 flex items-center justify-center text-green-700 dark:text-green-400 group-hover:scale-105 transition-transform mb-1 shadow-xs">
-              <UtensilsCrossed className="w-5 h-5" />
-            </div>
-            <span className="text-[11px] font-bold text-gray-800 dark:text-gray-200">HiFood</span>
-            <span className="text-[9px] text-gray-400 leading-none">Kantin</span>
-          </Link>
-
-          <Link
-            to="/dashboard/kantin"
-            className="flex flex-col items-center group"
-          >
-            <div className="w-12 h-12 bg-green-50 dark:bg-green-950/60 border border-green-200 dark:border-green-800 flex items-center justify-center text-green-700 dark:text-green-400 group-hover:scale-105 transition-transform mb-1 shadow-xs">
-              <Bike className="w-5 h-5" />
-            </div>
-            <span className="text-[11px] font-bold text-gray-800 dark:text-gray-200">HiSend</span>
-            <span className="text-[9px] text-gray-400 leading-none">Antar Kamar</span>
-          </Link>
-
-          <Link
-            to="/dashboard/kantin"
-            className="flex flex-col items-center group"
-          >
-            <div className="w-12 h-12 bg-green-50 dark:bg-green-950/60 border border-green-200 dark:border-green-800 flex items-center justify-center text-green-700 dark:text-green-400 group-hover:scale-105 transition-transform mb-1 shadow-xs">
-              <Store className="w-5 h-5" />
-            </div>
-            <span className="text-[11px] font-bold text-gray-800 dark:text-gray-200">HiMart</span>
-            <span className="text-[9px] text-gray-400 leading-none">Snack</span>
+            <span className="px-1.5 py-0.5 bg-green-800 text-[10px] font-bold uppercase tracking-wider shrink-0 flex items-center gap-1">
+              <MapPin className="w-3 h-3 text-green-300" />
+              Antar ke
+            </span>
+            <span className="truncate text-green-100 font-medium">
+              {user?.santri_room
+                ? `Kamar ${user.santri_room} • ${user.santri_name || user.name}`
+                : 'Pilih Kamar / Asrama Santri Al-Mannan'}
+            </span>
           </Link>
 
           <Link
             to="/dashboard/pembayaran"
-            className="flex flex-col items-center group"
+            className="flex items-center gap-1.5 px-2 py-0.5 bg-green-800/80 hover:bg-green-800 text-white font-mono text-[11px] font-bold shrink-0 transition-colors"
+            title="Saldo Santri / Riwayat"
           >
-            <div className="w-12 h-12 bg-green-50 dark:bg-green-950/60 border border-green-200 dark:border-green-800 flex items-center justify-center text-green-700 dark:text-green-400 group-hover:scale-105 transition-transform mb-1 shadow-xs">
-              <ClipboardList className="w-5 h-5" />
-            </div>
-            <span className="text-[11px] font-bold text-gray-800 dark:text-gray-200">Pesanan</span>
-            <span className="text-[9px] text-gray-400 leading-none">Status</span>
+            <Wallet className="w-3 h-3 text-green-300" />
+            <span>Rp {parseFloat(user?.balance || 0).toLocaleString('id-ID')}</span>
           </Link>
         </div>
       </div>
 
-      {/* 5. PROMO BANNER (Gojek Banner Carousel) */}
-      <div className="relative">
-        {loadingBanners ? (
-          <div className="w-full h-28 bg-gray-200 dark:bg-gray-800 animate-pulse border border-gray-200 dark:border-gray-800" />
-        ) : (
-          <div
-            ref={scrollBannerRef}
-            className="flex overflow-x-auto snap-x snap-mandatory hide-scrollbar space-x-2.5 pb-1"
-          >
-            {Array.isArray(banners) && banners.length > 0 ? (
-              banners.map((b) => (
-                <div
-                  key={b.id}
-                  className="snap-center shrink-0 w-full sm:w-[85%] h-28 sm:h-36 relative overflow-hidden border border-gray-200 dark:border-gray-800 bg-gray-900"
-                >
-                  <img src={getStorageUrl(b.image_path)} alt={b.title} className="w-full h-full object-cover" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex items-end p-2.5">
-                    <p className="text-white font-bold text-xs sm:text-sm drop-shadow-sm line-clamp-1">{b.title}</p>
-                  </div>
+      <div className="max-w-5xl mx-auto px-3 sm:px-4 pt-3.5 space-y-3.5">
+        {/* 2. PESANAN AKTIF BERJALAN (Gojek Floating Active Order Tracker) */}
+        {activeOrders.length > 0 && (
+          <div className="bg-amber-50 dark:bg-amber-950/40 border-l-4 border-l-amber-500 border border-amber-200 dark:border-amber-800/80 p-3 shadow-xs">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5 overflow-hidden">
+                <div className="w-8 h-8 bg-amber-500 text-white flex items-center justify-center shrink-0">
+                  <Bike className="w-4 h-4" />
                 </div>
-              ))
-            ) : (
-              <div className="snap-center shrink-0 w-full h-24 bg-gradient-to-r from-green-800 to-emerald-800 text-white p-3 flex items-center justify-between border border-green-900">
-                <div>
-                  <span className="text-[9px] font-bold uppercase tracking-wider bg-white/20 px-1 py-0.5">
-                    HiGO Promo
-                  </span>
-                  <h4 className="text-xs sm:text-sm font-extrabold mt-1">Gratis Biaya Layanan Pesantren</h4>
-                  <p className="text-[10px] text-green-100">Pesan makanan favorit langsung diantar ke kamar santri</p>
-                </div>
-                <Store className="w-8 h-8 text-green-300 opacity-80 shrink-0" />
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* 6. PALING LARIS DI PONDOK (Horizontal Scroll ala GoFood) */}
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-3 shadow-xs">
-        <div className="flex items-center justify-between mb-2">
-          <div>
-            <h3 className="font-extrabold text-xs sm:text-sm text-gray-900 dark:text-white uppercase tracking-wider">
-              Paling Laris di Pondok
-            </h3>
-            <p className="text-[10px] text-gray-500 dark:text-gray-400">Jajanan favorit para santri Al-Mannan</p>
-          </div>
-          <Link
-            to="/dashboard/kantin"
-            className="text-xs font-bold text-green-600 dark:text-green-400 flex items-center gap-0.5 hover:underline"
-          >
-            Lihat Semua <ChevronRight className="w-3 h-3" />
-          </Link>
-        </div>
-
-        <div className="flex overflow-x-auto hide-scrollbar space-x-2.5 pb-1">
-          {popularProducts.slice(0, 8).map((product) => {
-            const canteen = product.canteen;
-            const canteenCart = canteen ? getCanteenItems(canteen.id) : {};
-            const currentQty = canteenCart[String(product.id)]?.quantity || 0;
-
-            return (
-              <div
-                key={product.id}
-                className="shrink-0 w-36 sm:w-40 border border-gray-200 dark:border-gray-800 p-2 flex flex-col justify-between hover:border-green-500 transition-colors"
-              >
-                <div>
-                  <div className="aspect-square bg-gray-100 dark:bg-gray-800 overflow-hidden mb-1.5 relative border border-gray-100 dark:border-gray-700">
-                    <AppImage
-                      src={product.image}
-                      alt={product.name}
-                      type="food"
-                      fallbackIcon={<UtensilsCrossed className="w-6 h-6 text-gray-400 dark:text-gray-500 opacity-40" />}
-                      className="w-full h-full object-cover"
-                    />
-                    {currentQty > 0 && (
-                      <span className="absolute top-1 right-1 bg-green-600 text-white font-mono text-[9px] font-black px-1 py-0.2">
-                        {currentQty}x
-                      </span>
-                    )}
+                <div className="truncate">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[9px] font-black uppercase px-1 py-0.2 bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-200 tracking-wider">
+                      {activeOrders[0].status === 'pending' ? 'Menunggu Konfirmasi' : 'Sedang Diproses Kurir'}
+                    </span>
                   </div>
-                  <h4 className="text-xs font-bold text-gray-900 dark:text-white line-clamp-1">{product.name}</h4>
-                  <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate flex items-center gap-1">
-                    <Store className="w-2.5 h-2.5 text-gray-400 shrink-0" />
-                    <span>{canteen?.name || 'Kantin'}</span>
+                  <p className="text-xs font-bold text-gray-900 dark:text-white truncate">
+                    {activeOrders[0].canteen?.name || 'Kantin Pondok'} • Rp{' '}
+                    {parseFloat(activeOrders[0].total_price).toLocaleString('id-ID')}
+                  </p>
+                  <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate">
+                    Tujuan: {activeOrders[0].delivery_location || user?.santri_room || 'Kamar Santri'}
                   </p>
                 </div>
-
-                <div className="pt-1.5 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between mt-1">
-                  <span className="text-xs font-mono font-bold text-green-700 dark:text-green-400">
-                    Rp {parseFloat(product.price).toLocaleString('id-ID')}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => handleAddToCart(canteen, product)}
-                    className="w-6 h-6 bg-green-600 hover:bg-green-700 text-white font-bold text-xs flex items-center justify-center transition-colors active:scale-90"
-                    title="Tambah"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                  </button>
-                </div>
               </div>
+
+              <Link
+                to="/dashboard/pembayaran"
+                className="px-2.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shrink-0 flex items-center gap-1 transition-colors"
+              >
+                <span>Pantau</span>
+                <ChevronRight className="w-3 h-3" />
+              </Link>
+            </div>
+          </div>
+        )}
+
+        {/* 3. SEARCH INPUT (Flat Sharp & High Density ala GoFood) */}
+        <div className="relative">
+          <div className="bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 px-3 py-2.5 flex items-center gap-2 shadow-xs">
+            <Search className="w-4 h-4 text-gray-400 shrink-0" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Lagi mau jajan apa hari ini di pondok? (Cari menu / kantin...)"
+              className="flex-1 bg-transparent text-xs sm:text-sm outline-hidden text-gray-800 dark:text-gray-100 placeholder-gray-400"
+            />
+            {searchQuery ? (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 px-1 font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            ) : (
+              <UtensilsCrossed className="w-4 h-4 text-green-600 shrink-0" />
+            )}
+          </div>
+        </div>
+
+        {/* 4. PROMO BANNER CAROUSEL */}
+        <div className="relative">
+          {loadingBanners ? (
+            <div className="w-full h-36 sm:h-48 bg-gray-200 dark:bg-gray-800 animate-pulse border border-gray-200 dark:border-gray-800" />
+          ) : (
+            <div
+              ref={scrollContainerRef}
+              className="flex overflow-x-auto snap-x snap-mandatory hide-scrollbar space-x-3 pb-1"
+            >
+              {Array.isArray(banners) && banners.length > 0 ? (
+                banners.map((banner) => (
+                  <div
+                    key={banner.id}
+                    className="snap-center shrink-0 w-full sm:w-[85%] lg:w-[70%] h-36 sm:h-48 relative overflow-hidden border border-gray-200 dark:border-gray-800 bg-gray-900"
+                  >
+                    <AppImage
+                      src={banner.image_path}
+                      alt={banner.title}
+                      type="banner"
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent flex items-end p-3 sm:p-4">
+                      <div>
+                        <span className="px-1.5 py-0.5 bg-green-600 text-white text-[10px] font-bold uppercase tracking-wider mb-1 inline-block">
+                          Promo Kantin
+                        </span>
+                        <h3 className="text-white font-bold text-sm sm:text-base leading-tight drop-shadow-sm">
+                          {banner.title}
+                        </h3>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="snap-center shrink-0 w-full h-36 sm:h-44 bg-gradient-to-r from-green-800 via-green-700 to-emerald-800 p-4 sm:p-6 text-white flex flex-col justify-center border border-green-900">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <Sparkles className="w-4 h-4 text-green-300" />
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-green-200">
+                      HiGO Pondok Al-Mannan
+                    </span>
+                  </div>
+                  <h3 className="text-base sm:text-xl font-extrabold mb-1">
+                    Jajan & Kebutuhan Santri Jadi Lebih Praktis!
+                  </h3>
+                  <p className="text-xs sm:text-sm text-green-100 max-w-xl">
+                    Pilih menu favoritmu dari berbagai kantin pondok. Kurir santri siap mengantar ke kamar asrama.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* 5. SHORTCUT LAYANAN 4 KOLOM (ala Gojek) */}
+        <div className="grid grid-cols-4 gap-2 pt-0.5">
+          <button
+            type="button"
+            onClick={() => navigate({ to: '/kantin', search: { category: 'makanan' } })}
+            className="flex flex-col items-center justify-center p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 hover:border-green-500 transition-all cursor-pointer group"
+          >
+            <div className="w-10 h-10 bg-red-50 dark:bg-red-950/50 text-red-600 flex items-center justify-center mb-1 text-lg group-hover:scale-105 transition-transform">
+              🍜
+            </div>
+            <span className="text-[11px] font-bold text-gray-900 dark:text-white">Makanan</span>
+            <span className="text-[9px] text-green-700 dark:text-green-400 font-semibold font-mono">HiFood</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate({ to: '/kantin', search: { category: 'minuman' } })}
+            className="flex flex-col items-center justify-center p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 hover:border-green-500 transition-all cursor-pointer group"
+          >
+            <div className="w-10 h-10 bg-blue-50 dark:bg-blue-950/50 text-blue-600 flex items-center justify-center mb-1 text-lg group-hover:scale-105 transition-transform">
+              🥤
+            </div>
+            <span className="text-[11px] font-bold text-gray-900 dark:text-white">Minuman</span>
+            <span className="text-[9px] text-blue-600 dark:text-blue-400 font-semibold font-mono">Segar</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate({ to: '/kantin', search: { category: 'snack' } })}
+            className="flex flex-col items-center justify-center p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 hover:border-green-500 transition-all cursor-pointer group"
+          >
+            <div className="w-10 h-10 bg-amber-50 dark:bg-amber-950/50 text-amber-600 flex items-center justify-center mb-1 text-lg group-hover:scale-105 transition-transform">
+              🍿
+            </div>
+            <span className="text-[11px] font-bold text-gray-900 dark:text-white">Camilan</span>
+            <span className="text-[9px] text-amber-600 dark:text-amber-400 font-semibold font-mono">Snack</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate({ to: '/kantin', search: { category: 'semua' } })}
+            className="flex flex-col items-center justify-center p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 hover:border-green-500 transition-all cursor-pointer group"
+          >
+            <div className="w-10 h-10 bg-green-50 dark:bg-green-950/50 text-green-600 flex items-center justify-center mb-1 text-lg group-hover:scale-105 transition-transform">
+              🏪
+            </div>
+            <span className="text-[11px] font-bold text-gray-900 dark:text-white">Semua Toko</span>
+            <span className="text-[9px] text-green-700 dark:text-green-400 font-semibold font-mono">Kantin</span>
+          </button>
+        </div>
+
+        {/* 6. VOUCHER PROMO STRIP */}
+        <Link
+          to="/dashboard/vouchers"
+          className="flex items-center justify-between p-2.5 bg-gradient-to-r from-green-700 via-emerald-600 to-green-800 text-white border border-green-800 shadow-xs cursor-pointer hover:opacity-95 transition-opacity"
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-base">🎟️</span>
+            <div>
+              <p className="text-xs font-bold leading-tight">Kupon Diskon Ongkir & Layanan Santri</p>
+              <p className="text-[10px] text-green-200 leading-tight">Hemat biaya admin dan potongan harga tiap hari</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 text-[11px] font-bold shrink-0 bg-white/20 px-2 py-1">
+            <span>Klaim</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </div>
+        </Link>
+
+        {/* 7. KATEGORI FILTER TABS (Beautified) */}
+        <div className="flex items-center gap-1.5 overflow-x-auto hide-scrollbar pb-1 text-xs">
+          {[
+            { id: 'semua', label: 'Semua Menu', icon: Store, iconColor: 'text-emerald-500 dark:text-emerald-400' },
+            { id: 'buka', label: 'Kantin Buka', icon: Clock, iconColor: 'text-green-500 dark:text-green-400', isLive: true },
+            { id: 'makanan', label: 'Makanan Berat', icon: UtensilsCrossed, iconColor: 'text-amber-500 dark:text-amber-400' },
+            { id: 'minuman', label: 'Minuman Segar', icon: Coffee, iconColor: 'text-sky-500 dark:text-sky-400' },
+            { id: 'snack', label: 'Snack & Camilan', icon: Sparkles, iconColor: 'text-rose-500 dark:text-rose-400' }
+          ].map((cat) => {
+            const Icon = cat.icon;
+            const isActive = selectedCategory === cat.id;
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => setSelectedCategory(cat.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 shrink-0 text-xs font-black uppercase tracking-wider border rounded-none transition-all cursor-pointer select-none active:scale-[0.98] ${
+                  isActive
+                    ? 'bg-green-600 text-white border-green-500 shadow-sm shadow-green-900/30 ring-1 ring-green-400/50'
+                    : 'bg-white dark:bg-gray-900/95 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-800 hover:border-green-500/60 hover:bg-gray-50 dark:hover:bg-gray-800/90 hover:text-green-600 dark:hover:text-green-400'
+                }`}
+              >
+                {cat.isLive && (
+                  <span className="relative flex h-2 w-2">
+                    <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isActive ? 'bg-white' : 'bg-green-400'}`} />
+                    <span className={`relative inline-flex rounded-full h-2 w-2 ${isActive ? 'bg-white' : 'bg-green-500'}`} />
+                  </span>
+                )}
+                <Icon className={`w-3.5 h-3.5 shrink-0 transition-transform ${isActive ? 'text-white scale-110' : cat.iconColor}`} />
+                <span>{cat.label}</span>
+              </button>
             );
           })}
         </div>
-      </div>
 
-      {/* 7. KANTIN & WARUNG PILIHAN (Daftar Resto ala GoFood) */}
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-3 shadow-xs">
-        <div className="flex items-center justify-between mb-2.5">
-          <div>
-            <h3 className="font-extrabold text-xs sm:text-sm text-gray-900 dark:text-white uppercase tracking-wider">
-              Kantin & Toko Pilihan
-            </h3>
-            <p className="text-[10px] text-gray-500 dark:text-gray-400">Pesan langsung dari stan terdekat</p>
-          </div>
-          <Link
-            to="/dashboard/kantin"
-            className="text-xs font-bold text-green-600 dark:text-green-400 flex items-center gap-0.5 hover:underline"
-          >
-            Lihat Semua <ChevronRight className="w-3 h-3" />
-          </Link>
-        </div>
-
-        <div className="space-y-2">
-          {canteens.slice(0, 4).map((canteen) => (
-            <Link
-              key={canteen.id}
-              to={`/kantin/${canteen.id}`}
-              className="flex bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 hover:border-green-600 p-2 transition-colors group"
-            >
-              <div className="w-16 h-16 bg-gray-200 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 overflow-hidden shrink-0 flex items-center justify-center">
-                <AppImage
-                  src={canteen.image}
-                  alt={canteen.name}
-                  type="store"
-                  fallbackIcon={<Store className="w-6 h-6 text-gray-400 dark:text-gray-500 opacity-60" />}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                />
-              </div>
-              <div className="ml-2.5 flex-1 flex flex-col justify-between overflow-hidden">
-                <div>
-                  <div className="flex items-center justify-between gap-1">
-                    <h4 className="font-bold text-xs sm:text-sm text-gray-900 dark:text-white truncate">
-                      {canteen.name}
-                    </h4>
-                    <span
-                      className={`text-[9px] font-black px-1.5 py-0.2 uppercase tracking-wider shrink-0 ${
-                        canteen.is_open
-                          ? 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300'
-                          : 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'
-                      }`}
-                    >
-                      {canteen.is_open ? 'Buka' : 'Tutup'}
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-gray-500 dark:text-gray-400 line-clamp-1">
-                    {canteen.description || 'Kantin resmi pondok pesantren'}
-                  </p>
-                </div>
-                <div className="flex items-center justify-between text-[10px] text-gray-500 dark:text-gray-400 pt-1 border-t border-gray-200 dark:border-gray-700">
-                  <span className="flex items-center gap-1">
-                    <Bike className="w-3 h-3 text-green-600" /> Antar ke Kamar
-                  </span>
-                  <span className="text-green-600 dark:text-green-400 font-bold">Buka Menu →</span>
-                </div>
-              </div>
-            </Link>
-          ))}
-        </div>
-      </div>
-
-      {/* 8. PESANAN TERAKHIR (Gojek Recent Orders / Pesan Lagi) */}
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-3 shadow-xs">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="font-extrabold text-xs sm:text-sm text-gray-900 dark:text-white uppercase tracking-wider">
-            Pesanan Terakhir
-          </h3>
-          <Link
-            to="/dashboard/pembayaran"
-            className="text-xs font-bold text-green-600 dark:text-green-400 flex items-center gap-0.5 hover:underline"
-          >
-            Riwayat <ChevronRight className="w-3 h-3" />
-          </Link>
-        </div>
-
-        {orders.length === 0 ? (
-          <div className="py-5 text-center text-gray-400 text-xs">Belum ada riwayat pesanan santri.</div>
-        ) : (
-          <div className="space-y-2">
-            {orders.slice(0, 3).map((o) => (
-              <div
-                key={o.id}
-                className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 text-xs"
+        {/* 8. DAFTAR KANTIN PONDOK */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-1.5">
+              <Store className="w-4 h-4 text-green-600" />
+              <h2 className="font-bold text-sm text-gray-900 dark:text-white uppercase tracking-wider">
+                Daftar Kantin Pondok
+              </h2>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500 dark:text-gray-400 font-mono">
+                {filteredCanteens.length} Toko
+              </span>
+              <Link
+                to="/dashboard/kantin"
+                className="text-xs font-bold text-green-600 dark:text-green-400 hover:underline flex items-center gap-0.5"
               >
-                <div className="flex items-center gap-2 overflow-hidden">
-                  <div className="w-8 h-8 bg-green-50 dark:bg-green-950/60 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 flex items-center justify-center shrink-0">
-                    <Store className="w-4 h-4" />
-                  </div>
-                  <div className="truncate">
-                    <p className="font-bold text-gray-900 dark:text-white truncate">{o.canteen?.name || 'Kantin'}</p>
-                    <p className="text-[10px] text-gray-400">
-                      {new Date(o.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} •{' '}
-                      {o.items?.length || 0} Menu
-                    </p>
-                  </div>
-                </div>
-
-                <div className="text-right shrink-0">
-                  <p className="font-mono font-bold text-gray-900 dark:text-white">
-                    Rp {parseFloat(o.total_price).toLocaleString('id-ID')}
-                  </p>
-                  <span
-                    className={`text-[9px] font-black px-1.5 py-0.2 inline-block ${
-                      o.status === 'completed'
-                        ? 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300'
-                        : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                    }`}
-                  >
-                    {o.status === 'completed' ? 'Selesai' : o.status === 'pending' ? 'Menunggu' : 'Diproses'}
-                  </span>
-                </div>
-              </div>
-            ))}
+                <span>Selengkapnya</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
           </div>
-        )}
+
+          {loadingCanteens ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-24 bg-gray-200 dark:bg-gray-800 border border-gray-200 dark:border-gray-800 animate-pulse" />
+              ))}
+            </div>
+          ) : filteredCanteens.length === 0 ? (
+            <div className="p-6 text-center bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800">
+              <p className="text-xs text-gray-500">Tidak ada kantin yang sesuai pencarian.</p>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                {filteredCanteens.slice(0, 5).map((canteen) => (
+                  <Link
+                    key={canteen.id}
+                    to={`/kantin/${canteen.id}`}
+                    className="flex bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 hover:border-green-500 dark:hover:border-green-600 transition-colors p-2.5 group relative"
+                  >
+                    <div className="w-20 h-20 bg-gray-100 dark:bg-gray-800 overflow-hidden shrink-0 border border-gray-200 dark:border-gray-700 flex items-center justify-center">
+                      <AppImage
+                        src={canteen.image}
+                        alt={canteen.name}
+                        type="store"
+                        fallbackIcon={<Store className="w-8 h-8 text-gray-400 dark:text-gray-500 opacity-60" />}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                      />
+                    </div>
+
+                    <div className="ml-2.5 flex-1 flex flex-col justify-between overflow-hidden">
+                      <div>
+                        <div className="flex items-center justify-between gap-1 mb-0.5">
+                          <h3 className="font-bold text-xs sm:text-sm text-gray-900 dark:text-white truncate">
+                            {canteen.name}
+                          </h3>
+                          <span
+                            className={`text-[9px] font-black px-1.5 py-0.5 uppercase tracking-wider shrink-0 ${
+                              canteen.is_open
+                                ? 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300 border border-green-300 dark:border-green-800'
+                                : 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300 border border-red-300 dark:border-red-800'
+                            }`}
+                          >
+                            {canteen.is_open ? 'Buka' : 'Tutup'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-gray-500 dark:text-gray-400 line-clamp-1">
+                          {canteen.description || 'Penyedia jajan & makanan santri Al-Mannan'}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-1 border-t border-gray-100 dark:border-gray-800 text-[10px] text-gray-500 dark:text-gray-400">
+                        <span>{canteen.products?.length || 0} Menu Tersedia</span>
+                        <span className="text-green-600 dark:text-green-400 font-bold flex items-center gap-0.5">
+                          Buka Toko <ChevronRight className="w-3 h-3" />
+                        </span>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+
+              {filteredCanteens.length > 5 && (
+                <div className="pt-2">
+                  <Link
+                    to="/dashboard/kantin"
+                    className="flex items-center justify-center gap-1.5 w-full py-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 hover:border-green-600 dark:hover:border-green-500 text-gray-800 dark:text-gray-200 font-bold text-xs uppercase tracking-wider transition-colors shadow-xs rounded-none group cursor-pointer"
+                  >
+                    <span>Lihat Semua Kantin ({filteredCanteens.length} Toko)</span>
+                    <ChevronRight className="w-4 h-4 text-green-600 group-hover:translate-x-0.5 transition-transform" />
+                  </Link>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* 9. PILIHAN MENU JAJANAN TERPOPULER */}
+        <div>
+          <div className="flex items-center justify-between mb-2 pt-2">
+            <div className="flex items-center gap-1.5">
+              <UtensilsCrossed className="w-4 h-4 text-green-600" />
+              <h2 className="font-bold text-sm text-gray-900 dark:text-white uppercase tracking-wider">
+                Menu & Jajanan Santri
+              </h2>
+            </div>
+            <span className="text-xs text-gray-500 dark:text-gray-400 font-mono">
+              {filteredProducts.length} Item
+            </span>
+          </div>
+
+          {filteredProducts.length === 0 ? (
+            <div className="p-6 text-center bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800">
+              <p className="text-xs text-gray-500">Tidak ada produk menu yang cocok dengan filter saat ini.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-2.5">
+              {filteredProducts.slice(0, 16).map((product) => {
+                const canteen = product.canteen;
+                const canteenCart = canteen ? getCanteenItems(canteen.id) : {};
+                const currentInCart = canteenCart[String(product.id)]?.quantity || 0;
+
+                return (
+                  <div
+                    key={product.id}
+                    className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-2 flex flex-col justify-between hover:border-green-500 dark:hover:border-green-600 transition-colors"
+                  >
+                    <div>
+                      <div className="aspect-square bg-gray-100 dark:bg-gray-800 overflow-hidden mb-2 relative border border-gray-200 dark:border-gray-700">
+                        <AppImage
+                          src={product.image}
+                          alt={product.name}
+                          type="food"
+                          fallbackIcon={<UtensilsCrossed className="w-8 h-8 text-gray-400 dark:text-gray-500 opacity-40" />}
+                          className="w-full h-full object-cover"
+                        />
+                        {currentInCart > 0 && (
+                          <span className="absolute top-1 right-1 bg-green-600 text-white font-mono text-[10px] font-black px-1.5 py-0.5 border border-white dark:border-gray-900">
+                            {currentInCart}x di Keranjang
+                          </span>
+                        )}
+                      </div>
+
+                      <h4 className="font-bold text-xs text-gray-900 dark:text-white line-clamp-1 mb-0.5">
+                        {product.name}
+                      </h4>
+                      <p className="text-[10px] text-gray-500 dark:text-gray-400 line-clamp-1 mb-1.5 flex items-center gap-1">
+                        <Store className="w-2.5 h-2.5 shrink-0" />
+                        <span className="truncate">{canteen?.name || 'Kantin'}</span>
+                      </p>
+                    </div>
+
+                    <div className="pt-1.5 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between gap-1">
+                      <span className="text-xs font-mono font-bold text-green-700 dark:text-green-400">
+                        Rp {parseFloat(product.price).toLocaleString('id-ID')}
+                      </span>
+
+                      {hasVariants(product) ? (
+                        <button
+                          type="button"
+                          onClick={() => handleAddToCart(canteen, product)}
+                          className="px-2 py-1 bg-green-600 hover:bg-green-700 active:scale-95 text-white text-[10px] font-bold uppercase tracking-wider rounded-none flex items-center gap-1 transition-all cursor-pointer"
+                        >
+                          <Sparkles className="w-3 h-3 text-yellow-300" />
+                          <span>{currentInCart > 0 ? `+ Opsi (${currentInCart})` : 'Pilih Opsi'}</span>
+                        </button>
+                      ) : currentInCart > 0 ? (
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => removeItem(canteen.id, product.id)}
+                            className="w-6 h-6 bg-gray-100 dark:bg-gray-800 hover:bg-red-50 text-gray-700 dark:text-gray-200 hover:text-red-600 flex items-center justify-center border border-gray-200 dark:border-gray-700 text-xs font-bold cursor-pointer"
+                          >
+                            <Minus className="w-3 h-3" />
+                          </button>
+                          <span className="text-xs font-mono font-bold px-1">{currentInCart}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleAddToCart(canteen, product)}
+                            className="w-6 h-6 bg-green-600 text-white hover:bg-green-700 flex items-center justify-center border border-green-700 text-xs font-bold cursor-pointer"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleAddToCart(canteen, product)}
+                          className="px-2 py-1 bg-green-600 hover:bg-green-700 active:scale-95 text-white text-[10px] font-bold uppercase tracking-wider rounded-none flex items-center gap-1 transition-all cursor-pointer"
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>Pesan</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* 10. FOOTER / DOKUMENTASI PONDOK */}
+        <div className="pt-6 pb-4 border-t border-gray-200 dark:border-gray-800 text-center space-y-2">
+          <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-gray-600 dark:text-gray-400">
+            <Link to="/buku-panduan" className="hover:text-green-600 flex items-center gap-1 underline font-semibold">
+              <BookOpen className="w-3.5 h-3.5" /> Panduan Pemesanan Santri
+            </Link>
+            <span>•</span>
+            <Link to="/dashboard/pembayaran" className="hover:text-green-600 font-semibold underline">
+              Riwayat Pembayaran
+            </Link>
+          </div>
+          <p className="text-[11px] text-gray-400 dark:text-gray-500 font-mono">
+            HiGO Pondok Pesantren Al-Mannan © {new Date().getFullYear()}
+          </p>
+        </div>
       </div>
+
+      {/* 11. PRODUCT OPTION MODAL (Varian Dinamis & Preset) */}
+      <ProductOptionModal
+        isOpen={isOptionModalOpen}
+        onClose={() => {
+          setIsOptionModalOpen(false);
+          setSelectedOptionProduct(null);
+          setSelectedOptionCanteen(null);
+        }}
+        product={selectedOptionProduct}
+        onConfirm={handleConfirmVariant}
+      />
     </div>
   );
 }

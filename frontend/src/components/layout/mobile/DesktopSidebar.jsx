@@ -53,30 +53,20 @@ export default function DesktopSidebar({ sidebarMenus }) {
                 key={item.href}
                 to={item.href}
                 activeOptions={{ exact: true }}
-                className="group flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200"
+                className="group flex items-center px-4 py-2.5 text-sm font-medium rounded-none transition-all duration-150"
                 activeProps={{
-                  className: "bg-green-50 text-green-700 dark:bg-green-900/50 dark:text-green-300 font-bold"
+                  className: "bg-green-50 text-green-700 dark:bg-green-950/60 dark:text-green-300 font-bold border-l-3 border-green-600"
                 }}
                 inactiveProps={{
-                  className: "text-gray-700 hover:bg-green-50 hover:text-green-700 dark:text-gray-300 dark:hover:bg-green-900/50 dark:hover:text-green-300"
+                  className: "text-gray-700 hover:bg-green-50 hover:text-green-700 dark:text-gray-300 dark:hover:bg-green-950/40 dark:hover:text-green-300"
                 }}
               >
                 <item.icon className="mr-3 h-5 w-5 flex-shrink-0 text-green-600 dark:text-green-400" />
                 <span className="flex-1 truncate">
-                  {item.name === 'User'
-                    ? 'Manajemen User'
-                    : item.name === 'Pertokoan'
-                    ? 'Manajemen Toko'
-                    : item.name === 'Pesanan'
-                    ? 'Rekap & Pesanan'
-                    : item.name === 'Trans'
-                    ? 'Transaksi'
-                    : item.name === 'Transport'
-                    ? 'Transportasi'
-                    : item.name}
+                  {item.desktopName || item.name}
                 </span>
                 {badgeContent && (
-                  <span className="ml-auto inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-[11px] font-black leading-none text-white bg-red-500 rounded-full shadow-xs animate-pulse">
+                  <span className="ml-auto inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-[11px] font-black leading-none text-white bg-red-500 rounded-none shadow-xs animate-pulse">
                     {badgeContent}
                   </span>
                 )}
@@ -87,11 +77,11 @@ export default function DesktopSidebar({ sidebarMenus }) {
       </div>
 
       {/* Sidebar Footer with Theme Toggle */}
-      <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/50 space-y-2.5">
-        {role === ROLES.ADMIN && (
+      <div className="p-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/50 space-y-2">
+      {role === ROLES.SUPER_ADMIN && (
           <SyncDbButton variant="sidebar" />
         )}
-        <ThemeToggle variant="switch" showLabel={true} className="w-full justify-between p-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-xs" />
+        <ThemeToggle variant="switch" showLabel={true} className="w-full justify-between p-2 rounded-none bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-xs" />
       </div>
     </aside>
   );

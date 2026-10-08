@@ -15,6 +15,7 @@ class DatabaseSeeder extends Seeder
             RoleSeeder::class,
             UserSeeder::class,
             OrderSeeder::class,
+            TodayOrdersSeeder::class,
             VoucherSeeder::class,
         ]);
     }

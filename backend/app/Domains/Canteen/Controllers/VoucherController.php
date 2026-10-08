@@ -17,7 +17,17 @@ class VoucherController extends Controller
      */
     public function index(Request $request)
     {
-        $user = $request->user();
+        $user = $request->user('sanctum') ?? auth('sanctum')->user() ?? $request->user();
+
+        if ($request->hasHeader('X-Impersonate-User-Id')) {
+            if ($user && $user->hasRole('admin')) {
+                $impersonateId = $request->header('X-Impersonate-User-Id');
+                $targetUser = \App\Domains\Auth\User::find($impersonateId);
+                if ($targetUser) {
+                    $user = $targetUser;
+                }
+            }
+        }
         
         $vouchers = Voucher::with(['canteen:id,name,image', 'creator:id,name'])
             ->where('is_active', true)
@@ -158,6 +168,10 @@ class VoucherController extends Controller
             ->select(['id', 'name', 'phone', 'santri_name', 'santri_room', 'santri_class', 'santri_level'])
             ->get()
             ->map(function ($u) {
+                $level = $u->santri_level ?: '-';
+                if (strcasecmp($level, 'Aliyah') === 0) {
+                    $level = 'MA';
+                }
                 return [
                     'id' => $u->id,
                     'name' => $u->name,
@@ -165,7 +179,7 @@ class VoucherController extends Controller
                     'santri_name' => $u->santri_name ?: $u->name,
                     'santri_room' => $u->santri_room ?: '-',
                     'santri_class' => $u->santri_class ?: '-',
-                    'santri_level' => $u->santri_level ?: '-',
+                    'santri_level' => $level,
                 ];
             })
             ->sortBy('santri_name')
@@ -175,26 +189,59 @@ class VoucherController extends Controller
     }
 
     /**
-     * Kantin: Daftar voucher milik kantin tertentu
+     * Kantin & Admin: Daftar voucher milik kantin tertentu atau seluruh kantin (mode all)
      */
     public function canteenVouchers(Request $request)
     {
         $user = $request->user();
+        $isAdmin = $user && ($user->hasRole('admin') || $user->hasRole('super_admin') || $user->role === 'admin' || $user->role === 'super_admin');
         $canteenId = $request->input('canteen_id') ?? $request->query('canteen_id');
 
+        // Mode 'all': Admin atau pengguna yang ingin melihat seluruh voucher di semua kantin
+        if ($canteenId === 'all' || ($isAdmin && !$canteenId)) {
+            $vouchers = Voucher::with(['canteen:id,name', 'creator:id,name'])
+                ->withCount('userVouchers')
+                ->orderBy('created_at', 'desc')
+                ->get();
+
+            return response()->json($vouchers);
+        }
+
         $canteen = null;
-        if ($canteenId) {
-            $canteen = $user->canteens()->where('id', $canteenId)->first();
+        if ($isAdmin) {
+            if ($canteenId) {
+                $canteen = Canteen::where('id', $canteenId)->first();
+            }
+            if (!$canteen) {
+                $canteen = Canteen::first();
+            }
         } else {
-            $canteen = $user->canteens()->first();
+            if ($canteenId) {
+                $canteen = $user->canteens()->where('id', $canteenId)->first();
+            } else {
+                $canteen = $user->canteens()->first();
+            }
         }
 
         if (!$canteen) {
+            // Jika admin tidak memiliki toko terdaftar tapi tidak kirim canteen_id, tampilkan seluruh voucher
+            if ($isAdmin) {
+                $vouchers = Voucher::with(['canteen:id,name', 'creator:id,name'])
+                    ->withCount('userVouchers')
+                    ->orderBy('created_at', 'desc')
+                    ->get();
+                return response()->json($vouchers);
+            }
             return response()->json(['message' => 'Toko tidak ditemukan'], 404);
         }
 
-        $vouchers = Voucher::withCount('userVouchers')
-            ->where('canteen_id', $canteen->id)
+        // Tampilkan voucher khusus toko ini BESERTA voucher global pondok (agar toko mengetahui promo aktif)
+        $vouchers = Voucher::with(['canteen:id,name', 'creator:id,name'])
+            ->withCount('userVouchers')
+            ->where(function ($q) use ($canteen) {
+                $q->where('canteen_id', $canteen->id)
+                  ->orWhereNull('canteen_id');
+            })
             ->orderBy('created_at', 'desc')
             ->get();
 
@@ -220,7 +267,7 @@ class VoucherController extends Controller
     public function store(Request $request)
     {
         $user = $request->user();
-        $isAdmin = $user->hasRole('admin') || $user->role === 'admin';
+        $isAdmin = $user && ($user->hasRole('admin') || $user->hasRole('super_admin') || $user->role === 'admin' || $user->role === 'super_admin');
 
         $rules = [
             'code' => 'required|string|max:20|unique:vouchers,code',
@@ -233,11 +280,8 @@ class VoucherController extends Controller
             'target_type' => 'required|in:all,specific',
             'target_user_ids' => 'nullable|array',
             'quota' => 'nullable|integer|min:1',
+            'canteen_id' => 'nullable',
         ];
-
-        if ($isAdmin) {
-            $rules['canteen_id'] = 'nullable|exists:canteens,id';
-        }
 
         $validated = $request->validate($rules);
 
@@ -246,7 +290,14 @@ class VoucherController extends Controller
         $validated['min_purchase'] = $validated['min_purchase'] ?? 0;
         $validated['is_active'] = true;
 
-        if (!$isAdmin) {
+        if ($isAdmin) {
+            $inputCanteenId = $request->input('canteen_id') ?? $request->query('canteen_id');
+            if ($inputCanteenId && $inputCanteenId !== 'all') {
+                $validated['canteen_id'] = $inputCanteenId;
+            } else {
+                $validated['canteen_id'] = null; // Global voucher pondok berlaku seluruh kantin
+            }
+        } else {
             $canteenId = $request->input('canteen_id') ?? $request->query('canteen_id');
             $canteen = $canteenId ? $user->canteens()->where('id', $canteenId)->first() : $user->canteens()->first();
             if (!$canteen) {
@@ -269,7 +320,7 @@ class VoucherController extends Controller
     public function toggleStatus(Request $request, $id)
     {
         $user = $request->user();
-        $isAdmin = $user->hasRole('admin') || $user->role === 'admin';
+        $isAdmin = $user && ($user->hasRole('admin') || $user->hasRole('super_admin') || $user->role === 'admin' || $user->role === 'super_admin');
 
         $voucher = null;
         if ($isAdmin) {
@@ -277,8 +328,14 @@ class VoucherController extends Controller
         } else {
             $canteenId = $request->input('canteen_id') ?? $request->query('canteen_id');
             $canteen = $canteenId ? $user->canteens()->where('id', $canteenId)->first() : $user->canteens()->first();
-            if (!$canteen) return response()->json(['message' => 'Toko tidak ditemukan'], 404);
-            $voucher = Voucher::where('canteen_id', $canteen->id)->findOrFail($id);
+            if (!$canteen) {
+                // Alternatif: Cek apakah voucher ini dibuat oleh user ini
+                $voucher = Voucher::where('created_by_user_id', $user->id)->findOrFail($id);
+            } else {
+                $voucher = Voucher::where(function($q) use ($canteen, $user) {
+                    $q->where('canteen_id', $canteen->id)->orWhere('created_by_user_id', $user->id);
+                })->findOrFail($id);
+            }
         }
 
         $voucher->update(['is_active' => !$voucher->is_active]);
@@ -295,7 +352,7 @@ class VoucherController extends Controller
     public function destroy(Request $request, $id)
     {
         $user = $request->user();
-        $isAdmin = $user->hasRole('admin') || $user->role === 'admin';
+        $isAdmin = $user && ($user->hasRole('admin') || $user->hasRole('super_admin') || $user->role === 'admin' || $user->role === 'super_admin');
 
         $voucher = null;
         if ($isAdmin) {
@@ -303,12 +360,85 @@ class VoucherController extends Controller
         } else {
             $canteenId = $request->input('canteen_id') ?? $request->query('canteen_id');
             $canteen = $canteenId ? $user->canteens()->where('id', $canteenId)->first() : $user->canteens()->first();
-            if (!$canteen) return response()->json(['message' => 'Toko tidak ditemukan'], 404);
-            $voucher = Voucher::where('canteen_id', $canteen->id)->findOrFail($id);
+            if (!$canteen) {
+                $voucher = Voucher::where('created_by_user_id', $user->id)->findOrFail($id);
+            } else {
+                $voucher = Voucher::where(function($q) use ($canteen, $user) {
+                    $q->where('canteen_id', $canteen->id)->orWhere('created_by_user_id', $user->id);
+                })->findOrFail($id);
+            }
         }
 
         $voucher->delete();
 
         return response()->json(['message' => 'Voucher berhasil dihapus.']);
+    }
+
+    /**
+     * Admin & Kantin: Daftar user yang telah mengklaim voucher tertentu
+     */
+    public function claimers(Request $request, $id)
+    {
+        $user = $request->user();
+        $isAdmin = $user && ($user->hasRole('admin') || $user->hasRole('super_admin') || $user->role === 'admin' || $user->role === 'super_admin');
+
+        $voucher = null;
+        if ($isAdmin) {
+            $voucher = Voucher::with(['canteen:id,name'])->findOrFail($id);
+        } else {
+            $canteenId = $request->input('canteen_id') ?? $request->query('canteen_id');
+            $canteen = $canteenId ? $user->canteens()->where('id', $canteenId)->first() : $user->canteens()->first();
+            if (!$canteen) {
+                $voucher = Voucher::where('created_by_user_id', $user->id)->with(['canteen:id,name'])->findOrFail($id);
+            } else {
+                $voucher = Voucher::where(function($q) use ($canteen, $user) {
+                    $q->where('canteen_id', $canteen->id)->orWhere('created_by_user_id', $user->id);
+                })->with(['canteen:id,name'])->findOrFail($id);
+            }
+        }
+
+        $claims = UserVoucher::with([
+                'user:id,name,phone,santri_name,santri_room,santri_class,santri_level',
+                'order:id,order_number,status,total_amount'
+            ])
+            ->where('voucher_id', $voucher->id)
+            ->latest('claimed_at')
+            ->get()
+            ->map(function ($uv) {
+                return [
+                    'id' => $uv->id,
+                    'claimed_at' => $uv->claimed_at,
+                    'is_used' => (bool)$uv->is_used,
+                    'used_at' => $uv->used_at,
+                    'order' => $uv->order ? [
+                        'id' => $uv->order->id,
+                        'order_number' => $uv->order->order_number,
+                        'status' => $uv->order->status,
+                        'total_amount' => $uv->order->total_amount,
+                    ] : null,
+                    'user' => $uv->user ? [
+                        'id' => $uv->user->id,
+                        'name' => $uv->user->name,
+                        'phone' => $uv->user->phone,
+                        'santri_name' => $uv->user->santri_name,
+                        'santri_room' => $uv->user->santri_room,
+                        'santri_class' => $uv->user->santri_class,
+                        'santri_level' => $uv->user->santri_level,
+                    ] : null,
+                ];
+            });
+
+        return response()->json([
+            'voucher' => [
+                'id' => $voucher->id,
+                'code' => $voucher->code,
+                'title' => $voucher->title,
+                'discount_type' => $voucher->discount_type,
+                'discount_amount' => $voucher->discount_amount,
+                'quota' => $voucher->quota,
+                'claimed_count' => $voucher->claimed_count,
+            ],
+            'claims' => $claims
+        ]);
     }
 }

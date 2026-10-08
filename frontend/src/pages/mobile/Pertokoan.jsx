@@ -90,6 +90,7 @@ export default function Pertokoan() {
   const [newBannerTitle, setNewBannerTitle] = useState('');
   const [newBannerFile, setNewBannerFile] = useState(null);
   const [newBannerPreview, setNewBannerPreview] = useState(null);
+  const [showBannerForm, setShowBannerForm] = useState(false);
 
   // 1. Fetch Canteens List
   const { data: canteens, isLoading } = useQuery({
@@ -1089,7 +1090,8 @@ export default function Pertokoan() {
       {/* --- MODAL 3: DETAIL TOKO LENGKAP (HIGH DENSITY & COMPACT GOBIZ STYLE) --- */}
       {selectedCanteen && createPortal(
         <div className="fixed inset-0 z-[100] bg-white dark:bg-gray-950 flex flex-col animate-in slide-in-from-bottom-full duration-200 font-sans">
-          <div className="sticky top-0 z-20 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xs border-b border-gray-200 dark:border-gray-800 px-3 py-2 flex items-center justify-between gap-2 shadow-xs">
+          {/* Header */}
+          <div className="sticky top-0 z-20 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xs border-b border-gray-200 dark:border-gray-800 px-2.5 sm:px-3 py-1.5 flex items-center justify-between gap-2 shadow-xs">
             <div className="flex items-center gap-2 min-w-0">
               <button 
                 onClick={() => {
@@ -1097,6 +1099,7 @@ export default function Pertokoan() {
                   setNewBannerTitle('');
                   setNewBannerFile(null);
                   setNewBannerPreview(null);
+                  setShowBannerForm(false);
                 }}
                 className="w-7 h-7 flex items-center justify-center rounded-none hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors border border-gray-200 dark:border-gray-700 cursor-pointer shrink-0"
                 title="Kembali"
@@ -1125,37 +1128,35 @@ export default function Pertokoan() {
             </div>
           </div>
           
-          <div className="flex-1 overflow-y-auto p-2 sm:p-3 pb-16 space-y-2 max-w-2xl mx-auto w-full">
+          <div className="flex-1 overflow-y-auto p-1.5 sm:p-2.5 pb-16 space-y-1.5 max-w-4xl mx-auto w-full">
             
-            {/* Quick Status & Action Bar */}
-            <div className="p-2 sm:p-2.5 rounded-none bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 flex items-center justify-between gap-2 shadow-xs">
-              <div className="min-w-0">
-                <span className="text-[9.5px] font-bold text-gray-400 uppercase tracking-wider block leading-tight">Status Operasional</span>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  {selectedCanteen.status === 'pending' ? (
-                    <span className="px-1.5 py-0.2 bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 text-[10px] font-bold rounded-none border border-amber-200 dark:border-amber-800 flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-none bg-amber-500 animate-pulse"></span>
-                      Menunggu Review Admin
-                    </span>
-                  ) : selectedCanteen.status === 'rejected' ? (
-                    <span className="px-1.5 py-0.2 bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 text-[10px] font-bold rounded-none border border-gray-300 dark:border-gray-700 flex items-center gap-1">
-                      <XCircle size={11} className="text-red-500" />
-                      Ditolak / Nonaktif
-                    </span>
-                  ) : selectedCanteen.is_force_closed ? (
-                    <span className="px-1.5 py-0.2 bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300 text-[10px] font-bold rounded-none border border-red-200 dark:border-red-800">
-                      ● Ditutup Paksa oleh Admin
-                    </span>
-                  ) : selectedCanteen.is_open ? (
-                    <span className="px-1.5 py-0.2 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 text-[10px] font-bold rounded-none border border-emerald-200 dark:border-emerald-800">
-                      ● Sedang Buka
-                    </span>
-                  ) : (
-                    <span className="px-1.5 py-0.2 bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 text-[10px] font-semibold rounded-none border border-gray-200 dark:border-gray-700">
-                      ● Tutup di Luar Jadwal
-                    </span>
-                  )}
-                </div>
+            {/* Quick Status & Action Bar - Ramping & Padat */}
+            <div className="p-1.5 sm:p-2 rounded-none bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 flex items-center justify-between gap-2 shadow-xs">
+              <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
+                <span className="text-[9.5px] font-bold text-gray-400 uppercase tracking-wider shrink-0 leading-tight">Status:</span>
+                {selectedCanteen.status === 'pending' ? (
+                  <span className="px-1.5 py-0.2 bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 text-[10px] font-bold rounded-none border border-amber-200 dark:border-amber-800 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-none bg-amber-500 animate-pulse"></span>
+                    Menunggu Review
+                  </span>
+                ) : selectedCanteen.status === 'rejected' ? (
+                  <span className="px-1.5 py-0.2 bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 text-[10px] font-bold rounded-none border border-gray-300 dark:border-gray-700 flex items-center gap-1">
+                    <XCircle size={11} className="text-red-500" />
+                    Ditolak / Nonaktif
+                  </span>
+                ) : selectedCanteen.is_force_closed ? (
+                  <span className="px-1.5 py-0.2 bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300 text-[10px] font-bold rounded-none border border-red-200 dark:border-red-800">
+                    ● Ditutup Paksa
+                  </span>
+                ) : selectedCanteen.is_open ? (
+                  <span className="px-1.5 py-0.2 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 text-[10px] font-bold rounded-none border border-emerald-200 dark:border-emerald-800">
+                    ● Sedang Buka
+                  </span>
+                ) : (
+                  <span className="px-1.5 py-0.2 bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 text-[10px] font-semibold rounded-none border border-gray-200 dark:border-gray-700">
+                    ● Tutup Jadwal
+                  </span>
+                )}
               </div>
 
               {/* Action Buttons: Approve / Reject / Toggle Close */}
@@ -1170,7 +1171,7 @@ export default function Pertokoan() {
                         }
                       }}
                       disabled={approveCanteenMutation.isPending}
-                      className="px-2.5 py-1 rounded-none text-[11px] font-bold bg-green-600 hover:bg-green-700 text-white flex items-center gap-1 shadow-xs transition-all disabled:opacity-50 cursor-pointer"
+                      className="px-2.5 py-1 rounded-none text-[11px] font-bold bg-green-600 hover:bg-green-700 text-white flex items-center gap-1 shadow-xs transition-all disabled:opacity-50 cursor-pointer h-[29px]"
                     >
                       <CheckCircle size={12} />
                       <span>{approveCanteenMutation.isPending ? '...' : 'Setujui'}</span>
@@ -1184,7 +1185,7 @@ export default function Pertokoan() {
                         }
                       }}
                       disabled={rejectCanteenMutation.isPending}
-                      className="px-2.5 py-1 rounded-none text-[11px] font-bold bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-300 dark:border-red-800 border border-red-200 flex items-center gap-1 transition-all disabled:opacity-50 cursor-pointer"
+                      className="px-2.5 py-1 rounded-none text-[11px] font-bold bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-300 dark:border-red-800 border border-red-200 flex items-center gap-1 transition-all disabled:opacity-50 cursor-pointer h-[29px]"
                     >
                       <XCircle size={12} />
                       <span>{rejectCanteenMutation.isPending ? '...' : 'Tolak'}</span>
@@ -1201,7 +1202,7 @@ export default function Pertokoan() {
                       }
                     }}
                     disabled={approveCanteenMutation.isPending}
-                    className="px-2.5 py-1 rounded-none text-[11px] font-bold bg-green-600 hover:bg-green-700 text-white flex items-center gap-1 shadow-xs transition-all disabled:opacity-50 cursor-pointer"
+                    className="px-2.5 py-1 rounded-none text-[11px] font-bold bg-green-600 hover:bg-green-700 text-white flex items-center gap-1 shadow-xs transition-all disabled:opacity-50 cursor-pointer h-[29px]"
                   >
                     <CheckCircle size={12} />
                     <span>{approveCanteenMutation.isPending ? '...' : 'Aktifkan Toko'}</span>
@@ -1219,7 +1220,7 @@ export default function Pertokoan() {
                       });
                     }}
                     disabled={toggleDirectCloseMutation.isPending}
-                    className={`px-2.5 py-1 rounded-none text-[11px] font-bold flex items-center gap-1 shadow-xs transition-all cursor-pointer ${
+                    className={`px-2.5 py-1 rounded-none text-[11px] font-bold flex items-center gap-1 shadow-xs transition-all cursor-pointer h-[29px] ${
                       selectedCanteen.is_force_closed
                         ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
                         : 'bg-red-600 hover:bg-red-700 text-white'
@@ -1232,20 +1233,20 @@ export default function Pertokoan() {
               </div>
             </div>
 
-            {/* Profil Pemilik Toko (High-Density 2x2 Grid) */}
-            <div className="bg-white dark:bg-gray-900 p-2 sm:p-2.5 rounded-none border border-gray-200 dark:border-gray-800 shadow-xs space-y-1.5">
-              <h3 className="font-bold text-[11px] uppercase tracking-wider text-gray-900 dark:text-white flex items-center gap-1.5">
-                <User className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
+            {/* Profil Pemilik Toko (High-Density Grid: 2 Kolom Mobile, 4 Kolom Desktop) */}
+            <div className="bg-white dark:bg-gray-900 p-2 sm:p-2.5 rounded-none border border-gray-200 dark:border-gray-800 shadow-xs space-y-1">
+              <h3 className="font-bold text-[10.5px] uppercase tracking-wider text-gray-900 dark:text-white flex items-center gap-1.5">
+                <User className="w-3 h-3 text-green-600 dark:text-green-400" />
                 Profil Pemilik Toko
               </h3>
-              <div className="grid grid-cols-2 gap-1.5 text-xs">
-                <div className="bg-gray-50 dark:bg-gray-800/40 p-1.5 rounded-none border border-gray-200 dark:border-gray-700/60">
-                  <span className="block text-gray-400 text-[9.5px] font-bold uppercase leading-tight">Nama Pemilik</span>
-                  <span className="font-bold text-gray-900 dark:text-gray-100 truncate block mt-0.5">{selectedCanteen.user?.name || '-'}</span>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 text-[11px]">
+                <div className="bg-gray-50 dark:bg-gray-800/40 p-1 px-1.5 rounded-none border border-gray-200 dark:border-gray-700/60">
+                  <span className="block text-gray-400 text-[9px] font-bold uppercase leading-none">Pemilik</span>
+                  <span className="font-bold text-gray-900 dark:text-gray-100 truncate block mt-0.5 leading-tight">{selectedCanteen.user?.name || '-'}</span>
                 </div>
-                <div className="bg-gray-50 dark:bg-gray-800/40 p-1.5 rounded-none border border-gray-200 dark:border-gray-700/60">
-                  <span className="block text-gray-400 text-[9.5px] font-bold uppercase leading-tight">Nomor WhatsApp</span>
-                  <span className="font-bold text-gray-900 dark:text-gray-100 truncate block mt-0.5">
+                <div className="bg-gray-50 dark:bg-gray-800/40 p-1 px-1.5 rounded-none border border-gray-200 dark:border-gray-700/60">
+                  <span className="block text-gray-400 text-[9px] font-bold uppercase leading-none">WhatsApp</span>
+                  <span className="font-bold text-gray-900 dark:text-gray-100 truncate block mt-0.5 leading-tight">
                     {selectedCanteen.user?.phone ? (
                       <a href={`https://wa.me/${selectedCanteen.user.phone}`} target="_blank" rel="noreferrer" className="text-emerald-600 dark:text-emerald-400 hover:underline">
                         {selectedCanteen.user.phone}
@@ -1255,56 +1256,63 @@ export default function Pertokoan() {
                     )}
                   </span>
                 </div>
-                <div className="bg-gray-50 dark:bg-gray-800/40 p-1.5 rounded-none border border-gray-200 dark:border-gray-700/60">
-                  <span className="block text-gray-400 text-[9.5px] font-bold uppercase leading-tight">Nama Santri</span>
-                  <span className="font-bold text-gray-900 dark:text-gray-100 truncate block mt-0.5">{selectedCanteen.user?.santri_name || <span className="text-red-500 font-normal">Belum diisi</span>}</span>
+                <div className="bg-gray-50 dark:bg-gray-800/40 p-1 px-1.5 rounded-none border border-gray-200 dark:border-gray-700/60">
+                  <span className="block text-gray-400 text-[9px] font-bold uppercase leading-none">Santri</span>
+                  <span className="font-bold text-gray-900 dark:text-gray-100 truncate block mt-0.5 leading-tight">{selectedCanteen.user?.santri_name || <span className="text-red-500 font-normal">Belum diisi</span>}</span>
                 </div>
-                <div className="bg-gray-50 dark:bg-gray-800/40 p-1.5 rounded-none border border-gray-200 dark:border-gray-700/60">
-                  <span className="block text-gray-400 text-[9.5px] font-bold uppercase leading-tight">Kamar / Asrama</span>
-                  <span className="font-bold text-gray-900 dark:text-gray-100 truncate block mt-0.5">{selectedCanteen.user?.santri_room || <span className="text-red-500 font-normal">Belum diisi</span>}</span>
+                <div className="bg-gray-50 dark:bg-gray-800/40 p-1 px-1.5 rounded-none border border-gray-200 dark:border-gray-700/60">
+                  <span className="block text-gray-400 text-[9px] font-bold uppercase leading-none">Kamar / Asrama</span>
+                  <span className="font-bold text-gray-900 dark:text-gray-100 truncate block mt-0.5 leading-tight">{selectedCanteen.user?.santri_room || <span className="text-red-500 font-normal">Belum diisi</span>}</span>
                 </div>
               </div>
             </div>
 
-            {/* Banner Promosi Toko di Beranda (High-Density & Flat Sharp) */}
-            <div className="bg-white dark:bg-gray-900 p-2 sm:p-2.5 rounded-none border border-gray-200 dark:border-gray-800 shadow-xs space-y-2">
-              <div className="flex items-center justify-between">
-                <h3 className="font-bold text-[11px] uppercase tracking-wider text-gray-900 dark:text-white flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+            {/* Banner Promosi Toko di Beranda (High-Density & Collapsible Form) */}
+            <div className="bg-white dark:bg-gray-900 p-2 sm:p-2.5 rounded-none border border-gray-200 dark:border-gray-800 shadow-xs space-y-1.5">
+              <div className="flex items-center justify-between flex-wrap gap-1">
+                <h3 className="font-bold text-[10.5px] uppercase tracking-wider text-gray-900 dark:text-white flex items-center gap-1.5">
+                  <Sparkles className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
                   Banner Promosi Toko (Beranda)
                 </h3>
-                <span className={`px-1.5 py-0.2 text-[9px] font-bold rounded-none border ${
-                  (selectedCanteen.banners?.length || 0) > 0 
-                    ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800' 
-                    : 'bg-gray-100 text-gray-500 border-gray-200 dark:bg-gray-800 dark:text-gray-400'
-                }`}>
-                  {(selectedCanteen.banners?.length || 0) > 0 ? `${selectedCanteen.banners.length} Banner Terpasang` : 'Belum Pasang Banner'}
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className={`px-1.5 py-0.2 text-[9px] font-bold rounded-none border ${
+                    (selectedCanteen.banners?.length || 0) > 0 
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800' 
+                      : 'bg-gray-100 text-gray-500 border-gray-200 dark:bg-gray-800 dark:text-gray-400'
+                  }`}>
+                    {(selectedCanteen.banners?.length || 0) > 0 ? `${selectedCanteen.banners.length} Banner Terpasang` : 'Belum Ada'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowBannerForm(prev => !prev)}
+                    className="px-2 py-0.5 text-[9.5px] font-bold bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-950/40 dark:text-green-300 border border-green-300 dark:border-green-800 rounded-none cursor-pointer"
+                  >
+                    {showBannerForm ? '✕ Tutup Form' : '＋ Unggah Banner'}
+                  </button>
+                </div>
               </div>
 
-              {/* Daftar Banner Terpasang */}
-              {selectedCanteen.banners && selectedCanteen.banners.length > 0 ? (
-                <div className="space-y-1.5">
+              {/* Daftar Banner Terpasang (Compact List) */}
+              {selectedCanteen.banners && selectedCanteen.banners.length > 0 && (
+                <div className="space-y-1">
                   {selectedCanteen.banners.map((b) => (
                     <div 
                       key={b.id} 
                       className="p-1.5 bg-gray-50 dark:bg-gray-800/40 rounded-none border border-gray-200 dark:border-gray-700/60 flex items-center justify-between gap-2"
                     >
                       <div className="flex items-center gap-2 min-w-0">
-                        <div className="w-16 h-10 bg-gray-200 dark:bg-gray-700 rounded-none shrink-0 overflow-hidden border border-gray-300 dark:border-gray-600">
+                        <div className="w-14 h-8 bg-gray-200 dark:bg-gray-700 rounded-none shrink-0 overflow-hidden border border-gray-300 dark:border-gray-600">
                           <AppImage src={b.image_path} alt={b.title} className="w-full h-full object-cover" />
                         </div>
                         <div className="min-w-0">
-                          <h4 className="font-bold text-xs text-gray-900 dark:text-white truncate">{b.title}</h4>
-                          <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className={`px-1 py-0.2 text-[8px] font-bold rounded-none border ${
-                              b.status === 'active'
-                                ? 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300'
-                                : 'bg-gray-200 text-gray-700 border-gray-300 dark:bg-gray-700 dark:text-gray-300'
-                            }`}>
-                              {b.status === 'active' ? '● Tayang di Beranda' : '○ Disembunyikan'}
-                            </span>
-                          </div>
+                          <h4 className="font-bold text-[11px] text-gray-900 dark:text-white truncate">{b.title}</h4>
+                          <span className={`inline-block px-1 py-0.1 text-[8px] font-bold rounded-none border ${
+                            b.status === 'active'
+                              ? 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300'
+                              : 'bg-gray-200 text-gray-700 border-gray-300 dark:bg-gray-700 dark:text-gray-300'
+                          }`}>
+                            {b.status === 'active' ? '● Tayang di Beranda' : '○ Disembunyikan'}
+                          </span>
                         </div>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
@@ -1313,17 +1321,17 @@ export default function Pertokoan() {
                           onClick={() => toggleBannerStatusMutation.mutate(b.id)}
                           disabled={toggleBannerStatusMutation.isPending}
                           title={b.status === 'active' ? 'Sembunyikan banner dari beranda' : 'Tayangkan banner di beranda'}
-                          className="px-2 py-1 text-[10px] font-bold rounded-none border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 transition-colors flex items-center gap-1 cursor-pointer"
+                          className="px-1.5 py-0.5 text-[9.5px] font-bold rounded-none border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 transition-colors flex items-center gap-1 cursor-pointer"
                         >
                           {b.status === 'active' ? (
                             <>
-                              <EyeOff size={11} className="text-amber-600" />
-                              <span className="text-[9.5px]">Sembunyikan</span>
+                              <EyeOff size={10} className="text-amber-600" />
+                              <span>Sembunyikan</span>
                             </>
                           ) : (
                             <>
-                              <Eye size={11} className="text-emerald-600" />
-                              <span className="text-[9.5px]">Tayangkan</span>
+                              <Eye size={10} className="text-emerald-600" />
+                              <span>Tayangkan</span>
                             </>
                           )}
                         </button>
@@ -1338,199 +1346,189 @@ export default function Pertokoan() {
                           title="Hapus banner ini"
                           className="p-1 text-xs font-bold rounded-none border border-red-200 dark:border-red-800 bg-red-50 hover:bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400 transition-colors cursor-pointer"
                         >
-                          <Trash2 size={13} />
+                          <Trash2 size={11} />
                         </button>
                       </div>
                     </div>
                   ))}
                 </div>
-              ) : (
-                <div className="bg-gray-50 dark:bg-gray-800/30 p-2 rounded-none border border-dashed border-gray-200 dark:border-gray-700 text-center">
-                  <p className="text-[11px] text-gray-500 dark:text-gray-400">
-                    Toko ini belum memasang banner promosi. Admin dapat mengunggah banner promosi di bawah agar tampil di beranda aplikasi santri.
-                  </p>
-                </div>
               )}
 
-              {/* Form Upload Banner Baru */}
-              <form onSubmit={handleUploadBannerSubmit} className="pt-2 border-t border-gray-100 dark:border-gray-800 space-y-1.5 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider flex items-center gap-1">
-                    <Plus size={11} className="text-green-600" /> Unggah Banner Baru untuk Toko Ini
-                  </span>
-                  <span className="text-[9px] text-gray-400">Rasio ~16:9 atau 21:9</span>
-                </div>
-
-                <div>
-                  <input
-                    type="text"
-                    placeholder="Judul / Promo banner (contoh: Promo Diskon 15% Menu Favorit)"
-                    value={newBannerTitle}
-                    onChange={(e) => setNewBannerTitle(e.target.value)}
-                    className="w-full rounded-none border border-gray-300 dark:border-gray-700 dark:bg-gray-800 p-1.5 text-xs font-medium text-gray-900 dark:text-white focus:ring-1 focus:ring-green-500"
-                  />
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <label className="flex-1 cursor-pointer">
+              {/* Form Upload Banner Baru - Sangat Ramping & Tidak Makan Tempat */}
+              {(showBannerForm || (!selectedCanteen.banners || selectedCanteen.banners.length === 0)) && (
+                <form onSubmit={handleUploadBannerSubmit} className="pt-1.5 border-t border-gray-100 dark:border-gray-800 space-y-1 text-xs">
+                  <div className="flex items-center gap-1.5">
                     <input
-                      type="file"
-                      accept="image/png,image/jpeg,image/jpg,image/webp"
-                      onChange={handleBannerFileChange}
-                      className="hidden"
+                      type="text"
+                      placeholder="Judul banner promo..."
+                      value={newBannerTitle}
+                      onChange={(e) => setNewBannerTitle(e.target.value)}
+                      className="flex-1 rounded-none border border-gray-300 dark:border-gray-700 dark:bg-gray-800 px-2 py-1 text-xs font-medium text-gray-900 dark:text-white focus:ring-1 focus:ring-green-500 h-[29px]"
+                      required
                     />
-                    <div className="border border-dashed border-gray-300 dark:border-gray-700 hover:border-green-500 p-2 bg-gray-50 dark:bg-gray-800/40 text-center transition-colors">
-                      {newBannerFile ? (
-                        <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 truncate block">
-                          📁 {newBannerFile.name} ({(newBannerFile.size / 1024).toFixed(0)} KB)
-                        </span>
-                      ) : (
-                        <span className="text-[10px] text-gray-500 dark:text-gray-400 flex items-center justify-center gap-1">
-                          <UploadCloud size={13} className="text-gray-400" />
-                          <span>Pilih Gambar Banner (Maks 3MB)</span>
-                        </span>
-                      )}
-                    </div>
-                  </label>
-
+                    <label className="shrink-0 cursor-pointer">
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/jpg,image/webp"
+                        onChange={handleBannerFileChange}
+                        className="hidden"
+                      />
+                      <div className="border border-dashed border-gray-300 dark:border-gray-700 hover:border-green-500 px-2 py-1 bg-gray-50 dark:bg-gray-800/40 text-center transition-colors h-[29px] flex items-center justify-center gap-1 text-[10px] text-gray-600 dark:text-gray-300 font-semibold">
+                        <UploadCloud size={12} className="text-gray-400 shrink-0" />
+                        <span className="truncate max-w-[120px]">{newBannerFile ? newBannerFile.name : 'Pilih Gambar'}</span>
+                      </div>
+                    </label>
+                    <button
+                      type="submit"
+                      disabled={uploadBannerMutation.isPending || !newBannerFile || !newBannerTitle.trim()}
+                      className="bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white px-2.5 rounded-none font-bold text-xs transition-all disabled:opacity-50 flex items-center justify-center gap-1 shadow-xs cursor-pointer h-[29px] shrink-0"
+                    >
+                      <Save size={12} />
+                      <span>{uploadBannerMutation.isPending ? '...' : 'Pasang'}</span>
+                    </button>
+                  </div>
                   {newBannerPreview && (
-                    <div className="w-16 h-10 bg-gray-100 border border-gray-300 dark:border-gray-700 overflow-hidden relative shrink-0">
-                      <img src={newBannerPreview} alt="Preview" className="w-full h-full object-cover" />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setNewBannerFile(null);
-                          setNewBannerPreview(null);
-                        }}
-                        className="absolute top-0 right-0 bg-red-600 text-white p-0.5 cursor-pointer"
-                        title="Batal pilih"
-                      >
-                        <X size={10} />
-                      </button>
+                    <div className="flex items-center gap-2 pt-0.5">
+                      <div className="w-16 h-8 bg-gray-100 border border-gray-300 dark:border-gray-700 overflow-hidden relative shrink-0">
+                        <img src={newBannerPreview} alt="Preview" className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNewBannerFile(null);
+                            setNewBannerPreview(null);
+                          }}
+                          className="absolute top-0 right-0 bg-red-600 text-white p-0.5 cursor-pointer leading-none"
+                          title="Batal pilih"
+                        >
+                          <X size={9} />
+                        </button>
+                      </div>
+                      <span className="text-[9.5px] text-emerald-600 dark:text-emerald-400 font-semibold truncate">
+                        Preview banner terpilih (Rasio ~16:9 atau 21:9)
+                      </span>
                     </div>
                   )}
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={uploadBannerMutation.isPending || !newBannerFile || !newBannerTitle.trim()}
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white py-1.5 px-2.5 rounded-none font-bold text-xs transition-all disabled:opacity-50 flex items-center justify-center gap-1 shadow-xs cursor-pointer"
-                >
-                  <Save size={13} />
-                  <span>{uploadBannerMutation.isPending ? 'Mengunggah Banner...' : 'Unggah & Pasang Banner'}</span>
-                </button>
-              </form>
+                </form>
+              )}
             </div>
 
-            {/* Zona Lokasi & Tarif (Compact Single Card) */}
-            <div className="bg-white dark:bg-gray-900 p-2 sm:p-2.5 rounded-none border border-gray-200 dark:border-gray-800 shadow-xs space-y-1.5">
-              <h3 className="font-bold text-[11px] uppercase tracking-wider text-gray-900 dark:text-white flex items-center gap-1.5">
-                <MapPin className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
-                Zona Lokasi & Tarif Layanan
-              </h3>
-              
-              <div className="space-y-1">
-                <select
-                  value={detailCategory}
-                  onChange={(e) => setDetailCategory(e.target.value)}
-                  className="w-full rounded-none border border-gray-300 dark:border-gray-700 dark:bg-gray-800 shadow-xs text-gray-900 dark:text-white text-xs font-bold p-1.5 focus:ring-1 focus:ring-green-500"
-                >
-                  {CANTEEN_ZONES.map(z => (
-                    <option key={z.id} value={z.id}>
-                      {z.label} (Ongkir {rp(z.deliveryFee)} + Layanan {rp(z.adminFee)} = {rp(z.deliveryFee + z.adminFee)})
-                    </option>
-                  ))}
-                </select>
+            {/* Grid 2 Kolom: Zona Lokasi & Jam Operasional Berdampingan di Desktop */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+              {/* Card A: Zona Lokasi & Tarif Layanan (Ramping) */}
+              <div className="bg-white dark:bg-gray-900 p-2 sm:p-2.5 rounded-none border border-gray-200 dark:border-gray-800 shadow-xs space-y-1.5 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between gap-1 mb-1">
+                    <h3 className="font-bold text-[10.5px] uppercase tracking-wider text-gray-900 dark:text-white flex items-center gap-1.5">
+                      <MapPin className="w-3 h-3 text-green-600 dark:text-green-400 shrink-0" />
+                      <span className="truncate">Zona Lokasi & Tarif</span>
+                    </h3>
+                    <span className="text-[10px] font-black text-green-700 dark:text-green-400 font-mono shrink-0">
+                      Total {rp(getZone(detailCategory).deliveryFee + getZone(detailCategory).adminFee)}
+                    </span>
+                  </div>
 
-                <div className="bg-green-50 dark:bg-green-950/30 px-2 py-1 rounded-none border border-green-200 dark:border-green-900/50 text-[11px] font-semibold flex items-center justify-between flex-wrap gap-1">
-                  <span className="text-green-800 dark:text-green-300">
-                    🛵 Ongkir {rp(getZone(detailCategory).deliveryFee)} | 🛡️ Layanan {rp(getZone(detailCategory).adminFee)}
-                  </span>
-                  <span className="text-green-700 dark:text-green-400 font-black font-mono">
-                    Total {rp(getZone(detailCategory).deliveryFee + getZone(detailCategory).adminFee)}
-                  </span>
+                  <div className="flex items-center gap-1.5 w-full">
+                    <select
+                      value={detailCategory}
+                      onChange={(e) => setDetailCategory(e.target.value)}
+                      className="flex-1 min-w-0 w-0 rounded-none border border-gray-300 dark:border-gray-700 dark:bg-gray-800 shadow-xs text-gray-900 dark:text-white text-xs font-bold px-2 py-1 h-[29px] focus:ring-1 focus:ring-green-500 truncate"
+                    >
+                      {CANTEEN_ZONES.map(z => (
+                        <option key={z.id} value={z.id}>
+                          {z.label} ({rp(z.deliveryFee + z.adminFee)})
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        updateCategoryMutation.mutate({
+                          id: selectedCanteen.id,
+                          category: detailCategory
+                        });
+                      }}
+                      disabled={updateCategoryMutation.isPending}
+                      className="px-2.5 sm:px-3 bg-green-600 hover:bg-green-700 active:scale-98 text-white rounded-none font-bold text-xs transition-all disabled:opacity-50 flex items-center justify-center gap-1 shadow-xs h-[29px] shrink-0 cursor-pointer whitespace-nowrap"
+                    >
+                      <Save size={12} className="shrink-0" />
+                      <span className="whitespace-nowrap">{updateCategoryMutation.isPending ? '...' : 'Simpan'}</span>
+                    </button>
+                  </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    updateCategoryMutation.mutate({
-                      id: selectedCanteen.id,
-                      category: detailCategory
-                    });
-                  }}
-                  disabled={updateCategoryMutation.isPending}
-                  className="w-full bg-green-600 hover:bg-green-700 active:scale-98 text-white py-1 px-2.5 rounded-none font-bold text-xs transition-all disabled:opacity-50 flex items-center justify-center gap-1 shadow-xs cursor-pointer"
-                >
-                  <Save size={13} />
-                  <span>{updateCategoryMutation.isPending ? 'Menyimpan...' : 'Simpan Zona & Tarif'}</span>
-                </button>
+                <p className="text-[9.5px] text-gray-500 dark:text-gray-400 pt-0.5 leading-tight truncate">
+                  🛵 Ongkir {rp(getZone(detailCategory).deliveryFee)} • 🛡️ Biaya Layanan {rp(getZone(detailCategory).adminFee)}
+                </p>
+              </div>
+
+              {/* Card B: Jam Operasional Toko (Ramping) */}
+              <div className="bg-white dark:bg-gray-900 p-2 sm:p-2.5 rounded-none border border-gray-200 dark:border-gray-800 shadow-xs space-y-1.5 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between gap-1 mb-1">
+                    <h3 className="font-bold text-[10.5px] uppercase tracking-wider text-gray-900 dark:text-white flex items-center gap-1.5">
+                      <Clock className="w-3 h-3 text-green-600 dark:text-green-400 shrink-0" />
+                      <span className="truncate">Jam Operasional</span>
+                    </h3>
+                    <span className="text-[10px] font-mono text-gray-500 dark:text-gray-400 font-semibold shrink-0">
+                      {detailOpenTime} - {detailCloseTime}
+                    </span>
+                  </div>
+
+                  <form 
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      updateHoursMutation.mutate({
+                        id: selectedCanteen.id,
+                        open_time: detailOpenTime,
+                        close_time: detailCloseTime
+                      });
+                    }}
+                    className="flex items-center gap-1.5 w-full"
+                  >
+                    <div className="flex items-center gap-1 flex-1 min-w-0 w-0">
+                      <input
+                        type="time"
+                        lang="id-ID"
+                        value={detailOpenTime}
+                        onChange={(e) => setDetailOpenTime(e.target.value)}
+                        className="flex-1 min-w-0 w-0 rounded-none border border-gray-300 dark:border-gray-700 dark:bg-gray-800 text-gray-900 dark:text-white font-bold p-1 text-center text-xs font-mono h-[29px]"
+                        required
+                      />
+                      <span className="text-[10px] text-gray-400 font-bold shrink-0">s/d</span>
+                      <input
+                        type="time"
+                        lang="id-ID"
+                        value={detailCloseTime}
+                        onChange={(e) => setDetailCloseTime(e.target.value)}
+                        className="flex-1 min-w-0 w-0 rounded-none border border-gray-300 dark:border-gray-700 dark:bg-gray-800 text-gray-900 dark:text-white font-bold p-1 text-center text-xs font-mono h-[29px]"
+                        required
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={updateHoursMutation.isPending}
+                      className="px-2.5 sm:px-3 bg-green-600 hover:bg-green-700 active:scale-98 text-white rounded-none font-bold text-xs transition-all disabled:opacity-50 flex items-center justify-center gap-1 shadow-xs h-[29px] shrink-0 cursor-pointer whitespace-nowrap"
+                    >
+                      <Save size={12} className="shrink-0" />
+                      <span className="whitespace-nowrap">{updateHoursMutation.isPending ? '...' : 'Simpan'}</span>
+                    </button>
+                  </form>
+                </div>
+                <p className="text-[9.5px] text-gray-500 dark:text-gray-400 pt-0.5 leading-tight">
+                  Format 24 jam (Jam Buka s/d Jam Tutup toko)
+                </p>
               </div>
             </div>
 
-            {/* Jam Operasional (Compact) */}
+            {/* Pencairan Saldo (Withdrawal - Compact Ramping) */}
             <div className="bg-white dark:bg-gray-900 p-2 sm:p-2.5 rounded-none border border-gray-200 dark:border-gray-800 shadow-xs space-y-1.5">
-              <h3 className="font-bold text-[11px] uppercase tracking-wider text-gray-900 dark:text-white flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
-                Jam Operasional Toko
-              </h3>
-              <form 
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  updateHoursMutation.mutate({
-                    id: selectedCanteen.id,
-                    open_time: detailOpenTime,
-                    close_time: detailCloseTime
-                  });
-                }}
-                className="space-y-1.5"
-              >
-                <div className="grid grid-cols-2 gap-1.5">
-                  <div className="bg-gray-50 dark:bg-gray-800/40 p-1 border border-gray-200 dark:border-gray-700">
-                    <label className="block text-[9.5px] font-bold text-gray-400 uppercase mb-0.5">Jam Buka</label>
-                    <input
-                      type="time"
-                      lang="id-ID"
-                      value={detailOpenTime}
-                      onChange={(e) => setDetailOpenTime(e.target.value)}
-                      className="w-full rounded-none border border-gray-300 dark:border-gray-700 dark:bg-gray-800 shadow-xs text-gray-900 dark:text-white font-bold p-1 text-center text-xs font-mono"
-                      required
-                    />
-                  </div>
-                  <div className="bg-gray-50 dark:bg-gray-800/40 p-1 border border-gray-200 dark:border-gray-700">
-                    <label className="block text-[9.5px] font-bold text-gray-400 uppercase mb-0.5">Jam Tutup</label>
-                    <input
-                      type="time"
-                      lang="id-ID"
-                      value={detailCloseTime}
-                      onChange={(e) => setDetailCloseTime(e.target.value)}
-                      className="w-full rounded-none border border-gray-300 dark:border-gray-700 dark:bg-gray-800 shadow-xs text-gray-900 dark:text-white font-bold p-1 text-center text-xs font-mono"
-                      required
-                    />
-                  </div>
-                </div>
-                <button
-                  type="submit"
-                  disabled={updateHoursMutation.isPending}
-                  className="w-full bg-green-600 hover:bg-green-700 active:scale-98 text-white py-1 px-2.5 rounded-none font-bold text-xs transition-all disabled:opacity-50 flex items-center justify-center gap-1 shadow-xs cursor-pointer"
-                >
-                  <Save size={13} />
-                  <span>{updateHoursMutation.isPending ? 'Menyimpan...' : 'Simpan Jam Operasional'}</span>
-                </button>
-              </form>
-            </div>
-
-            {/* Pencairan Saldo (Withdrawal - Compact) */}
-            <div className="bg-white dark:bg-gray-900 p-2 sm:p-2.5 rounded-none border border-gray-200 dark:border-gray-800 shadow-xs space-y-1.5">
-              <h3 className="font-bold text-[11px] uppercase tracking-wider text-gray-900 dark:text-white flex items-center gap-1.5">
-                <Wallet className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
-                Pencairan Saldo Toko (Withdrawal)
-              </h3>
-              
-              <div className="bg-emerald-50 dark:bg-emerald-950/30 px-2 py-1 rounded-none border border-emerald-200 dark:border-emerald-800 flex items-center justify-between text-xs">
-                <span className="text-[11px] font-semibold text-emerald-800 dark:text-emerald-300">Saldo Toko:</span>
-                <span className="font-mono font-black text-emerald-700 dark:text-emerald-400 text-xs">
-                  Rp {parseFloat(selectedCanteen.balance || 0).toLocaleString('id-ID')}
+              <div className="flex items-center justify-between gap-1">
+                <h3 className="font-bold text-[10.5px] uppercase tracking-wider text-gray-900 dark:text-white flex items-center gap-1.5">
+                  <Wallet className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
+                  Pencairan Saldo Toko (Withdrawal)
+                </h3>
+                <span className="text-[11px] font-mono font-black text-emerald-700 dark:text-emerald-400">
+                  Saldo: Rp {parseFloat(selectedCanteen.balance || 0).toLocaleString('id-ID')}
                 </span>
               </div>
 
@@ -1545,39 +1543,34 @@ export default function Pertokoan() {
                     });
                   }
                 }}
-                className="space-y-1.5 text-xs"
+                className="space-y-1 text-xs"
               >
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                  <div>
-                    <label className="block text-[9.5px] font-bold text-gray-400 uppercase mb-0.5">Nominal (Rp)</label>
-                    <input
-                      type="number"
-                      min="1000"
-                      max={selectedCanteen.balance || 0}
-                      value={withdrawalAmount}
-                      onChange={(e) => setWithdrawalAmount(e.target.value)}
-                      className="w-full rounded-none border border-gray-300 dark:border-gray-700 dark:bg-gray-800 p-1 font-bold text-gray-900 dark:text-white focus:ring-1 focus:ring-green-500 font-mono text-xs"
-                      placeholder="Contoh: 50000"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[9.5px] font-bold text-gray-400 uppercase mb-0.5">Keterangan Transfer</label>
-                    <input
-                      type="text"
-                      value={withdrawalNotes}
-                      onChange={(e) => setWithdrawalNotes(e.target.value)}
-                      className="w-full rounded-none border border-gray-300 dark:border-gray-700 dark:bg-gray-800 p-1 text-gray-900 dark:text-white focus:ring-1 focus:ring-green-500 text-xs"
-                      placeholder="Transfer BSI / Tunai..."
-                    />
-                  </div>
+                  <input
+                    type="number"
+                    min="1000"
+                    max={selectedCanteen.balance || 0}
+                    value={withdrawalAmount}
+                    onChange={(e) => setWithdrawalAmount(e.target.value)}
+                    className="w-full rounded-none border border-gray-300 dark:border-gray-700 dark:bg-gray-800 p-1 px-2 font-bold text-gray-900 dark:text-white focus:ring-1 focus:ring-green-500 font-mono text-xs h-[29px]"
+                    placeholder="Nominal Penarikan (Rp)"
+                    required
+                  />
+                  <input
+                    type="text"
+                    value={withdrawalNotes}
+                    onChange={(e) => setWithdrawalNotes(e.target.value)}
+                    className="w-full rounded-none border border-gray-300 dark:border-gray-700 dark:bg-gray-800 p-1 px-2 text-gray-900 dark:text-white focus:ring-1 focus:ring-green-500 text-xs h-[29px]"
+                    placeholder="Keterangan Transfer (BSI / Tunai...)"
+                  />
                 </div>
                 <button
                   type="submit"
-                  disabled={withdrawMutation.isPending || !withdrawalAmount || withdrawalAmount > (selectedCanteen.balance || 0)}
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white py-1 px-2.5 rounded-none font-bold text-xs transition-all disabled:opacity-50 shadow-xs cursor-pointer"
+                  disabled={withdrawMutation.isPending || !withdrawalAmount || parseFloat(withdrawalAmount) <= 0 || parseFloat(withdrawalAmount) > parseFloat(selectedCanteen.balance || 0)}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white py-1 px-2.5 rounded-none font-bold text-xs transition-all disabled:opacity-50 shadow-xs cursor-pointer h-[29px] flex items-center justify-center gap-1.5"
                 >
-                  {withdrawMutation.isPending ? 'Memproses...' : 'Cairkan Saldo'}
+                  <Wallet size={12} />
+                  <span>{withdrawMutation.isPending ? 'Memproses...' : 'Proses Pencairan Saldo'}</span>
                 </button>
               </form>
             </div>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Store, Save, Plus, Edit2, Trash2, X, ChevronLeft, ChevronRight, Star, Clock, CheckCircle2, ChevronDown } from 'lucide-react';
+import { Store, Save, Plus, Edit2, Trash2, X, ChevronLeft, ChevronRight, Star, Clock, CheckCircle2, ChevronDown, Search, User } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import toast from 'react-hot-toast';
@@ -7,15 +7,41 @@ import api, { getStorageUrl } from '../../lib/axios';
 import { SkeletonCard } from '../../components/ui/Skeleton';
 import { ProductFormModal } from '../../components/modals/ProductFormModal';
 import { useCanteenStore } from '../../store/canteenStore';
+import { useAuthStore } from '../../store/authStore';
 import { useActiveOrdersCount } from '../../hooks/useActiveOrdersCount';
+import { ROLES } from '../../config/roles';
 import AppImage from '../../components/common/AppImage';
+import LoadingSpinner from '../../components/common/LoadingSpinner';
 
 export default function TokoSaya() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const currentUser = useAuthStore((state) => state.user);
+  const originalAdmin = useAuthStore((state) => state.originalAdmin);
+  const stopImpersonating = useAuthStore((state) => state.stopImpersonating);
   const { activeCanteenId, setActiveCanteenId, isStoreSelected, setIsStoreSelected } = useCanteenStore();
   const [page, setPage] = useState(1);
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [storeSearch, setStoreSearch] = useState('');
   const activeOrdersCount = useActiveOrdersCount();
+
+  React.useEffect(() => {
+    const handleScroll = (e) => {
+      const scrollY = window.scrollY || e?.target?.scrollTop || document.querySelector('main')?.scrollTop || 0;
+      setIsScrolled(scrollY > 50);
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    const mainEl = document.querySelector('main');
+    if (mainEl) {
+      mainEl.addEventListener('scroll', handleScroll, { passive: true });
+    }
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      if (mainEl) {
+        mainEl.removeEventListener('scroll', handleScroll);
+      }
+    };
+  }, []);
 
   // Fetch all canteens owned by this user
   const { data: rawCanteensList } = useQuery({
@@ -29,6 +55,18 @@ export default function TokoSaya() {
   const canteensList = Array.isArray(rawCanteensList)
     ? rawCanteensList
     : (Array.isArray(rawCanteensList?.data) ? rawCanteensList.data : []);
+
+  const filteredCanteensList = React.useMemo(() => {
+    if (!storeSearch.trim()) return canteensList;
+    const q = storeSearch.toLowerCase();
+    return canteensList.filter(c => 
+      c.name?.toLowerCase().includes(q) || 
+      c.category?.toLowerCase().includes(q) ||
+      c.description?.toLowerCase().includes(q) ||
+      c.user?.name?.toLowerCase().includes(q) ||
+      c.user?.email?.toLowerCase().includes(q)
+    );
+  }, [canteensList, storeSearch]);
 
 
 
@@ -193,18 +231,59 @@ export default function TokoSaya() {
     deleteProductMutation.mutate(id);
   };
 
-  if (isLoadingCanteen || (isLoadingProducts && !productsRes)) {
-    return <div className="flex justify-center items-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div></div>;
-  }
+  const handleBack = () => {
+    if (originalAdmin) {
+      stopImpersonating();
+      queryClient.clear();
+      window.location.href = '/dashboard';
+      return;
+    }
+    if (canteensList.length > 1) {
+      setIsStoreSelected(false);
+    } else if (window.history.length > 1) {
+      window.history.back();
+    } else {
+      navigate({ to: '/dashboard' });
+    }
+  };
 
-  if (!isStoreSelected) {
+  if (isLoadingCanteen && !canteen) {
     return (
-      <div className="bg-gray-50 h-full min-h-screen dark:bg-gray-950">
+      <div className="bg-gray-50 min-h-screen dark:bg-gray-950 font-sans">
         <div className="bg-white dark:bg-gray-900 sticky top-0 z-20 shadow-xs px-2.5 sm:px-3 py-2 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <button 
               onClick={() => navigate({ to: '/dashboard' })} 
               className="p-1 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-none transition-colors border border-gray-200 dark:border-gray-700 cursor-pointer"
+              title="Kembali ke Dashboard"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <h1 className="text-sm sm:text-base font-black text-gray-900 dark:text-white">Toko Saya</h1>
+          </div>
+        </div>
+        <div className="p-4 max-w-7xl mx-auto space-y-3">
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-none shadow-xs">
+            <LoadingSpinner 
+              text="Memuat Toko Saya..." 
+              subtext="Menghubungkan ke data produk dan etalase toko" 
+              minHeight="min-h-[160px]"
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isStoreSelected) {
+    return (
+      <div className="bg-gray-50 min-h-screen pb-28 sm:pb-32 dark:bg-gray-950 font-sans">
+        <div className="bg-white dark:bg-gray-900 sticky top-0 z-20 shadow-xs px-2.5 sm:px-3 py-2 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => navigate({ to: '/dashboard' })} 
+              className="p-1 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-none transition-colors border border-gray-200 dark:border-gray-700 cursor-pointer"
+              title="Kembali ke Dashboard"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
@@ -215,7 +294,38 @@ export default function TokoSaya() {
           </span>
         </div>
         
-        <div className="p-2 max-w-2xl mx-auto space-y-1.5">
+        <div className="p-2 max-w-2xl mx-auto space-y-2 pb-24 sm:pb-28">
+          {/* Mode Admin Banner */}
+          {(currentUser?.role === ROLES.ADMIN || currentUser?.role === ROLES.SUPER_ADMIN) && (
+            <div className="bg-emerald-50 dark:bg-emerald-950/40 p-2 border border-emerald-300 dark:border-emerald-800 rounded-none text-xs text-emerald-900 dark:text-emerald-200 font-bold flex items-center justify-between">
+              <span>🛡️ Mode Administrator: Akses & Kelola Seluruh Toko Mitra</span>
+              <span className="text-[10px] font-mono bg-white dark:bg-gray-800 px-1.5 py-0.5 border border-emerald-300 dark:border-emerald-700">Total {canteensList.length} Toko</span>
+            </div>
+          )}
+
+          {/* Pencarian Toko untuk Akun Multi-Toko / Admin */}
+          {canteensList.length > 2 && (
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Cari toko, nama pemilik, kategori..."
+                value={storeSearch}
+                onChange={(e) => setStoreSearch(e.target.value)}
+                className="w-full pl-8 pr-7 py-1.5 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white rounded-none text-xs focus:ring-1 focus:ring-green-500 outline-none font-medium"
+              />
+              {storeSearch && (
+                <button
+                  type="button"
+                  onClick={() => setStoreSearch('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          )}
+
           {!canteensList || canteensList.length === 0 ? (
              <div className="text-center py-8 bg-white dark:bg-gray-900 rounded-none border border-gray-200 dark:border-gray-700 shadow-xs mt-2">
                <div className="w-12 h-12 bg-gray-100 dark:bg-gray-800 rounded-none flex items-center justify-center mx-auto mb-2">
@@ -231,8 +341,12 @@ export default function TokoSaya() {
                  Buat Toko Baru
                </button>
              </div>
+          ) : filteredCanteensList.length === 0 ? (
+            <div className="text-center py-8 bg-white dark:bg-gray-900 rounded-none border border-gray-200 dark:border-gray-800 shadow-xs text-xs text-gray-500">
+              Tidak ditemukan toko dengan kata kunci "{storeSearch}".
+            </div>
           ) : (
-            canteensList.map(c => (
+            filteredCanteensList.map(c => (
               <div 
                 key={c.id} 
                 onClick={() => { setActiveCanteenId(c.id); setIsStoreSelected(true); }}
@@ -265,6 +379,25 @@ export default function TokoSaya() {
                   <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-green-600 transition-colors shrink-0 ml-2" />
                 </div>
 
+                {/* Info Akun Kantin yang Menaungi Toko */}
+                {c.user && (
+                  <div className="flex items-center gap-1.5 px-2 py-1 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-900/50 rounded-none text-[10.5px]">
+                    <User className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span className="text-gray-500 dark:text-gray-400 font-medium">Akun Pengelola:</span>
+                    <span className="font-bold text-gray-900 dark:text-gray-100 truncate">
+                      {c.user.name}
+                    </span>
+                    <span className="text-emerald-700 dark:text-emerald-300 font-mono text-[9.5px] truncate">
+                      ({c.user.email})
+                    </span>
+                    {c.user.phone && (
+                      <span className="text-gray-500 font-mono text-[9.5px] truncate hidden sm:inline">
+                        • {c.user.phone}
+                      </span>
+                    )}
+                  </div>
+                )}
+
                 <div className="flex items-center justify-between pt-1 border-t border-gray-100 dark:border-gray-800 text-[10px]">
                   <div className="flex items-center gap-1.5">
                     <div className={`w-1.5 h-1.5 rounded-none ${c.is_open ? 'bg-green-500' : 'bg-red-500'}`}></div>
@@ -288,6 +421,57 @@ export default function TokoSaya() {
 
   return (
     <div className="bg-gray-50 h-full pb-20 dark:bg-gray-950 font-sans relative">
+      {/* FLOATING & SOLID STICKY TOP NAVIGATION (TETAP DI ATAS SAAT SCROLL) */}
+      <div
+        className={`fixed left-0 right-0 z-40 transition-all duration-200 ${
+          originalAdmin ? 'top-[36px] sm:top-[40px]' : 'top-0'
+        } ${
+          isScrolled
+            ? 'bg-gradient-to-r from-emerald-950 via-green-900 to-teal-950 border-b border-green-700/80 shadow-md py-2 px-3 sm:px-4'
+            : 'bg-transparent p-2 sm:p-3 pointer-events-none'
+        }`}
+      >
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <button 
+              type="button"
+              onClick={handleBack} 
+              className="pointer-events-auto w-8 h-8 rounded-none bg-black/70 hover:bg-black text-white flex items-center justify-center backdrop-blur-xs transition-colors shadow-xs border border-white/20 cursor-pointer active:scale-95 shrink-0"
+              title={canteensList.length > 1 ? "Ganti Toko / Kembali" : "Kembali"}
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+
+            {isScrolled && (
+              <div className="min-w-0 animate-fade-in">
+                <h2 className="font-extrabold text-sm text-white tracking-tight leading-none drop-shadow-xs truncate">
+                  {canteen?.name || 'Toko Saya'}
+                </h2>
+                <p className="text-[10px] text-emerald-200 font-medium mt-0.5 truncate">
+                  {canteen?.category ? `Kategori: ${canteen.category.toUpperCase()}` : 'Outlet Merchant Partner'}
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="pointer-events-auto flex items-center gap-1.5 shrink-0">
+            {canteensList.length > 1 && (
+              <button
+                type="button"
+                onClick={() => setIsStoreSelected(false)}
+                className="px-2 py-0.5 bg-black/70 hover:bg-black text-white text-[10px] font-bold border border-white/20 backdrop-blur-xs transition-colors cursor-pointer"
+                title="Pilih Toko Lain"
+              >
+                Ganti Toko
+              </button>
+            )}
+            <div className="px-2.5 py-0.5 bg-green-600 text-white text-[10px] font-extrabold uppercase tracking-wider border border-white/20 backdrop-blur-xs">
+              Merchant Partner
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* HEADER BANNER */}
       <div className="relative h-36 sm:h-44 bg-gradient-to-r from-emerald-950 via-green-900 to-teal-950 overflow-hidden">
         {canteen?.image ? (
@@ -310,25 +494,54 @@ export default function TokoSaya() {
         
         {/* Subtle dark gradient overlay */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-black/60 pointer-events-none" />
-
-        {/* Top Navbar overlay */}
-        <div className="absolute top-0 left-0 right-0 p-2 sm:p-3 flex justify-between items-center z-10">
-          <button 
-            onClick={() => setIsStoreSelected(false)} 
-            className="w-8 h-8 rounded-none bg-black/60 flex items-center justify-center text-white backdrop-blur-xs transition-colors hover:bg-black/80 shadow-xs border border-white/20 cursor-pointer"
-            title="Ganti Toko"
-          >
-            <ChevronLeft className="w-5 h-5" />
-          </button>
-          <div className="px-2.5 py-0.5 bg-green-600 text-white text-[10px] font-extrabold uppercase tracking-wider border border-white/20 backdrop-blur-xs">
-            Merchant Partner
-          </div>
-        </div>
       </div>
 
       {/* STORE INFO CARD (Overlapping banner) */}
       <div className="px-2 sm:px-4 max-w-7xl mx-auto -mt-8 relative z-10">
         <div className="bg-white dark:bg-gray-900 rounded-none shadow-xs p-2.5 sm:p-3 border border-gray-200 dark:border-gray-800">
+          {/* Quick Store Switcher for Admin & Multi-Store Owners */}
+          {(canteensList.length > 1 || currentUser?.role === ROLES.ADMIN || currentUser?.role === ROLES.SUPER_ADMIN) && (
+            <div className="mb-2.5 p-2 bg-emerald-50/90 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 rounded-none shadow-2xs overflow-hidden">
+              <div className="flex items-center justify-between gap-1.5 mb-1.5">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Store className="w-4 h-4 text-emerald-700 dark:text-emerald-400 shrink-0" />
+                  <span className="text-xs font-bold text-emerald-950 dark:text-emerald-100 truncate">
+                    Toko yang Dikelola:
+                  </span>
+                  <span className="text-[10px] bg-emerald-200/80 text-emerald-900 dark:bg-emerald-900/60 dark:text-emerald-300 px-1.5 py-0.2 font-mono font-bold shrink-0">
+                    #{canteen?.id}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsStoreSelected(false)}
+                  className="px-2 py-0.5 bg-green-600 hover:bg-green-700 active:scale-95 text-white rounded-none text-[11px] font-bold shrink-0 transition-all cursor-pointer whitespace-nowrap shadow-xs"
+                  title="Lihat Daftar Toko Lengkap"
+                >
+                  Daftar Toko
+                </button>
+              </div>
+
+              <div className="w-full min-w-0">
+                <select
+                  value={activeCanteenId || ''}
+                  onChange={(e) => {
+                    const newId = Number(e.target.value);
+                    setActiveCanteenId(newId);
+                    setIsStoreSelected(true);
+                  }}
+                  className="w-full min-w-0 px-2 py-1 bg-white dark:bg-gray-800 border border-emerald-300 dark:border-emerald-700 rounded-none text-xs font-bold text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-green-500 cursor-pointer truncate"
+                >
+                  {canteensList.map(c => (
+                    <option key={c.id} value={c.id}>
+                      #{c.id} {c.name} {c.category ? `(${c.category})` : ''} — {c.is_open ? '🟢 Buka' : '🔴 Tutup'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center justify-between mb-1.5">
             <div className="flex-1">
               <h1 className="text-base sm:text-lg font-black text-gray-900 dark:text-white leading-tight">
@@ -337,6 +550,16 @@ export default function TokoSaya() {
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2 pr-2">
                 {canteen?.description || 'Belum ada deskripsi.'}
               </p>
+
+              {canteen?.user && (
+                <div className="flex items-center gap-1.5 mt-1.5 text-[11px] text-gray-600 dark:text-gray-300">
+                  <User className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <span className="text-gray-500 dark:text-gray-400 font-medium">Akun Pengelola:</span>
+                  <span className="font-bold text-gray-900 dark:text-white">{canteen.user.name}</span>
+                  <span className="text-emerald-700 dark:text-emerald-400 font-mono text-[10px]">({canteen.user.email})</span>
+                  {canteen.user.phone && <span className="text-gray-400 font-mono text-[10px] hidden sm:inline">• {canteen.user.phone}</span>}
+                </div>
+              )}
 
               <div className="flex flex-wrap items-center gap-1.5 mt-2">
                 <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-none border ${canteen?.is_open ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-950/40 dark:text-green-400 dark:border-green-800' : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800'}`}>
@@ -402,8 +625,12 @@ export default function TokoSaya() {
       {/* PRODUCT LIST */}
       <div className="mt-4 px-4 md:px-8 max-w-7xl mx-auto">
         {isLoadingProducts && !productsRes ? (
-          <div className="space-y-4 bg-white dark:bg-gray-900 p-3 sm:p-5 rounded-none border border-gray-200 dark:border-gray-800">
-            {[1, 2, 3].map(i => <SkeletonCard key={i} />)}
+          <div className="bg-white dark:bg-gray-900 p-4 rounded-none border border-gray-200 dark:border-gray-800 shadow-xs">
+            <LoadingSpinner 
+              text="Memuat Menu Toko..." 
+              subtext="Mengambil daftar sajian dan stok etalase" 
+              minHeight="min-h-[160px]"
+            />
           </div>
         ) : products.length === 0 ? (
           <div className="text-center py-12 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 flex flex-col items-center">

@@ -4,6 +4,7 @@ namespace App\Domains\Canteen\Controllers;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use App\Domains\Canteen\Canteen;
 use App\Domains\Canteen\Requests\UpdateCanteenRequest;
@@ -14,17 +15,24 @@ class CanteenController extends Controller
     public function index(Request $request)
     {
         // Public route: list approved canteens
-        // Asumsi lokasi user di Asrama Pondok (Misal: -7.250445, 112.768845)
         $userLat = $request->query('lat', -7.250445);
         $userLng = $request->query('lng', 112.768845);
 
-        $canteens = Canteen::approved()
-            ->with(['products'])
-            ->selectRaw("*, ( 6371 * acos( cos( radians(?) ) * cos( radians( latitude ) ) * cos( radians( longitude ) - radians(?) ) + sin( radians(?) ) * sin( radians( latitude ) ) ) ) AS distance", [$userLat, $userLng, $userLat])
-            ->orderBy('distance')
-            ->get();
+        // Cache 60 detik per kombinasi koordinat
+        $cacheKey = 'canteens_list_' . round($userLat, 3) . '_' . round($userLng, 3);
+        $data = Cache::remember($cacheKey, 60, function () use ($userLat, $userLng, $request) {
+            $canteens = Canteen::approved()
+                ->select('canteens.*')
+                ->selectRaw("( 6371 * acos( cos( radians(?) ) * cos( radians( latitude ) ) * cos( radians( longitude ) - radians(?) ) + sin( radians(?) ) * sin( radians( latitude ) ) ) ) AS distance", [$userLat, $userLng, $userLat])
+                ->with(['products', 'user:id,name,phone,email'])
+                ->withCount('products')
+                ->orderBy('distance')
+                ->get();
+
+            return CanteenResource::collection($canteens)->resolve($request);
+        });
             
-        return CanteenResource::collection($canteens);
+        return response()->json(['data' => $data]);
     }
 
     public function show($id)
@@ -36,15 +44,35 @@ class CanteenController extends Controller
     private function getActiveCanteen(Request $request)
     {
         $canteenId = $request->query('canteen_id') ?? $request->input('canteen_id');
-        if ($canteenId) {
-            return $request->user()->canteens()->where('id', $canteenId)->first();
+        $user = $request->user();
+
+        if ($user && ($user->hasRole('admin') || $user->hasRole('super_admin'))) {
+            if ($canteenId) {
+                return Canteen::where('id', $canteenId)->first() ?: Canteen::first();
+            }
+            return Canteen::first();
         }
-        return $request->user()->canteens()->first();
+
+        if ($canteenId) {
+            return $user->canteens()->where('id', $canteenId)->first();
+        }
+        return $user->canteens()->first();
     }
 
     public function myCanteens(Request $request)
     {
-        $canteens = $request->user()->canteens()
+        $user = $request->user();
+
+        if ($user && ($user->hasRole('admin') || $user->hasRole('super_admin'))) {
+            $canteens = Canteen::with(['user:id,name,email,phone'])
+                ->withCount(['orders as pending_orders_count' => function ($query) {
+                    $query->whereIn('status', ['pending', 'processing']);
+                }])->get();
+            return CanteenResource::collection($canteens);
+        }
+
+        $canteens = $user->canteens()
+            ->with(['user:id,name,email,phone'])
             ->withCount(['orders as pending_orders_count' => function ($query) {
                 $query->whereIn('status', ['pending', 'processing']);
             }])
@@ -76,7 +104,7 @@ class CanteenController extends Controller
         if (!$canteen) {
             return response()->json(['message' => 'Kantin tidak ditemukan'], 404);
         }
-        $canteen->load(['products', 'banners', 'orders.items']);
+        $canteen->load(['user:id,name,email,phone', 'products', 'banners', 'orders.items']);
         return new CanteenResource($canteen);
     }
 

@@ -8,7 +8,7 @@ class StoreUserRequest extends FormRequest
 {
     public function authorize()
     {
-        return $this->user()->hasRole('admin');
+        return $this->user()->hasRole('super_admin') || $this->user()->hasRole('admin');
     }
 
     public function rules()
@@ -17,7 +17,7 @@ class StoreUserRequest extends FormRequest
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
             'password' => 'required|string|min:8',
-            'role' => 'required|in:admin,user,kantin,kurir',
+            'role' => 'required|in:super_admin,admin,user,kantin,kurir',
             'status' => 'required|in:active,inactive,pending',
             'canteen_ids' => 'nullable|array',
             'canteen_ids.*' => 'exists:canteens,id',

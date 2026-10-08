@@ -13,6 +13,7 @@ import { useAuthStore } from '../../store/authStore';
 import { getFileType, isImageFile, isHeifFile, isPdfFile, formatFileSize, getFileNameFromPath, compressImageFiles } from '../../lib/fileUtils';
 import santriData from '../../data/santri.json';
 import ThermalReceiptModal from '../../components/receipt/ThermalReceiptModal';
+import LoadingSpinner from '../../components/common/LoadingSpinner';
 
 function getWeeksInMonth(year, month) {
   const weeks = [];
@@ -511,13 +512,6 @@ export default function Pembayaran() {
     return text;
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center h-screen">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
-      </div>
-    );
-  }
 
   const monthsList = [
     'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
@@ -698,8 +692,16 @@ export default function Pembayaran() {
         </div>
       </div>
 
-      <div className="p-3 sm:p-4 md:px-6 max-w-7xl mx-auto">
-        {displayedGroups.length === 0 ? (
+      <div className="p-3 sm:p-4 md:px-6 max-w-7xl mx-auto pb-36 sm:pb-44">
+        {isLoading && !orders ? (
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-xs">
+            <LoadingSpinner 
+              text="Memuat Riwayat Pesanan..." 
+              subtext="Mengambil data transaksi dan status pembayaran" 
+              minHeight="min-h-[160px]"
+            />
+          </div>
+        ) : displayedGroups.length === 0 ? (
           activityTab === 'in_progress' ? (
             <div className="text-center py-12 text-gray-500 flex flex-col items-center bg-white dark:bg-gray-900 rounded-none border border-gray-200 dark:border-gray-800 p-6 shadow-2xs">
               <Clock className="w-14 h-14 mb-3 text-green-600/60 dark:text-green-400/60" />

@@ -72,12 +72,75 @@ export const ProductFormModal = ({
         // Load variant config
         const rawConfig = editingProduct.variant_config;
         if (rawConfig && typeof rawConfig === 'object') {
+          const rawGroups = (rawConfig.custom && Array.isArray(rawConfig.custom.groups))
+            ? rawConfig.custom.groups
+            : [];
+
+          const normalizedGroups = rawGroups.map((g, gIdx) => {
+            const rawItems = g.items || g.options || [];
+            const items = rawItems.map((it, itIdx) => {
+              if (typeof it === 'string') {
+                const match = it.match(/\(\+Rp\s*([\d\.,]+)\)/i);
+                const price = match ? (parseFloat(match[1].replace(/[\.,]/g, '')) || 0) : 0;
+                const name = it.replace(/\s*\(\+Rp[^\)]+\)/i, '').trim();
+                return {
+                  id: itIdx + 1,
+                  name: name || it,
+                  price: price
+                };
+              }
+              return {
+                id: it.id || (itIdx + 1),
+                name: it.name || '',
+                price: it.price !== undefined ? parseFloat(it.price) : 0
+              };
+            });
+
+            const isCheckbox = g.type === 'checkbox' || (!g.type && g.name && (g.name.toLowerCase().includes('topping') || g.name.toLowerCase().includes('tambahan')));
+            const groupType = isCheckbox ? 'checkbox' : 'radio';
+
+            return {
+              id: g.id || (Date.now() + gIdx),
+              name: g.name || '',
+              type: groupType,
+              required: g.required ?? (groupType === 'radio'),
+              items: items.length > 0 ? items : [{ id: 1, name: '', price: 0 }]
+            };
+          });
+
           setVariantConfig({
-            spicy: rawConfig.spicy || { enabled: false, maxLevel: 3 },
-            temperature: rawConfig.temperature || { enabled: false, allowIce: true, allowHot: true },
-            portion: rawConfig.portion || { enabled: false, jumboPrice: 3000 },
-            sugar: rawConfig.sugar || { enabled: false },
-            custom: rawConfig.custom || { enabled: false, groups: [] }
+            spicy: {
+              enabled: Boolean(rawConfig.spicy?.enabled),
+              maxLevel: rawConfig.spicy?.maxLevel || 3,
+              label: rawConfig.spicy?.label,
+              options: rawConfig.spicy?.options,
+              ...rawConfig.spicy
+            },
+            temperature: {
+              enabled: Boolean(rawConfig.temperature?.enabled),
+              allowIce: rawConfig.temperature?.allowIce ?? true,
+              allowHot: rawConfig.temperature?.allowHot ?? true,
+              label: rawConfig.temperature?.label,
+              options: rawConfig.temperature?.options,
+              ...rawConfig.temperature
+            },
+            portion: {
+              enabled: Boolean(rawConfig.portion?.enabled),
+              jumboPrice: rawConfig.portion?.jumboPrice || 3000,
+              label: rawConfig.portion?.label,
+              options: rawConfig.portion?.options,
+              ...rawConfig.portion
+            },
+            sugar: {
+              enabled: Boolean(rawConfig.sugar?.enabled),
+              label: rawConfig.sugar?.label,
+              options: rawConfig.sugar?.options,
+              ...rawConfig.sugar
+            },
+            custom: {
+              enabled: Boolean(rawConfig.custom?.enabled),
+              groups: normalizedGroups
+            }
           });
         } else {
           setVariantConfig(DEFAULT_VARIANT_CONFIG);
@@ -174,7 +237,7 @@ export const ProductFormModal = ({
         ...prev.custom,
         enabled: true,
         groups: [
-          ...prev.custom.groups,
+          ...(prev.custom?.groups || []),
           {
             id: Date.now(),
             name: '',
@@ -191,7 +254,7 @@ export const ProductFormModal = ({
 
   const removeCustomGroup = (groupId) => {
     setVariantConfig(prev => {
-      const updated = prev.custom.groups.filter(g => g.id !== groupId);
+      const updated = (prev.custom?.groups || []).filter(g => g.id !== groupId);
       return {
         ...prev,
         custom: {
@@ -208,7 +271,7 @@ export const ProductFormModal = ({
       ...prev,
       custom: {
         ...prev.custom,
-        groups: prev.custom.groups.map(g => g.id === groupId ? { ...g, [field]: value } : g)
+        groups: (prev.custom?.groups || []).map(g => g.id === groupId ? { ...g, [field]: value } : g)
       }
     }));
   };
@@ -218,11 +281,11 @@ export const ProductFormModal = ({
       ...prev,
       custom: {
         ...prev.custom,
-        groups: prev.custom.groups.map(g => {
+        groups: (prev.custom?.groups || []).map(g => {
           if (g.id !== groupId) return g;
           return {
             ...g,
-            items: [...g.items, { id: Date.now(), name: '', price: 0 }]
+            items: [...(g.items || []), { id: Date.now(), name: '', price: 0 }]
           };
         })
       }
@@ -234,11 +297,11 @@ export const ProductFormModal = ({
       ...prev,
       custom: {
         ...prev.custom,
-        groups: prev.custom.groups.map(g => {
+        groups: (prev.custom?.groups || []).map(g => {
           if (g.id !== groupId) return g;
           return {
             ...g,
-            items: g.items.filter(it => it.id !== itemId)
+            items: (g.items || []).filter(it => it.id !== itemId)
           };
         })
       }
@@ -250,11 +313,11 @@ export const ProductFormModal = ({
       ...prev,
       custom: {
         ...prev.custom,
-        groups: prev.custom.groups.map(g => {
+        groups: (prev.custom?.groups || []).map(g => {
           if (g.id !== groupId) return g;
           return {
             ...g,
-            items: g.items.map(it => it.id === itemId ? { ...it, [field]: value } : it)
+            items: (g.items || []).map(it => it.id === itemId ? { ...it, [field]: value } : it)
           };
         })
       }
@@ -275,12 +338,25 @@ export const ProductFormModal = ({
       ...variantConfig,
       custom: {
         ...variantConfig.custom,
-        groups: (variantConfig.custom.groups || [])
-          .filter(g => g.name.trim())
-          .map(g => ({
-            ...g,
-            items: (g.items || []).filter(it => it.name.trim())
-          }))
+        groups: (variantConfig.custom?.groups || [])
+          .filter(g => g.name && g.name.trim())
+          .map(g => {
+            const validItems = (g.items || [])
+              .filter(it => it.name && it.name.trim())
+              .map(it => ({
+                id: it.id,
+                name: it.name.trim(),
+                price: parseFloat(it.price || 0)
+              }));
+            return {
+              id: g.id,
+              name: g.name.trim(),
+              type: g.type || 'radio',
+              required: g.required ?? (g.type === 'radio'),
+              items: validItems,
+              options: validItems
+            };
+          })
           .filter(g => g.items.length > 0)
       }
     };
@@ -596,7 +672,7 @@ export const ProductFormModal = ({
                           custom: {
                             ...prev.custom,
                             enabled: checked,
-                            groups: checked && prev.custom.groups.length === 0
+                            groups: checked && (!prev.custom?.groups || prev.custom.groups.length === 0)
                               ? [{
                                   id: Date.now(),
                                   name: '',
@@ -604,7 +680,7 @@ export const ProductFormModal = ({
                                   required: true,
                                   items: [{ id: Date.now() + 1, name: '', price: 0 }]
                                 }]
-                              : prev.custom.groups
+                              : (prev.custom?.groups || [])
                           }
                         }));
                       }}
@@ -633,7 +709,7 @@ export const ProductFormModal = ({
                       💡 Tambahkan pilihan bebas untuk menu ini (Contoh: <strong>Pilihan Sambal</strong>, <strong>Bagian Ayam</strong>, <strong>Topping Seblak</strong>).
                     </p>
 
-                    {variantConfig.custom.groups.map((group, gIdx) => (
+                    {(variantConfig.custom?.groups || []).map((group, gIdx) => (
                       <div key={group.id} className="p-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 space-y-2">
                         <div className="flex items-center justify-between gap-2">
                           <input
@@ -682,7 +758,7 @@ export const ProductFormModal = ({
                           <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">
                             Daftar Pilihan:
                           </span>
-                          {group.items.map((it, itIdx) => (
+                          {(group.items || []).map((it, itIdx) => (
                             <div key={it.id} className="flex items-center gap-1.5">
                               <input
                                 type="text"
@@ -704,7 +780,7 @@ export const ProductFormModal = ({
                                   title="Tambahan harga (0 jika gratis)"
                                 />
                               </div>
-                              {group.items.length > 1 && (
+                              {(group.items || []).length > 1 && (
                                 <button
                                   type="button"
                                   onClick={() => removeCustomGroupItem(group.id, it.id)}

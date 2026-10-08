@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   Ticket, 
@@ -12,16 +12,29 @@ import {
   Users, 
   Clock,
   CheckSquare,
-  Square
+  Square,
+  Filter,
+  RotateCcw,
+  Store
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api, { getStorageUrl } from '../../lib/axios';
 import { toast } from 'react-hot-toast';
 import { useCanteenStore } from '../../store/canteenStore';
+import { useAuthStore } from '../../store/authStore';
+import { ROLES } from '../../config/roles';
+import LoadingSpinner from '../../components/common/LoadingSpinner';
+import santriData from '../../data/santri.json';
+
+const uniqueJenjang = [...new Set(santriData.data.filter(r => r.length > 5 && r[4]).map(r => r[4]))].sort();
 
 export default function PromoVoucher() {
   const queryClient = useQueryClient();
-  const { activeCanteenId } = useCanteenStore();
+  const { activeCanteenId, setActiveCanteenId } = useCanteenStore();
+  const currentUser = useAuthStore((state) => state.user);
+  const originalAdmin = useAuthStore((state) => state.originalAdmin);
+  const isAdmin = currentUser?.role === ROLES.ADMIN || currentUser?.role === ROLES.SUPER_ADMIN || originalAdmin?.role === ROLES.SUPER_ADMIN;
+
   const [activeTab, setActiveTab] = useState('vouchers'); // 'vouchers' | 'banners'
 
   // Banner State
@@ -29,10 +42,15 @@ export default function PromoVoucher() {
   const [bannerData, setBannerData] = useState({ title: '' });
   const [bannerFile, setBannerFile] = useState(null);
   const [bannerPreview, setBannerPreview] = useState(null);
+  const [bannerCanteenId, setBannerCanteenId] = useState('');
 
   // Voucher State
   const [showVoucherModal, setShowVoucherModal] = useState(false);
+  const [voucherCanteenId, setVoucherCanteenId] = useState('');
   const [santriSearch, setSantriSearch] = useState('');
+  const [filterJenjang, setFilterJenjang] = useState('all');
+  const [filterKelas, setFilterKelas] = useState('all');
+  const [filterKamar, setFilterKamar] = useState('all');
   const [voucherData, setVoucherData] = useState({
     code: '',
     title: '',
@@ -46,43 +64,80 @@ export default function PromoVoucher() {
     valid_until: ''
   });
 
-  // 1. Fetch Canteen Profile for Banner Info
-  const { data: canteen, isLoading: isLoadingCanteen } = useQuery({
-    queryKey: ['my_canteen', activeCanteenId],
+  // 0. Fetch list canteens (Untuk memastikan activeCanteenId tersedia baik bagi Kantin maupun Admin)
+  const { data: rawCanteens, isLoading: isLoadingCanteens } = useQuery({
+    queryKey: ['canteens_for_promo', isAdmin],
     queryFn: async () => {
-      const res = await api.get(`/my-canteen?canteen_id=${activeCanteenId}`);
-      return res.data.data || res.data;
-    },
-    enabled: !!activeCanteenId
+      const endpoint = isAdmin ? '/admin/canteens' : '/my-canteens';
+      const res = await api.get(endpoint);
+      return res.data?.data || res.data || [];
+    }
   });
 
-  // 2. Fetch Canteen Vouchers
-  const { data: vouchers = [], isLoading: isLoadingVouchers } = useQuery({
-    queryKey: ['canteen_vouchers', activeCanteenId],
+  const canteensList = Array.isArray(rawCanteens) ? rawCanteens : (Array.isArray(rawCanteens?.data) ? rawCanteens.data : []);
+
+  // Default selection: Bagi Admin default ke 'all' agar seluruh voucher tampil langsung
+  const selectedCanteenId = activeCanteenId !== undefined && activeCanteenId !== null
+    ? activeCanteenId
+    : (isAdmin ? 'all' : (canteensList.length > 0 ? canteensList[0].id : 'all'));
+
+  useEffect(() => {
+    if ((activeCanteenId === undefined || activeCanteenId === null) && isAdmin) {
+      setActiveCanteenId('all');
+    }
+  }, [activeCanteenId, isAdmin, setActiveCanteenId]);
+
+  // 1. Fetch Canteen Profile for Banner Info (Hanya jika toko spesifik dipilih)
+  const { data: canteen, isLoading: isLoadingCanteen, isFetching: isFetchingCanteen } = useQuery({
+    queryKey: ['my_canteen', selectedCanteenId],
     queryFn: async () => {
-      const res = await api.get(`/canteen/vouchers?canteen_id=${activeCanteenId}`);
+      const res = await api.get(`/my-canteen?canteen_id=${selectedCanteenId}`);
+      return res.data.data || res.data;
+    },
+    enabled: !!selectedCanteenId && selectedCanteenId !== 'all'
+  });
+
+  // 1b. Fetch All Public Active Banners (Jika mode 'all' dipilih)
+  const { data: allBanners = [], isLoading: isLoadingAllBanners } = useQuery({
+    queryKey: ['all_active_banners'],
+    queryFn: async () => {
+      const res = await api.get('/banners');
       return res.data || [];
     },
-    enabled: !!activeCanteenId
+    enabled: selectedCanteenId === 'all'
+  });
+
+  // 2. Fetch Canteen Vouchers (Mendukung mode 'all' maupun toko spesifik)
+  const { data: vouchers = [], isLoading: isLoadingVouchers, isFetching: isFetchingVouchers } = useQuery({
+    queryKey: ['canteen_vouchers', selectedCanteenId],
+    queryFn: async () => {
+      const param = selectedCanteenId ? `?canteen_id=${selectedCanteenId}` : '';
+      const res = await api.get(`/canteen/vouchers${param}`);
+      return res.data || [];
+    },
   });
 
   // 3. Fetch Santri Options for targeting
-  const { data: santriOptions = [] } = useQuery({
-    queryKey: ['canteen_santri_options', activeCanteenId],
+  const { data: santriOptions = [], isLoading: isLoadingSantriOptions } = useQuery({
+    queryKey: ['canteen_santri_options', selectedCanteenId],
     queryFn: async () => {
-      const res = await api.get(`/vouchers/santri-options?canteen_id=${activeCanteenId}`);
+      const param = selectedCanteenId && selectedCanteenId !== 'all' ? `?canteen_id=${selectedCanteenId}` : '';
+      const res = await api.get(`/vouchers/santri-options${param}`);
       return res.data || [];
     },
-    enabled: !!activeCanteenId
   });
 
   // Mutations for Banners
   const uploadBannerMutation = useMutation({
-    mutationFn: (formData) => api.post(`/canteen/banners?canteen_id=${activeCanteenId}`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    }),
+    mutationFn: (formData) => {
+      const targetCId = bannerCanteenId || (selectedCanteenId !== 'all' ? selectedCanteenId : (canteensList[0]?.id));
+      return api.post(`/canteen/banners?canteen_id=${targetCId}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries(['my_canteen']);
+      queryClient.invalidateQueries(['all_active_banners']);
       toast.success('Banner berhasil ditambahkan.');
       closeBannerModal();
     },
@@ -90,27 +145,41 @@ export default function PromoVoucher() {
   });
 
   const toggleBannerStatusMutation = useMutation({
-    mutationFn: (id) => api.put(`/canteen/banners/${id}/status?canteen_id=${activeCanteenId}`),
+    mutationFn: (id) => {
+      const targetCId = selectedCanteenId !== 'all' ? selectedCanteenId : '';
+      const query = targetCId ? `?canteen_id=${targetCId}` : '';
+      return api.put(`/canteen/banners/${id}/status${query}`);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries(['my_canteen']);
+      queryClient.invalidateQueries(['all_active_banners']);
       toast.success('Status banner diperbarui');
     }
   });
 
   const deleteBannerMutation = useMutation({
-    mutationFn: (id) => api.delete(`/canteen/banners/${id}?canteen_id=${activeCanteenId}`),
+    mutationFn: (id) => {
+      const targetCId = selectedCanteenId !== 'all' ? selectedCanteenId : '';
+      const query = targetCId ? `?canteen_id=${targetCId}` : '';
+      return api.delete(`/canteen/banners/${id}${query}`);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries(['my_canteen']);
+      queryClient.invalidateQueries(['all_active_banners']);
       toast.success('Banner dihapus');
     }
   });
 
   // Mutations for Vouchers
   const createVoucherMutation = useMutation({
-    mutationFn: (payload) => api.post(`/canteen/vouchers?canteen_id=${activeCanteenId}`, payload),
+    mutationFn: (payload) => {
+      const targetCId = payload.canteen_id !== undefined ? payload.canteen_id : (selectedCanteenId !== 'all' ? selectedCanteenId : null);
+      const query = targetCId ? `?canteen_id=${targetCId}` : '';
+      return api.post(`/canteen/vouchers${query}`, payload);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries(['canteen_vouchers']);
-      toast.success('Voucher toko berhasil diterbitkan!');
+      toast.success('Voucher berhasil diterbitkan!');
       closeVoucherModal();
     },
     onError: (err) => {
@@ -120,7 +189,10 @@ export default function PromoVoucher() {
   });
 
   const toggleVoucherMutation = useMutation({
-    mutationFn: (id) => api.put(`/canteen/vouchers/${id}/toggle?canteen_id=${activeCanteenId}`),
+    mutationFn: (id) => {
+      const query = selectedCanteenId && selectedCanteenId !== 'all' ? `?canteen_id=${selectedCanteenId}` : '';
+      return api.put(`/canteen/vouchers/${id}/status${query}`);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries(['canteen_vouchers']);
       toast.success('Status voucher diperbarui');
@@ -128,7 +200,10 @@ export default function PromoVoucher() {
   });
 
   const deleteVoucherMutation = useMutation({
-    mutationFn: (id) => api.delete(`/canteen/vouchers/${id}?canteen_id=${activeCanteenId}`),
+    mutationFn: (id) => {
+      const query = selectedCanteenId && selectedCanteenId !== 'all' ? `?canteen_id=${selectedCanteenId}` : '';
+      return api.delete(`/canteen/vouchers/${id}${query}`);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries(['canteen_vouchers']);
       toast.success('Voucher dihapus');
@@ -167,6 +242,9 @@ export default function PromoVoucher() {
       valid_until: ''
     });
     setSantriSearch('');
+    setFilterJenjang('all');
+    setFilterKelas('all');
+    setFilterKamar('all');
   };
 
   const handleSelectSantri = (userId) => {
@@ -179,6 +257,29 @@ export default function PromoVoucher() {
           : [...prev.target_user_ids, userId]
       };
     });
+  };
+
+  const handleSelectAllFilteredSantri = () => {
+    const filteredIds = filteredSantri.map(s => s.id);
+    setVoucherData(prev => ({
+      ...prev,
+      target_user_ids: Array.from(new Set([...prev.target_user_ids, ...filteredIds]))
+    }));
+  };
+
+  const handleDeselectFilteredSantri = () => {
+    const filteredIdSet = new Set(filteredSantri.map(s => s.id));
+    setVoucherData(prev => ({
+      ...prev,
+      target_user_ids: prev.target_user_ids.filter(id => !filteredIdSet.has(id))
+    }));
+  };
+
+  const handleClearAllSelectedSantri = () => {
+    setVoucherData(prev => ({
+      ...prev,
+      target_user_ids: []
+    }));
   };
 
   const handleCreateVoucherSubmit = (e) => {
@@ -201,15 +302,56 @@ export default function PromoVoucher() {
     });
   };
 
-  const filteredSantri = santriOptions.filter(s => {
-    const q = santriSearch.toLowerCase();
-    return (
-      (s.santri_name && s.santri_name.toLowerCase().includes(q)) ||
-      (s.name && s.name.toLowerCase().includes(q)) ||
-      (s.santri_room && s.santri_room.toLowerCase().includes(q)) ||
-      (s.santri_class && s.santri_class.toLowerCase().includes(q))
-    );
-  });
+  // Opsi unik Jenjang (MA, MI, PPTQ, SMP) sinkron persis dengan Profil User
+  const jenjangOptions = uniqueJenjang;
+
+  // Opsi unik Kelas sesuai Jenjang yang dipilih (mengacu pada master santri.json & data santri)
+  const kelasOptions = React.useMemo(() => {
+    let classes = [];
+    if (filterJenjang === 'all') {
+      classes = santriData.data.filter(r => r.length > 5 && r[5]).map(r => r[5]);
+    } else {
+      classes = santriData.data.filter(r => r.length > 5 && r[4] === filterJenjang && r[5]).map(r => r[5]);
+    }
+    santriOptions.forEach(s => {
+      const sLevel = s.santri_level === 'Aliyah' ? 'MA' : s.santri_level;
+      if ((filterJenjang === 'all' || sLevel === filterJenjang) && s.santri_class && s.santri_class !== '-' && s.santri_class.trim() !== '') {
+        classes.push(s.santri_class.trim());
+      }
+    });
+    return [...new Set(classes)].sort();
+  }, [santriOptions, filterJenjang]);
+
+  // Opsi unik Kamar / Asrama (Al Majid, Asmah, dll)
+  const kamarOptions = React.useMemo(() => {
+    const set = new Set();
+    santriOptions.forEach(s => {
+      if (s.santri_room && s.santri_room !== '-' && s.santri_room.trim() !== '') {
+        set.add(s.santri_room.trim());
+      }
+    });
+    return Array.from(set).sort();
+  }, [santriOptions]);
+
+  // Filter santri berdasarkan seluruh dimensi (Jenjang, Kelas, Kamar, Pencarian)
+  const filteredSantri = React.useMemo(() => {
+    return santriOptions.filter(s => {
+      const sLevel = s.santri_level === 'Aliyah' ? 'MA' : s.santri_level;
+      if (filterJenjang !== 'all' && sLevel !== filterJenjang) return false;
+      if (filterKelas !== 'all' && s.santri_class !== filterKelas) return false;
+      if (filterKamar !== 'all' && s.santri_room !== filterKamar) return false;
+      if (santriSearch.trim()) {
+        const q = santriSearch.toLowerCase().trim();
+        const matchName = s.santri_name && s.santri_name.toLowerCase().includes(q);
+        const matchWali = s.name && s.name.toLowerCase().includes(q);
+        const matchRoom = s.santri_room && s.santri_room.toLowerCase().includes(q);
+        const matchClass = s.santri_class && s.santri_class.toLowerCase().includes(q);
+        const matchLevel = (sLevel && sLevel.toLowerCase().includes(q)) || (s.santri_level && s.santri_level.toLowerCase().includes(q));
+        if (!matchName && !matchWali && !matchRoom && !matchClass && !matchLevel) return false;
+      }
+      return true;
+    });
+  }, [santriOptions, filterJenjang, filterKelas, filterKamar, santriSearch]);
 
   const getDiscountBadge = (type, amount) => {
     const formatted = `Rp ${parseFloat(amount || 0).toLocaleString('id-ID')}`;
@@ -222,14 +364,9 @@ export default function PromoVoucher() {
     return <span className="bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 font-bold px-1.5 py-0.5 text-[10px] uppercase border border-amber-300 dark:border-amber-700">Diskon Produk {formatted}</span>;
   };
 
-  if (isLoadingCanteen) {
-    return (
-      <div className="p-8 text-center">
-        <div className="w-6 h-6 border-2 border-green-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-        <p className="text-xs text-gray-500">Memuat data toko...</p>
-      </div>
-    );
-  }
+
+  const displayBanners = selectedCanteenId === 'all' ? allBanners : (canteen?.banners || []);
+  const isLoadingBanners = selectedCanteenId === 'all' ? isLoadingAllBanners : (isLoadingCanteen || isFetchingCanteen);
 
   return (
     <div className="space-y-2 pb-16 font-sans">
@@ -246,6 +383,26 @@ export default function PromoVoucher() {
             </p>
           </div>
         </div>
+
+        {/* SELECTOR TOKO JIKA MULTI-TOKO ATAU ADMIN */}
+        {(isAdmin || canteensList.length > 0) && (
+          <div className="bg-emerald-50 dark:bg-emerald-950/40 p-2 border border-emerald-300 dark:border-emerald-800 rounded-none mb-2 flex items-center gap-2">
+            <Store className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span className="text-[11px] font-bold text-emerald-900 dark:text-emerald-200 shrink-0">Filter Toko:</span>
+            <select
+              value={selectedCanteenId || 'all'}
+              onChange={(e) => setActiveCanteenId(e.target.value)}
+              className="w-full text-xs font-bold bg-white dark:bg-gray-900 border border-emerald-300 dark:border-emerald-700 py-1 px-2 rounded-none text-gray-800 dark:text-gray-200 focus:ring-1 focus:ring-green-500"
+            >
+              <option value="all">🌟 Semua Kantin & Promo Global (Seluruh Toko)</option>
+              {canteensList.map((c) => (
+                <option key={c.id} value={c.id}>
+                  🏪 {c.name} {c.user?.name ? `(Kantin: ${c.user.name})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* TABS */}
         <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-gray-100 dark:border-gray-800">
@@ -267,7 +424,7 @@ export default function PromoVoucher() {
                 : 'bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-100'
             }`}
           >
-            Banner Promo ({canteen?.banners?.length || 0})
+            Banner Promo ({displayBanners.length})
           </button>
         </div>
       </div>
@@ -277,28 +434,39 @@ export default function PromoVoucher() {
         <div className="space-y-2">
           {/* Action Row */}
           <div className="flex justify-between items-center bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-2.5 shadow-xs">
-            <span className="text-xs font-bold text-gray-700 dark:text-gray-300">
-              Daftar Kupon Khusus Toko Anda
-            </span>
+            <div>
+              <span className="text-xs font-bold text-gray-800 dark:text-gray-200 block">
+                {selectedCanteenId === 'all' ? 'Seluruh Kupon di Semua Kantin & Pondok' : `Daftar Kupon Khusus ${canteen?.name || 'Toko'}`}
+              </span>
+              <span className="text-[10px] text-gray-500 dark:text-gray-400">
+                {vouchers.length} voucher aktif dan terdaftar
+              </span>
+            </div>
             <button
-              onClick={() => setShowVoucherModal(true)}
+              onClick={() => {
+                setVoucherCanteenId(selectedCanteenId !== 'all' ? selectedCanteenId : '');
+                setShowVoucherModal(true);
+              }}
               className="px-3 py-1.5 bg-green-600 hover:bg-green-700 active:scale-[0.99] text-white font-bold text-xs uppercase tracking-wider shadow-xs flex items-center gap-1 transition-colors cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>Buat Voucher Toko</span>
+              <span>Buat Voucher</span>
             </button>
           </div>
 
           {/* List of Vouchers */}
-          {isLoadingVouchers ? (
-            <div className="p-8 text-center bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800">
-              <div className="w-6 h-6 border-2 border-green-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-              <p className="text-xs text-gray-500">Memuat kupon toko...</p>
+          {(isLoadingVouchers || isFetchingVouchers || isLoadingCanteens) && vouchers.length === 0 ? (
+            <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800">
+              <LoadingSpinner 
+                text="Memuat kupon..." 
+                subtext="Menghubungkan ke server data voucher" 
+                minHeight="min-h-[180px]"
+              />
             </div>
           ) : vouchers.length === 0 ? (
             <div className="p-8 text-center bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800">
               <Ticket className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-              <p className="text-xs font-bold text-gray-700 dark:text-gray-300">Belum Ada Voucher Toko</p>
+              <p className="text-xs font-bold text-gray-700 dark:text-gray-300">Belum Ada Voucher</p>
               <p className="text-[11px] text-gray-500 mt-0.5">Terbitkan voucher diskon untuk menarik minat santri dan wali jajan di toko Anda.</p>
             </div>
           ) : (
@@ -316,6 +484,15 @@ export default function PromoVoucher() {
                           <span className="font-mono font-black text-xs px-2 py-0.5 bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900 tracking-wider">
                             {v.code}
                           </span>
+                          {v.canteen ? (
+                            <span className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 font-bold px-1.5 py-0.5 text-[10px] uppercase border border-emerald-300 dark:border-emerald-700">
+                              🏪 {v.canteen.name}
+                            </span>
+                          ) : (
+                            <span className="bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 font-bold px-1.5 py-0.5 text-[10px] uppercase border border-purple-300 dark:border-purple-700">
+                              🌐 Promo Pondok (Semua Toko)
+                            </span>
+                          )}
                           {getDiscountBadge(v.discount_type, v.discount_amount)}
                           {isExpired ? (
                             <span className="bg-red-100 text-red-700 text-[10px] font-bold px-1.5 py-0.5 border border-red-300">
@@ -398,11 +575,19 @@ export default function PromoVoucher() {
       {activeTab === 'banners' && (
         <div className="space-y-2">
           <div className="flex justify-between items-center bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-2.5 shadow-xs">
-            <span className="text-xs font-bold text-gray-700 dark:text-gray-300">
-              Banner Promosi di Layar Beranda
-            </span>
+            <div>
+              <span className="text-xs font-bold text-gray-700 dark:text-gray-300 block">
+                {selectedCanteenId === 'all' ? 'Seluruh Banner Promo Aktif' : `Banner Promosi ${canteen?.name || 'Toko'}`}
+              </span>
+              <span className="text-[10px] text-gray-500 dark:text-gray-400">
+                Tampil di beranda belanja santri
+              </span>
+            </div>
             <button
-              onClick={() => setShowBannerModal(true)}
+              onClick={() => {
+                setBannerCanteenId(selectedCanteenId !== 'all' ? selectedCanteenId : (canteensList[0]?.id || ''));
+                setShowBannerModal(true);
+              }}
               className="px-3 py-1.5 bg-green-600 hover:bg-green-700 active:scale-[0.99] text-white font-bold text-xs uppercase tracking-wider shadow-xs flex items-center gap-1 transition-colors cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
@@ -411,13 +596,24 @@ export default function PromoVoucher() {
           </div>
 
           <div className="grid grid-cols-1 gap-2">
-            {canteen?.banners && canteen.banners.length > 0 ? (
-              canteen.banners.map((banner) => (
+            {(isLoadingBanners || isLoadingCanteens) && displayBanners.length === 0 ? (
+              <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800">
+                <LoadingSpinner 
+                  text="Memuat banner..." 
+                  subtext="Mengambil poster promosi aktif" 
+                  minHeight="min-h-[160px]"
+                />
+              </div>
+            ) : displayBanners.length > 0 ? (
+              displayBanners.map((banner) => (
                 <div key={banner.id} className={`relative aspect-[21/9] border ${banner.status === 'active' ? 'border-green-600' : 'border-gray-300 dark:border-gray-700 opacity-70'} overflow-hidden shadow-xs bg-gray-100 dark:bg-gray-800`}>
                   <img src={getStorageUrl(banner.image_path)} alt={banner.title} className="w-full h-full object-cover" />
                   
-                  <div className="absolute top-2 left-2 bg-black/75 text-white text-[10px] font-bold px-2 py-0.5 max-w-[60%] truncate">
-                    {banner.title}
+                  <div className="absolute top-2 left-2 bg-black/75 text-white text-[10px] font-bold px-2 py-0.5 max-w-[65%] truncate flex items-center gap-1">
+                    <span>{banner.title}</span>
+                    {banner.canteen?.name && (
+                      <span className="text-emerald-400 font-normal">({banner.canteen.name})</span>
+                    )}
                   </div>
                   
                   <div className="absolute top-2 right-2 flex items-center gap-1.5">
@@ -462,7 +658,7 @@ export default function PromoVoucher() {
               <div className="flex items-center gap-1.5">
                 <Ticket className="w-4 h-4 text-green-600" />
                 <h3 className="text-xs sm:text-sm font-black text-gray-900 dark:text-white uppercase tracking-wider">
-                  Buat Voucher Toko ({canteen?.name})
+                  Buat Voucher {voucherCanteenId ? `Toko` : (selectedCanteenId !== 'all' ? `(${canteen?.name})` : `(Semua Kantin / Pondok)`)}
                 </h3>
               </div>
               <button
@@ -474,6 +670,26 @@ export default function PromoVoucher() {
             </div>
 
             <form onSubmit={handleCreateVoucherSubmit} className="p-3 overflow-y-auto space-y-2.5 flex-1 text-xs">
+              {(isAdmin || selectedCanteenId === 'all') && (
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-600 dark:text-gray-400 mb-1">
+                    Toko Penerbit Kupon
+                  </label>
+                  <select
+                    value={voucherCanteenId}
+                    onChange={(e) => setVoucherCanteenId(e.target.value)}
+                    className="w-full px-2 py-1.5 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 font-semibold text-gray-900 dark:text-white outline-none focus:border-green-600"
+                  >
+                    <option value="">🌐 Berlaku Semua Toko (Promo Pondok)</option>
+                    {canteensList.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        🏪 Khusus Toko: {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-600 dark:text-gray-400 mb-1">
@@ -620,43 +836,165 @@ export default function PromoVoucher() {
 
                 {voucherData.target_type === 'specific' && (
                   <div className="border border-gray-200 dark:border-gray-700 p-2 bg-gray-50 dark:bg-gray-950/60 space-y-2">
+                    {/* DROPDOWN FILTER BAR: JENJANG, KELAS, KAMAR */}
+                    <div className="grid grid-cols-3 gap-1.5">
+                      <div>
+                        <label className="block text-[9.5px] font-bold text-gray-500 dark:text-gray-400 mb-0.5">
+                          Jenjang
+                        </label>
+                        <select
+                          value={filterJenjang}
+                          onChange={(e) => {
+                            setFilterJenjang(e.target.value);
+                            setFilterKelas('all');
+                          }}
+                          className="w-full px-1.5 py-1 text-[11px] font-semibold bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white outline-none rounded-none focus:border-green-600"
+                        >
+                          <option value="all">Semua Jenjang</option>
+                          {jenjangOptions.map((j) => (
+                            <option key={j} value={j}>{j}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[9.5px] font-bold text-gray-500 dark:text-gray-400 mb-0.5">
+                          Kelas
+                        </label>
+                        <select
+                          value={filterKelas}
+                          onChange={(e) => setFilterKelas(e.target.value)}
+                          className="w-full px-1.5 py-1 text-[11px] font-semibold bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white outline-none rounded-none focus:border-green-600"
+                        >
+                          <option value="all">Semua Kelas</option>
+                          {kelasOptions.map((k) => (
+                            <option key={k} value={k}>{k}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[9.5px] font-bold text-gray-500 dark:text-gray-400 mb-0.5">
+                          Kamar / Asrama
+                        </label>
+                        <select
+                          value={filterKamar}
+                          onChange={(e) => setFilterKamar(e.target.value)}
+                          className="w-full px-1.5 py-1 text-[11px] font-semibold bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white outline-none rounded-none focus:border-green-600"
+                        >
+                          <option value="all">Semua Kamar</option>
+                          {kamarOptions.map((km) => (
+                            <option key={km} value={km}>{km}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* SEARCH INPUT */}
                     <div className="relative">
                       <Search className="w-3.5 h-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
                       <input
                         type="text"
-                        placeholder="Cari santri penerima kupon..."
+                        placeholder="Cari nama santri, wali, kamar, kelas..."
                         value={santriSearch}
                         onChange={(e) => setSantriSearch(e.target.value)}
-                        className="w-full pl-7 pr-2 py-1 text-[11px] bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white outline-none"
+                        className="w-full pl-7 pr-7 py-1 text-[11px] bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white outline-none rounded-none focus:border-green-600"
                       />
+                      {santriSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setSantriSearch('')}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
-                    <div className="max-h-36 overflow-y-auto divide-y divide-gray-200 dark:divide-gray-800 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
-                      {filteredSantri.map((s) => {
-                        const isChecked = voucherData.target_user_ids.includes(s.id);
-                        return (
-                          <div
-                            key={s.id}
-                            onClick={() => handleSelectSantri(s.id)}
-                            className={`p-2 flex items-center justify-between cursor-pointer hover:bg-green-50/50 ${isChecked ? 'bg-green-50 dark:bg-green-950/40' : ''}`}
+
+                    {/* STATUS & BATCH ACTIONS */}
+                    <div className="flex items-center justify-between gap-1 flex-wrap pt-0.5 text-[10px]">
+                      <span className="text-gray-500 dark:text-gray-400 font-medium">
+                        Hasil: <strong className="text-gray-900 dark:text-white font-mono">{filteredSantri.length}</strong> • Terpilih: <strong className="text-green-600 dark:text-green-400 font-mono">{voucherData.target_user_ids.length}</strong>
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={handleSelectAllFilteredSantri}
+                          disabled={filteredSantri.length === 0}
+                          className="px-2 py-0.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-none transition-colors disabled:opacity-40 cursor-pointer"
+                          title="Pilih semua santri yang ada di hasil filter saat ini"
+                        >
+                          + Pilih Semua ({filteredSantri.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleDeselectFilteredSantri}
+                          disabled={filteredSantri.length === 0}
+                          className="px-2 py-0.5 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 font-bold rounded-none transition-colors disabled:opacity-40 cursor-pointer"
+                          title="Batalkan pilihan santri di hasil filter saat ini"
+                        >
+                          - Batal Filter
+                        </button>
+                        {voucherData.target_user_ids.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={handleClearAllSelectedSantri}
+                            className="px-1.5 py-0.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 border border-red-200 dark:border-red-900/60 font-bold rounded-none transition-colors cursor-pointer"
+                            title="Kosongkan seluruh santri yang telah dipilih"
                           >
-                            <div className="min-w-0 pr-2">
-                              <p className="font-bold text-gray-900 dark:text-white leading-tight truncate">
-                                {s.santri_name || s.name}
-                              </p>
-                              <p className="text-[10px] text-gray-500 dark:text-gray-400 leading-tight">
-                                Kamar: {s.santri_room || '-'} • Kelas: {s.santri_class || '-'} • Wali: {s.name}
-                              </p>
+                            Reset
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* SANTRI LIST SCROLLBOX */}
+                    <div className="max-h-44 overflow-y-auto divide-y divide-gray-200 dark:divide-gray-800 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
+                      {filteredSantri.length === 0 ? (
+                        <div className="p-4 text-center text-gray-400 space-y-1">
+                          <p className="text-[11px] font-bold">Tidak ada santri yang sesuai filter</p>
+                          <p className="text-[10px]">Coba ubah filter jenjang, kelas, atau kata kunci pencarian.</p>
+                        </div>
+                      ) : (
+                        filteredSantri.map((s) => {
+                          const isChecked = voucherData.target_user_ids.includes(s.id);
+                          return (
+                            <div
+                              key={s.id}
+                              onClick={() => handleSelectSantri(s.id)}
+                              className={`p-2 flex items-center justify-between cursor-pointer hover:bg-green-50/50 dark:hover:bg-green-950/20 transition-colors ${isChecked ? 'bg-green-50/90 dark:bg-green-950/40' : ''}`}
+                            >
+                              <div className="min-w-0 pr-2">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <p className="font-bold text-xs text-gray-900 dark:text-white leading-tight">
+                                    {s.santri_name || s.name}
+                                  </p>
+                                  {s.santri_level && s.santri_level !== '-' && (
+                                    <span className="px-1 py-0.2 bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300 font-extrabold text-[9px] rounded-none">
+                                      {s.santri_level === 'Aliyah' ? 'MA' : s.santri_level}
+                                    </span>
+                                  )}
+                                  {s.santri_class && s.santri_class !== '-' && (
+                                    <span className="px-1 py-0.2 bg-purple-100 dark:bg-purple-900/60 text-purple-800 dark:text-purple-300 font-bold text-[9px] rounded-none">
+                                      Kls {s.santri_class}
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-[10px] text-gray-500 dark:text-gray-400 leading-tight mt-0.5">
+                                  Kamar: <span className="font-medium text-gray-700 dark:text-gray-300">{s.santri_room || '-'}</span> • Wali: {s.name}
+                                </p>
+                              </div>
+                              <div className="shrink-0">
+                                {isChecked ? (
+                                  <CheckSquare className="w-4 h-4 text-green-600" />
+                                ) : (
+                                  <Square className="w-4 h-4 text-gray-400" />
+                                )}
+                              </div>
                             </div>
-                            <div className="shrink-0">
-                              {isChecked ? (
-                                <CheckSquare className="w-4 h-4 text-green-600" />
-                              ) : (
-                                <Square className="w-4 h-4 text-gray-400" />
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })
+                      )}
                     </div>
                   </div>
                 )}
@@ -691,6 +1029,25 @@ export default function PromoVoucher() {
             </div>
             
             <form onSubmit={handleUploadBanner} className="p-3 space-y-3 text-xs">
+              {(isAdmin || selectedCanteenId === 'all') && (
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-600 dark:text-gray-400 mb-1">
+                    Pilih Toko untuk Banner Ini <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={bannerCanteenId}
+                    onChange={(e) => setBannerCanteenId(e.target.value)}
+                    className="w-full px-2 py-1.5 bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 font-semibold text-gray-900 dark:text-white outline-none focus:border-green-600"
+                  >
+                    {canteensList.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        🏪 {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div>
                 <label className="block text-[10px] font-bold uppercase tracking-wider text-gray-600 dark:text-gray-400 mb-1">
                   Judul Promo <span className="text-red-500">*</span>

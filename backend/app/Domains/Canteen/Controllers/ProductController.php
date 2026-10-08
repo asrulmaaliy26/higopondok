@@ -17,10 +17,19 @@ class ProductController extends Controller
     private function getActiveCanteen(Request $request)
     {
         $canteenId = $request->query('canteen_id') ?? $request->input('canteen_id');
-        if ($canteenId) {
-            return $request->user()->canteens()->where('id', $canteenId)->firstOrFail();
+        $user = $request->user();
+
+        if ($user && ($user->hasRole('admin') || $user->hasRole('super_admin'))) {
+            if ($canteenId) {
+                return Canteen::where('id', $canteenId)->firstOrFail();
+            }
+            return Canteen::firstOrFail();
         }
-        return $request->user()->canteens()->firstOrFail();
+
+        if ($canteenId) {
+            return $user->canteens()->where('id', $canteenId)->firstOrFail();
+        }
+        return $user->canteens()->firstOrFail();
     }
 
     public function index(Request $request)

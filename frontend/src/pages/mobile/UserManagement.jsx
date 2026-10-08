@@ -6,12 +6,13 @@ import {
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, RefreshCw,
   Home, BookOpen, Layers, Store
 } from 'lucide-react';
-import { ROLES } from '../../config/roles';
+import { ROLES, getRoleLabel } from '../../config/roles';
 import { useAuthStore } from '../../store/authStore';
 import { useNavigate } from '@tanstack/react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import api from '../../lib/axios';
+import LoadingSpinner from '../../components/common/LoadingSpinner';
 
 export default function UserManagement() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -45,8 +46,20 @@ export default function UserManagement() {
 
   const impersonate = useAuthStore(state => state.impersonate);
   const currentUser = useAuthStore(state => state.user);
+  const originalAdmin = useAuthStore(state => state.originalAdmin);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+
+  // Super Admin (baik login langsung maupun saat memegang sesi impersonasi) berhak penuh atas Manajemen User
+  const isSuperAdmin = currentUser?.role === ROLES.SUPER_ADMIN || originalAdmin?.role === ROLES.SUPER_ADMIN;
+
+  // Proteksi: Manajemen User HANYA untuk Super Admin
+  useEffect(() => {
+    if (currentUser && !isSuperAdmin) {
+      toast.error('Akses ditolak. Manajemen User hanya dapat diakses oleh Super Administrator.');
+      navigate({ to: '/dashboard' });
+    }
+  }, [currentUser, isSuperAdmin, navigate]);
 
   // Debounce search input
   useEffect(() => {
@@ -135,18 +148,36 @@ export default function UserManagement() {
     mutationFn: (userId) => api.post(`/admin/impersonate/${userId}`),
     onSuccess: (res) => {
       const { user: targetUser, token } = res.data;
-      queryClient.clear();
       impersonate(targetUser, token);
+      queryClient.clear();
       toast.success(`Berhasil login sebagai ${targetUser.name}`);
-      navigate({ to: '/dashboard' });
+      navigate({ to: '/dashboard', replace: true });
     },
     onError: (err) => {
       toast.error(err.response?.data?.message || 'Gagal beralih akun.');
     }
   });
 
+  const canImpersonateUser = (targetUser) => {
+    if (!targetUser) return false;
+    // Tidak bisa menyamar ke akun sendiri
+    if (targetUser.id === currentUser?.id) return false;
+    // Tidak bisa menyamar sebagai Super Admin
+    if (targetUser.role === ROLES.SUPER_ADMIN) return false;
+    // Super Admin berhak login ke semua role lainnya (Admin, Kantin, Kurir, User)
+    if (isSuperAdmin) return true;
+    // Admin biasa hanya bisa login ke Kantin, Kurir, atau Santri/Wali (tidak boleh ke sesama Admin)
+    if (currentUser?.role === ROLES.ADMIN) {
+      return targetUser.role !== ROLES.ADMIN;
+    }
+    return false;
+  };
+
   const handleImpersonate = (user) => {
-    if(user.role === ROLES.ADMIN) return;
+    if (!canImpersonateUser(user)) {
+      toast.error('Tidak memiliki izin untuk login sebagai akun ini.');
+      return;
+    }
     impersonateMutation.mutate(user.id);
   };
 
@@ -237,16 +268,18 @@ export default function UserManagement() {
 
   const getRoleBadge = (role) => {
     switch(role) {
+      case ROLES.SUPER_ADMIN:
+        return <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-none bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 text-[9.5px] font-bold border border-amber-300 dark:border-amber-700 whitespace-nowrap"><Shield className="w-2.5 h-2.5"/>Super Admin</span>;
       case ROLES.ADMIN: 
-        return <span className="flex items-center gap-1 px-2 py-0.5 rounded-none bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 text-[10px] font-bold border border-purple-200 dark:border-purple-800"><Shield className="w-3 h-3"/> Admin</span>;
+        return <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-none bg-green-50 text-green-700 dark:bg-green-950/60 dark:text-green-300 text-[9.5px] font-bold border border-green-200 dark:border-green-800 whitespace-nowrap"><Shield className="w-2.5 h-2.5"/>Admin</span>;
       case ROLES.USER: 
-        return <span className="flex items-center gap-1 px-2 py-0.5 rounded-none bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 text-[10px] font-bold border border-green-200 dark:border-green-800"><User className="w-3 h-3"/> User / Wali</span>;
+        return <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-none bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 text-[9.5px] font-bold border border-blue-200 dark:border-blue-800 whitespace-nowrap"><User className="w-2.5 h-2.5"/>Santri/Wali</span>;
       case ROLES.KANTIN: 
-        return <span className="flex items-center gap-1 px-2 py-0.5 rounded-none bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 text-[10px] font-bold border border-emerald-200 dark:border-emerald-800"><Coffee className="w-3 h-3"/> Kantin</span>;
+        return <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-none bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 text-[9.5px] font-bold border border-purple-200 dark:border-purple-800 whitespace-nowrap"><Coffee className="w-2.5 h-2.5"/>Pemilik Toko</span>;
       case ROLES.KURIR: 
-        return <span className="flex items-center gap-1 px-2 py-0.5 rounded-none bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300 text-[10px] font-bold border border-teal-200 dark:border-teal-800"><Bus className="w-3 h-3"/> Kurir</span>;
+        return <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-none bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 text-[9.5px] font-bold border border-gray-200 dark:border-gray-700 whitespace-nowrap"><Bus className="w-2.5 h-2.5"/>Kurir</span>;
       default: 
-        return <span className="px-2 py-0.5 rounded-none bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400 text-[10px] font-semibold border border-gray-200 dark:border-gray-700">{role}</span>;
+        return <span className="px-1.5 py-0.2 rounded-none bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400 text-[9.5px] font-semibold border border-gray-200 dark:border-gray-700 whitespace-nowrap">{role}</span>;
     }
   };
 
@@ -260,32 +293,60 @@ export default function UserManagement() {
     return pages;
   };
 
+  if (currentUser && !isSuperAdmin) {
+    return (
+      <div className="bg-white dark:bg-gray-900 rounded-none p-8 text-center border border-gray-200 dark:border-gray-800 shadow-xs my-6 max-w-md mx-auto">
+        <Shield className="mx-auto h-10 w-10 text-amber-500 mb-2" />
+        <h3 className="text-sm font-bold text-gray-900 dark:text-white">Akses Ditolak</h3>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+          Halaman Manajemen User hanya dapat diakses oleh Super Administrator.
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-3 animate-fade-in-up pb-20">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2.5 bg-white dark:bg-gray-900 p-3 sm:p-3.5 rounded-none border border-gray-200 dark:border-gray-800 shadow-xs">
-        <div>
-          <h2 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            Manajemen User & Akun
-          </h2>
-          <p className="text-[11px] sm:text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-            Kelola data akun santri/wali, administrator, pengelola kantin, dan kurir dengan cepat & ringan.
-          </p>
+    <div className="space-y-1.5 sm:space-y-2 pb-20 max-w-7xl mx-auto px-1 sm:px-2 font-sans">
+      {/* Header Compact */}
+      <div className="flex items-center justify-between gap-2 bg-white dark:bg-gray-900 p-2 sm:p-2.5 rounded-none border border-gray-200 dark:border-gray-800 shadow-xs">
+        <div className="flex items-center gap-2 min-w-0">
+          <button 
+            onClick={() => navigate({ to: '/dashboard' })} 
+            className="w-7 h-7 flex items-center justify-center border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-none transition-colors shrink-0 cursor-pointer"
+            title="Kembali ke Dashboard"
+          >
+            <ChevronLeft className="w-4 h-4 text-gray-700 dark:text-gray-300" />
+          </button>
+          <div className="min-w-0">
+            <h2 className="text-xs sm:text-sm font-black text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5 truncate">
+              <User className="w-3.5 h-3.5 text-green-600 shrink-0" />
+              <span>Manajemen User & Akun</span>
+            </h2>
+            <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate">
+              Santri/wali, admin, pemilik toko & kurir
+            </p>
+          </div>
         </div>
-        <button 
-          onClick={openAddModal}
-          className="inline-flex items-center justify-center px-3 py-1.5 bg-green-600 hover:bg-green-700 active:scale-98 text-white text-xs font-bold rounded-none transition-all w-full sm:w-auto shrink-0 gap-1.5 cursor-pointer"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>Tambah User Baru</span>
-        </button>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="hidden sm:inline-block px-2 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-[10px] font-bold font-mono border border-gray-200 dark:border-gray-700 rounded-none">
+            Total: {totalUsers}
+          </span>
+          <button 
+            onClick={openAddModal}
+            className="inline-flex items-center justify-center px-2.5 py-1 bg-green-600 hover:bg-green-700 active:scale-98 text-white text-xs font-bold rounded-none transition-all gap-1 cursor-pointer h-[29px]"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Tambah User</span>
+          </button>
+        </div>
       </div>
 
-      {/* Action Bar & Server-Side Filters */}
-      <div className="bg-white dark:bg-gray-900 p-2.5 sm:p-3 rounded-none border border-gray-200 dark:border-gray-800 shadow-xs flex flex-col sm:flex-row gap-2 items-center justify-between">
+      {/* Action Bar & Compact Filters */}
+      <div className="bg-white dark:bg-gray-900 p-1.5 sm:p-2 rounded-none border border-gray-200 dark:border-gray-800 shadow-xs flex flex-col sm:flex-row gap-1.5 items-stretch sm:items-center justify-between">
         {/* Search Input */}
-        <div className="relative w-full sm:w-80">
-          <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+        <div className="relative flex-1 min-w-0">
+          <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
             <Search className="h-3.5 w-3.5 text-gray-400" />
           </div>
           <input
@@ -293,56 +354,56 @@ export default function UserManagement() {
             placeholder="Cari nama, santri, kamar, email, no hp..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="block w-full pl-8 pr-7 py-1.5 border border-gray-200 dark:border-gray-700 rounded-none leading-5 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-green-500 text-xs font-medium transition-colors"
+            className="block w-full pl-7 pr-6 py-1 border border-gray-200 dark:border-gray-700 rounded-none bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-green-500 text-xs font-medium h-[29px]"
           />
           {searchTerm && (
             <button 
               onClick={() => setSearchTerm('')} 
-              className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-gray-400 hover:text-gray-600 cursor-pointer"
+              className="absolute inset-y-0 right-0 pr-2 flex items-center text-gray-400 hover:text-gray-600 cursor-pointer"
             >
-              <X className="w-3.5 h-3.5" />
+              <X className="w-3 h-3" />
             </button>
           )}
         </div>
         
-        {/* Filters & Per Page */}
-        <div className="flex items-center gap-1.5 w-full sm:w-auto justify-end flex-wrap">
+        {/* Filters & Per Page Inline */}
+        <div className="flex items-center gap-1 justify-end flex-wrap">
           {/* Role Filter */}
-          <div className="relative flex-1 sm:flex-initial min-w-[130px]">
-            <Filter className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+          <div className="relative flex-1 sm:flex-initial min-w-[120px]">
             <select
               value={filterRole}
               onChange={(e) => handleRoleChange(e.target.value)}
-              className="pl-8 pr-6 py-1.5 w-full border border-gray-200 dark:border-gray-700 rounded-none text-xs font-semibold bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-green-500 cursor-pointer"
+              className="px-2 py-1 w-full border border-gray-200 dark:border-gray-700 rounded-none text-xs font-semibold bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-green-500 cursor-pointer h-[29px]"
             >
               <option value="all">Semua Peran</option>
+              <option value={ROLES.SUPER_ADMIN}>Super Admin</option>
               <option value={ROLES.ADMIN}>Admin</option>
-              <option value={ROLES.USER}>User / Santri</option>
-              <option value={ROLES.KANTIN}>Kantin</option>
+              <option value={ROLES.USER}>Santri / Wali</option>
+              <option value={ROLES.KANTIN}>Pemilik Toko</option>
               <option value={ROLES.KURIR}>Kurir</option>
             </select>
           </div>
 
           {/* Per Page Selector */}
-          <div className="relative">
+          <div className="relative shrink-0">
             <select
               value={perPage}
               onChange={(e) => handlePerPageChange(e.target.value)}
-              className="px-2 py-1.5 border border-gray-200 dark:border-gray-700 rounded-none text-xs font-semibold bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-green-500 cursor-pointer"
-              title="Jumlah baris per halaman"
+              className="px-1.5 py-1 border border-gray-200 dark:border-gray-700 rounded-none text-xs font-semibold bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-green-500 cursor-pointer h-[29px]"
+              title="Jumlah data per halaman"
             >
-              <option value={10}>10 / hal</option>
-              <option value={15}>15 / hal</option>
-              <option value={30}>30 / hal</option>
-              <option value={50}>50 / hal</option>
-              <option value={100}>100 / hal</option>
+              <option value={10}>10</option>
+              <option value={15}>15</option>
+              <option value={30}>30</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
             </select>
           </div>
 
           {/* Refresh Button */}
           <button
             onClick={() => refetch()}
-            className="p-1.5 border border-gray-200 dark:border-gray-700 rounded-none bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-100 transition-colors cursor-pointer"
+            className="w-[29px] h-[29px] flex items-center justify-center border border-gray-200 dark:border-gray-700 rounded-none bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer shrink-0"
             title="Refresh Data"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? 'animate-spin text-green-600' : ''}`} />
@@ -351,139 +412,193 @@ export default function UserManagement() {
       </div>
 
       {/* Pagination Summary Info */}
-      <div className="flex items-center justify-between text-[11px] text-gray-500 px-1">
+      <div className="flex items-center justify-between text-[10px] text-gray-500 px-1 font-medium">
         <span>
-          Menampilkan <strong>{fromItem}</strong> - <strong>{toItem}</strong> dari total <strong>{totalUsers}</strong> pengguna
-          {debouncedSearch && ` (hasil pencarian "${debouncedSearch}")`}
+          Menampilkan <strong className="text-gray-800 dark:text-gray-200">{fromItem}</strong>-<strong className="text-gray-800 dark:text-gray-200">{toItem}</strong> dari total <strong className="text-gray-800 dark:text-gray-200">{totalUsers}</strong>
+          {debouncedSearch && ` ("${debouncedSearch}")`}
         </span>
-        <span>Halaman {currentPage} dari {lastPage}</span>
+        <span>Hal {currentPage} / {lastPage}</span>
       </div>
 
-      {/* Users List (Optimized Cards with Santri Details) */}
+      {/* Users List */}
       <div>
         {isLoading ? (
-          <div className="bg-white dark:bg-gray-900 rounded-none p-6 text-center border border-gray-200 dark:border-gray-800 shadow-xs">
-            <div className="animate-spin rounded-full h-6 w-6 border-2 border-green-600 border-t-transparent mx-auto mb-2"></div>
-            <p className="text-gray-500 text-xs font-semibold">Memuat data pengguna...</p>
+          <div className="bg-white dark:bg-gray-900 rounded-none border border-gray-200 dark:border-gray-800 shadow-xs">
+            <LoadingSpinner 
+              text="Memuat data pengguna..." 
+              subtext="Menghubungkan ke database akun pondok" 
+              minHeight="min-h-[180px]"
+            />
           </div>
-        ) : users.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-2">
-            {users.map((user) => {
-              const isUserSantri = user.role === ROLES.USER || (!user.role && (user.santri_name || user.santri_room));
-              
-              return (
-                <div 
-                  key={user.id} 
-                  className="bg-white dark:bg-gray-900 rounded-none p-2.5 sm:p-3 border border-gray-200 dark:border-gray-800 shadow-xs hover:border-green-500 dark:hover:border-green-600 transition-colors flex flex-col justify-between gap-2"
-                >
-                  <div className="space-y-1.5">
-                    {/* User Header */}
-                    <div className="flex items-start justify-between gap-1.5">
-                      <div className="flex items-center space-x-2 min-w-0">
-                        <div className="flex-shrink-0 h-7 w-7 rounded-none bg-green-100 dark:bg-green-900/50 flex items-center justify-center text-green-700 dark:text-green-300 font-extrabold text-[11px] uppercase border border-green-200 dark:border-green-800">
-                          {user.name?.charAt(0) || 'U'}
+        ) : users.length === 0 ? (
+          <div className="bg-white dark:bg-gray-900 rounded-none p-6 text-center border border-gray-200 dark:border-gray-800 shadow-xs">
+            <User className="mx-auto h-8 w-8 text-gray-300 dark:text-gray-600 mb-1.5" />
+            <h3 className="text-xs font-bold text-gray-900 dark:text-white">Tidak ada pengguna ditemukan</h3>
+            <p className="text-[10.5px] text-gray-500 dark:text-gray-400 mt-0.5">
+              Coba ubah kata kunci pencarian atau ganti filter peran.
+            </p>
+          </div>
+        ) : (
+          <>
+            {/* DESKTOP VIEW: HIGH-DENSITY FLAT TABLE */}
+            <div className="hidden md:block bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-none shadow-xs overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-gray-50 dark:bg-gray-800/70 border-b border-gray-200 dark:border-gray-800 text-[10px] uppercase font-bold text-gray-500 dark:text-gray-400">
+                    <th className="p-2 text-center w-8">#</th>
+                    <th className="p-2">User / Email</th>
+                    <th className="p-2">Peran</th>
+                    <th className="p-2">Santri & Asrama</th>
+                    <th className="p-2">WhatsApp</th>
+                    <th className="p-2">Terdaftar</th>
+                    <th className="p-2 text-right">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-[11px]">
+                  {users.map((user, idx) => (
+                    <tr key={user.id} className="hover:bg-gray-50/70 dark:hover:bg-gray-800/40 transition-colors">
+                      <td className="p-2 text-center font-mono text-gray-400 font-bold text-[10px]">
+                        {fromItem + idx}
+                      </td>
+                      <td className="p-2">
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-6 h-6 rounded-none bg-green-100 dark:bg-green-950/60 text-green-800 dark:text-green-300 font-black text-[10px] flex items-center justify-center border border-green-200 dark:border-green-800 shrink-0">
+                            {user.name?.charAt(0) || 'U'}
+                          </div>
+                          <div className="min-w-0">
+                            <span className="font-bold text-gray-900 dark:text-white truncate block leading-tight">
+                              {user.name} <span className="font-mono text-gray-400 font-normal text-[10px]">#{user.id}</span>
+                            </span>
+                            <span className="text-[10px] text-gray-400 block truncate">
+                              {user.email || '-'}
+                            </span>
+                          </div>
                         </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1 flex-wrap">
-                            <h3 className="text-xs sm:text-sm font-bold text-gray-900 dark:text-white truncate">
-                              {user.name}
-                            </h3>
-                            <span className="text-[10px] text-gray-400 font-mono">#{user.id}</span>
-                          </div>
-                          <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
-                            {user.email || '-'}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col items-end gap-1 shrink-0">
-                        {getRoleBadge(user.role)}
-                        {user.role === ROLES.KURIR && (
-                          <span className={`px-1.5 py-0.2 rounded-none text-[9px] font-bold border ${user.penalty_points > 0 ? 'bg-red-50 text-red-600 border-red-200 dark:bg-red-900/20 dark:border-red-800' : 'bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-800'}`}>
-                            SP {user.penalty_points || 0}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Santri & Contact Details (If available) */}
-                    {(user.santri_name || user.santri_room || user.santri_class || user.phone) && (
-                      <div className="bg-gray-50 dark:bg-gray-800/60 p-2 rounded-none border border-gray-200 dark:border-gray-800 text-[10.5px] grid grid-cols-1 sm:grid-cols-2 gap-1 text-gray-700 dark:text-gray-300">
-                        {user.santri_name && (
-                          <div className="flex items-center gap-1.5 truncate">
-                            <GraduationCap className="w-3 h-3 text-green-600 shrink-0" />
-                            <span className="text-gray-500 font-medium text-[10px]">Santri:</span>
-                            <strong className="text-gray-900 dark:text-white truncate">{user.santri_name}</strong>
-                          </div>
-                        )}
-                        {user.santri_room && (
-                          <div className="flex items-center gap-1.5 truncate">
-                            <Home className="w-3 h-3 text-green-600 shrink-0" />
-                            <span className="text-gray-500 font-medium text-[10px]">Asrama:</span>
-                            <strong className="text-gray-900 dark:text-white truncate">{user.santri_room}</strong>
-                          </div>
-                        )}
-                        {user.santri_class && (
-                          <div className="flex items-center gap-1.5 truncate">
-                            <BookOpen className="w-3 h-3 text-green-600 shrink-0" />
-                            <span className="text-gray-500 font-medium text-[10px]">Kelas:</span>
-                            <span>{user.santri_class} {user.santri_level ? `(${user.santri_level})` : ''}</span>
-                          </div>
-                        )}
-                        {user.phone && (
-                          <div className="flex items-center gap-1.5 truncate">
-                            <Phone className="w-3 h-3 text-green-600 shrink-0" />
-                            <span className="text-gray-500 font-medium text-[10px]">No. HP:</span>
-                            <a 
-                              href={`https://wa.me/${user.phone.replace(/^0/, '62')}`} 
-                              target="_blank" 
-                              rel="noreferrer"
-                              className="text-green-600 hover:underline font-semibold"
-                            >
-                              {user.phone}
-                            </a>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Kurir Assigned Canteens */}
-                    {user.role === ROLES.KURIR && (
-                      <div className="bg-emerald-50/50 dark:bg-emerald-950/20 p-2 rounded-none border border-emerald-200 dark:border-emerald-800 text-[10.5px] space-y-1">
-                        <div className="flex items-center gap-1 text-emerald-800 dark:text-emerald-300 font-bold">
-                          <Store className="w-3 h-3 shrink-0" />
-                          <span>Toko yang Ditugaskan:</span>
-                        </div>
-                        <div className="flex flex-wrap gap-1 pt-0.5">
-                          {user.assigned_canteens && user.assigned_canteens.length > 0 ? (
-                            user.assigned_canteens.map(c => (
-                              <span key={c.id} className="px-1.5 py-0.5 rounded-none bg-white dark:bg-gray-800 text-emerald-700 dark:text-emerald-300 text-[9.5px] font-bold border border-emerald-200 dark:border-emerald-700">
-                                {c.name}
-                              </span>
-                            ))
-                          ) : (
-                            <span className="text-red-500 font-semibold text-[9.5px] italic">Belum ada toko yang ditugaskan (Tidak ada tugas)</span>
+                      </td>
+                      <td className="p-2">
+                        <div className="flex items-center gap-1">
+                          {getRoleBadge(user.role)}
+                          {user.role === ROLES.KURIR && (
+                            <span className={`px-1 py-0.2 rounded-none text-[8.5px] font-bold border ${user.penalty_points > 0 ? 'bg-red-50 text-red-600 border-red-200 dark:bg-red-900/20' : 'bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-900/20'}`}>
+                              SP {user.penalty_points || 0}
+                            </span>
                           )}
                         </div>
+                      </td>
+                      <td className="p-2">
+                        {user.santri_name || user.santri_room ? (
+                          <div>
+                            <span className="font-semibold text-gray-800 dark:text-gray-200 block leading-tight">
+                              {user.santri_name || '-'}
+                            </span>
+                            <span className="text-[10px] text-gray-400 block">
+                              {user.santri_room && `Kamar: ${user.santri_room}`}
+                              {user.santri_class && ` • Kls ${user.santri_class}`}
+                              {user.santri_level && ` (${user.santri_level})`}
+                            </span>
+                          </div>
+                        ) : user.role === ROLES.KURIR && user.assigned_canteens?.length > 0 ? (
+                          <div className="text-[10px] text-emerald-700 dark:text-emerald-400 font-medium truncate max-w-[180px]">
+                            🏪 {user.assigned_canteens.map(c => c.name).join(', ')}
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 text-[10px]">-</span>
+                        )}
+                      </td>
+                      <td className="p-2 whitespace-nowrap">
+                        {user.phone ? (
+                          <a
+                            href={`https://wa.me/${user.phone.replace(/^0/, '62')}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-green-600 dark:text-green-400 hover:underline font-mono text-[10.5px] font-semibold"
+                          >
+                            {user.phone}
+                          </a>
+                        ) : (
+                          <span className="text-gray-400 text-[10px]">-</span>
+                        )}
+                      </td>
+                      <td className="p-2 font-mono text-[10px] text-gray-400 whitespace-nowrap">
+                        {new Date(user.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </td>
+                      <td className="p-2 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1">
+                          {canImpersonateUser(user) && (
+                            <button
+                              onClick={() => handleImpersonate(user)}
+                              disabled={impersonateMutation.isPending}
+                              className="px-1.5 py-0.5 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 rounded-none text-[9.5px] font-bold flex items-center gap-0.5 transition-colors cursor-pointer disabled:opacity-50"
+                              title="Login Sebagai Pengguna Ini"
+                            >
+                              <LogIn className="w-2.5 h-2.5" />
+                              <span>Login As</span>
+                            </button>
+                          )}
+                          {user.role === ROLES.KURIR && (
+                            <button 
+                              onClick={() => {
+                                setSpFormData({ id: user.id, penalty_points: user.penalty_points || 0 });
+                                setIsSPModalOpen(true);
+                              }}
+                              className="p-1 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded-none transition-colors cursor-pointer" 
+                              title="Kelola SP Kurir"
+                            >
+                              <AlertTriangle className="w-3 h-3" />
+                            </button>
+                          )}
+                          <button 
+                            onClick={() => openEditModal(user)}
+                            className="p-1 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-none transition-colors cursor-pointer" 
+                            title="Edit Data User"
+                          >
+                            <Edit2 className="w-3 h-3" />
+                          </button>
+                          <button 
+                            onClick={() => handleDelete(user)}
+                            className="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-none transition-colors cursor-pointer" 
+                            title="Hapus User"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* MOBILE VIEW: HIGH-DENSITY FLAT CARDS */}
+            <div className="md:hidden space-y-1.5">
+              {users.map((user) => (
+                <div 
+                  key={user.id} 
+                  className="bg-white dark:bg-gray-900 rounded-none p-2 border border-gray-200 dark:border-gray-800 shadow-xs hover:border-green-500 transition-colors space-y-1"
+                >
+                  {/* Top Bar: Name, ID, Role & Action Icons */}
+                  <div className="flex items-center justify-between gap-1">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <div className="w-5 h-5 rounded-none bg-green-100 dark:bg-green-950/60 text-green-800 dark:text-green-300 font-black text-[9px] flex items-center justify-center border border-green-200 dark:border-green-800 shrink-0">
+                        {user.name?.charAt(0) || 'U'}
                       </div>
-                    )}
-                  </div>
-                  
-                  {/* Card Footer: Registered date & Action buttons */}
-                  <div className="flex items-center justify-between pt-1.5 border-t border-gray-100 dark:border-gray-800 text-xs">
-                    <div className="text-[10px] text-gray-400 font-mono">
-                      {new Date(user.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      <span className="text-xs font-bold text-gray-900 dark:text-white truncate leading-tight">
+                        {user.name}
+                      </span>
+                      <span className="font-mono text-[9px] text-gray-400 shrink-0">#{user.id}</span>
+                      {getRoleBadge(user.role)}
                     </div>
-                    
-                    <div className="flex items-center gap-1">
-                      {user.role !== ROLES.ADMIN && (
+
+                    {/* Actions Compact */}
+                    <div className="flex items-center gap-1 shrink-0">
+                      {canImpersonateUser(user) && (
                         <button 
                           onClick={() => handleImpersonate(user)}
-                          className="px-2 py-0.5 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 rounded-none text-[10px] font-bold flex items-center gap-1 transition-colors cursor-pointer" 
-                          title="Login Sebagai Pengguna Ini"
+                          disabled={impersonateMutation.isPending}
+                          className="px-1.5 py-0.2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 rounded-none text-[9px] font-bold cursor-pointer"
+                          title="Login As"
                         >
-                          <LogIn className="w-3 h-3" />
-                          <span>Login As</span>
+                          Login
                         </button>
                       )}
                       {user.role === ROLES.KURIR && (
@@ -492,40 +607,55 @@ export default function UserManagement() {
                             setSpFormData({ id: user.id, penalty_points: user.penalty_points || 0 });
                             setIsSPModalOpen(true);
                           }}
-                          className="p-1 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded-none transition-colors cursor-pointer" 
-                          title="Kelola SP Kurir"
+                          className="p-1 text-amber-600 border border-amber-200 dark:border-amber-800 rounded-none cursor-pointer" 
+                          title="Kelola SP"
                         >
-                          <AlertTriangle className="w-3 h-3" />
+                          <AlertTriangle className="w-2.5 h-2.5" />
                         </button>
                       )}
                       <button 
                         onClick={() => openEditModal(user)}
-                        className="p-1 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-none transition-colors cursor-pointer" 
-                        title="Edit Data User"
+                        className="p-1 text-blue-600 border border-blue-200 dark:border-blue-800 rounded-none cursor-pointer" 
+                        title="Edit"
                       >
-                        <Edit2 className="w-3 h-3" />
+                        <Edit2 className="w-2.5 h-2.5" />
                       </button>
                       <button 
                         onClick={() => handleDelete(user)}
-                        className="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-none transition-colors cursor-pointer" 
-                        title="Hapus User"
+                        className="p-1 text-red-600 border border-red-200 dark:border-red-800 rounded-none cursor-pointer" 
+                        title="Hapus"
                       >
-                        <Trash2 className="w-3 h-3" />
+                        <Trash2 className="w-2.5 h-2.5" />
                       </button>
                     </div>
                   </div>
+
+                  {/* Info Row: Santri, Room, Phone in 1 Dense Box */}
+                  <div className="bg-gray-50 dark:bg-gray-800/50 p-1 px-1.5 rounded-none border border-gray-100 dark:border-gray-800 text-[10px] flex items-center justify-between gap-1 flex-wrap">
+                    <div className="truncate min-w-0">
+                      {user.santri_name ? (
+                        <span>🎓 <strong className="text-gray-800 dark:text-gray-200">{user.santri_name}</strong> {user.santri_room ? `(${user.santri_room})` : ''}</span>
+                      ) : user.role === ROLES.KURIR && user.assigned_canteens?.length > 0 ? (
+                        <span className="text-emerald-700 dark:text-emerald-400">🏪 {user.assigned_canteens.map(c => c.name).join(', ')}</span>
+                      ) : (
+                        <span className="text-gray-400">{user.email || '-'}</span>
+                      )}
+                    </div>
+                    {user.phone && (
+                      <a 
+                        href={`https://wa.me/${user.phone.replace(/^0/, '62')}`} 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="text-green-600 dark:text-green-400 hover:underline font-mono font-semibold shrink-0"
+                      >
+                        📱 {user.phone}
+                      </a>
+                    )}
+                  </div>
                 </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="bg-white dark:bg-gray-900 rounded-none p-8 text-center border border-gray-200 dark:border-gray-800 shadow-xs">
-            <User className="mx-auto h-10 w-10 text-gray-300 dark:text-gray-600 mb-2" />
-            <h3 className="text-xs font-bold text-gray-900 dark:text-white">Tidak ada pengguna ditemukan</h3>
-            <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
-              Coba ubah kata kunci pencarian atau ganti filter peran.
-            </p>
-          </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
 
@@ -723,10 +853,11 @@ export default function UserManagement() {
                   onChange={(e) => setFormData({...formData, role: e.target.value})}
                   className="w-full px-2.5 py-1.5 border border-gray-200 dark:border-gray-700 rounded-none bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-1 focus:ring-green-500 outline-none font-bold cursor-pointer"
                 >
-                  <option value="user">User / Santri / Wali</option>
-                  <option value="kantin">Kantin</option>
+                  <option value="user">Santri / Wali</option>
+                  <option value="kantin">Pemilik Toko (Kantin)</option>
                   <option value="kurir">Kurir</option>
                   <option value="admin">Admin</option>
+                  <option value="super_admin">Super Admin</option>
                 </select>
               </div>
 

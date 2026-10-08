@@ -13,10 +13,12 @@ class CanteenBannerController extends Controller
     // Publik / User (hanya banner yang aktif)
     public function index()
     {
-        $banners = CanteenBanner::with('canteen:id,name')
-            ->where('status', 'active')
-            ->latest()
-            ->get();
+        $banners = \Illuminate\Support\Facades\Cache::remember('banners_active', 300, function () {
+            return CanteenBanner::with('canteen:id,name')
+                ->where('status', 'active')
+                ->latest()
+                ->get();
+        });
             
         return response()->json($banners);
     }
@@ -30,7 +32,7 @@ class CanteenBannerController extends Controller
         ]);
 
         $user = $request->user();
-        $isAdmin = $user->hasRole('admin') || $user->role === 'admin';
+        $isAdmin = $user && ($user->hasRole('admin') || $user->hasRole('super_admin') || $user->role === 'admin' || $user->role === 'super_admin');
         $canteenId = $request->input('canteen_id') ?? $request->query('canteen_id');
 
         $canteen = null;
@@ -66,7 +68,7 @@ class CanteenBannerController extends Controller
     public function toggleStatus(Request $request, $id)
     {
         $user = $request->user();
-        $isAdmin = $user->hasRole('admin') || $user->role === 'admin';
+        $isAdmin = $user && ($user->hasRole('admin') || $user->hasRole('super_admin') || $user->role === 'admin' || $user->role === 'super_admin');
 
         if ($isAdmin) {
             $banner = CanteenBanner::findOrFail($id);
@@ -87,7 +89,7 @@ class CanteenBannerController extends Controller
     public function destroy(Request $request, $id)
     {
         $user = $request->user();
-        $isAdmin = $user->hasRole('admin') || $user->role === 'admin';
+        $isAdmin = $user && ($user->hasRole('admin') || $user->hasRole('super_admin') || $user->role === 'admin' || $user->role === 'super_admin');
 
         if ($isAdmin) {
             $banner = CanteenBanner::findOrFail($id);

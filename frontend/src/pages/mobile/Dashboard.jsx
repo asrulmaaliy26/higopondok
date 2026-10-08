@@ -11,12 +11,17 @@ export default function Dashboard() {
   const user = useAuthStore((state) => state.user);
   const originalAdmin = useAuthStore((state) => state.originalAdmin);
   const role = getUserRole(user) || (originalAdmin ? ROLES.USER : ROLES.ADMIN);
+
+  if (role === ROLES.USER) {
+    return <UserDashboard user={user} />;
+  }
+
   return (
     <div className="space-y-2 animate-fade-in-up pb-12 max-w-7xl mx-auto px-1 sm:px-2">
-      {role === ROLES.ADMIN && <AdminDashboard user={user} />}
-      {role === ROLES.USER && <UserDashboard user={user} />}
-      {role === ROLES.KANTIN && <KantinDashboard user={user} />}
+      {role === ROLES.SUPER_ADMIN && <AdminDashboard user={user} />}
+      {(role === ROLES.ADMIN || role === ROLES.KANTIN) && <KantinDashboard user={user} />}
       {role === ROLES.KURIR && <KurirDashboard user={user} />}
     </div>
   );
 }
+

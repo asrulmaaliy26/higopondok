@@ -5,6 +5,8 @@ import {
   createRouter,
   createRoute,
   createRootRoute,
+  Navigate,
+  useLocation,
 } from '@tanstack/react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuthStore } from './store/authStore';
@@ -14,9 +16,12 @@ import { usePwaStore } from './store/pwaStore';
 // Role Guard, Loading Bar & PWA Prompt
 import RoleGuard from './components/RoleGuard';
 import GlobalLoadingBar from './components/common/GlobalLoadingBar';
+import LoadingSpinner from './components/common/LoadingSpinner';
 import PwaInstallPrompt from './components/common/PwaInstallPrompt';
 import ImpersonationBanner from './components/common/ImpersonationBanner';
-import { ROLES } from './config/roles';
+import ActiveCartFloatingBanner from './components/cart/ActiveCartFloatingBanner';
+import VoucherThresholdPopup from './components/cart/VoucherThresholdPopup';
+import { ROLES, getUserRole } from './config/roles';
 
 // ==========================================
 // 1. HIGH-PERFORMANCE CODE SPLITTING (React.lazy)
@@ -62,10 +67,13 @@ const queryClient = new QueryClient({
 
 function PageLoader() {
   return (
-    <div className="flex items-center justify-center min-h-[50vh] w-full animate-fade-in">
-      <div className="flex flex-col items-center gap-2.5">
-        <div className="w-8 h-8 rounded-full border-3 border-green-500 border-t-transparent animate-spin" />
-        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Memuat...</span>
+    <div className="p-4 max-w-md mx-auto w-full my-6 animate-fade-in">
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-4 rounded-none shadow-xs">
+        <LoadingSpinner 
+          text="Memuat Halaman..." 
+          subtext="Menyiapkan data dan komponen aplikasi" 
+          minHeight="min-h-[140px]" 
+        />
       </div>
     </div>
   );
@@ -79,6 +87,8 @@ const rootRoute = createRootRoute({
       <React.Suspense fallback={<PageLoader />}>
         <Outlet />
       </React.Suspense>
+      <ActiveCartFloatingBanner />
+      <VoucherThresholdPopup />
       <PwaInstallPrompt />
     </>
   ),
@@ -136,48 +146,134 @@ const publicKantinDetailRoute = createRoute({
 const publicKeranjangRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/keranjang',
-  component: Keranjang,
+  component: function PublicKeranjangPage() {
+    const user = useAuthStore((state) => state.user);
+    const originalAdmin = useAuthStore((state) => state.originalAdmin);
+    const userRole = getUserRole(user);
+    const isSuperAdmin = userRole === ROLES.SUPER_ADMIN || (originalAdmin && getUserRole(originalAdmin) === ROLES.SUPER_ADMIN);
+
+    // Super Admin memiliki hak bypass penuh. Pengguna lain non-santri dialihkan ke dashboard
+    if (user && !isSuperAdmin && userRole !== ROLES.USER) {
+      return <Navigate to="/dashboard" replace />;
+    }
+    return <Keranjang />;
+  },
+});
+
+const publicVouchersRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/vouchers',
+  component: Vouchers,
+});
+
+const publicPromoRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/promo',
+  component: function PromoRedirect() {
+    return <Navigate to="/vouchers" replace />;
+  },
+});
+
+// Shortcut Redirects ke Laman Dashboard Terproteksi
+const publicPembayaranRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/pembayaran',
+  component: function PublicPembayaranRedirect() {
+    return <Navigate to="/dashboard/pembayaran" replace />;
+  },
+});
+
+const publicTokoSayaRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/toko-saya',
+  component: function PublicTokoSayaRedirect() {
+    return <Navigate to="/dashboard/toko-saya" replace />;
+  },
+});
+
+const publicPesananTokoRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/pesanan-toko',
+  component: function PublicPesananTokoRedirect() {
+    return <Navigate to="/dashboard/toko-saya/pesanan" replace />;
+  },
+});
+
+const publicTugasKurirRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/tugas-kurir',
+  component: function PublicTugasKurirRedirect() {
+    return <Navigate to="/dashboard/tugas-kurir" replace />;
+  },
+});
+
+const publicUsersRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/users',
+  component: function PublicUsersRedirect() {
+    return <Navigate to="/dashboard/users" replace />;
+  },
+});
+
+const publicPertokoanRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/pertokoan',
+  component: function PublicPertokoanRedirect() {
+    return <Navigate to="/dashboard/pertokoan" replace />;
+  },
+});
+
+const publicAdminPesananRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/admin/pesanan',
+  component: function PublicAdminPesananRedirect() {
+    return <Navigate to="/dashboard/admin/pesanan" replace />;
+  },
 });
 
 // Wrapper components to avoid inline arrow functions in createRoute
 function UserManagementPage() {
-  return <RoleGuard allowedRoles={[ROLES.ADMIN]}><UserManagement /></RoleGuard>;
+  return <RoleGuard allowedRoles={[ROLES.SUPER_ADMIN]}><UserManagement /></RoleGuard>;
 }
 
 function PertokoanPage() {
-  return <RoleGuard allowedRoles={[ROLES.ADMIN]}><Pertokoan /></RoleGuard>;
+  return <RoleGuard allowedRoles={[ROLES.SUPER_ADMIN]}><Pertokoan /></RoleGuard>;
 }
 
 function AdminLogsPage() {
-  return <RoleGuard allowedRoles={[ROLES.ADMIN]}><AdminLogs /></RoleGuard>;
+  return <RoleGuard allowedRoles={[ROLES.SUPER_ADMIN]}><AdminLogs /></RoleGuard>;
 }
 
 function AdminPesananPage() {
-  return <RoleGuard allowedRoles={[ROLES.ADMIN]}><AdminPesanan /></RoleGuard>;
+  const user = useAuthStore((state) => state.user);
+  if (user?.role === ROLES.ADMIN) {
+    return <Navigate to="/dashboard/toko-saya/pesanan" replace />;
+  }
+  return <RoleGuard allowedRoles={[ROLES.SUPER_ADMIN]}><AdminPesanan /></RoleGuard>;
 }
 
 function BukuPanduanPage() {
-  return <RoleGuard allowedRoles={[ROLES.ADMIN, ROLES.USER, ROLES.KANTIN, ROLES.KURIR]}><BukuPanduan /></RoleGuard>;
+  return <RoleGuard allowedRoles={[ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.USER, ROLES.KANTIN, ROLES.KURIR]}><BukuPanduan /></RoleGuard>;
 }
 
 function TokoSayaPage() {
-  return <RoleGuard allowedRoles={[ROLES.KANTIN]}><TokoSaya /></RoleGuard>;
+  return <RoleGuard allowedRoles={[ROLES.KANTIN, ROLES.ADMIN, ROLES.SUPER_ADMIN]}><TokoSaya /></RoleGuard>;
 }
 
 function PromoVoucherPage() {
-  return <RoleGuard allowedRoles={[ROLES.KANTIN]}><PromoVoucher /></RoleGuard>;
+  return <RoleGuard allowedRoles={[ROLES.KANTIN, ROLES.ADMIN, ROLES.SUPER_ADMIN]}><PromoVoucher /></RoleGuard>;
 }
 
 function PesananTokoPage() {
-  return <RoleGuard allowedRoles={[ROLES.KANTIN]}><PesananToko /></RoleGuard>;
+  return <RoleGuard allowedRoles={[ROLES.KANTIN, ROLES.ADMIN, ROLES.SUPER_ADMIN]}><PesananToko /></RoleGuard>;
 }
 
 function KantinPage() {
-  return <RoleGuard allowedRoles={[ROLES.USER]}><Kantin /></RoleGuard>;
+  return <RoleGuard allowedRoles={[ROLES.USER, ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.KANTIN, ROLES.KURIR]}><Kantin /></RoleGuard>;
 }
 
 function DetailKantinPage() {
-  return <RoleGuard allowedRoles={[ROLES.USER]}><DetailKantin /></RoleGuard>;
+  return <RoleGuard allowedRoles={[ROLES.USER, ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.KANTIN, ROLES.KURIR]}><DetailKantin /></RoleGuard>;
 }
 
 function PembayaranPage() {
@@ -185,7 +281,7 @@ function PembayaranPage() {
 }
 
 function TugasKurirPage() {
-  return <RoleGuard allowedRoles={[ROLES.KURIR]}><TugasKurir /></RoleGuard>;
+  return <RoleGuard allowedRoles={[ROLES.KURIR, ROLES.ADMIN, ROLES.SUPER_ADMIN]}><TugasKurir /></RoleGuard>;
 }
 
 function KeranjangPage() {
@@ -193,22 +289,32 @@ function KeranjangPage() {
 }
 
 function AdminVouchersPage() {
-  return <RoleGuard allowedRoles={[ROLES.ADMIN]}><AdminVouchers /></RoleGuard>;
+  return <RoleGuard allowedRoles={[ROLES.SUPER_ADMIN]}><AdminVouchers /></RoleGuard>;
 }
 
 function VouchersPage() {
-  return <RoleGuard allowedRoles={[ROLES.USER, ROLES.ADMIN]}><Vouchers /></RoleGuard>;
+  return <Vouchers />;
 }
 
-// Protected Dashboard Routes
 const dashboardRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/dashboard',
   component: function ProtectedDashboard() {
     const token = useAuthStore((state) => state.token);
+    const location = useLocation();
+
     if (!token) {
-      window.location.href = '/login';
-      return null;
+      if (location.pathname.startsWith('/dashboard/kantin')) {
+        const publicPath = location.pathname.replace('/dashboard/kantin', '/kantin');
+        return <Navigate to={publicPath} replace />;
+      }
+      if (location.pathname.startsWith('/dashboard/keranjang')) {
+        return <Navigate to="/keranjang" replace />;
+      }
+      if (location.pathname.startsWith('/dashboard/vouchers')) {
+        return <Navigate to="/vouchers" replace />;
+      }
+      return <Navigate to="/" replace />;
     }
     return <DashboardLayout />;
   },
@@ -322,6 +428,14 @@ const vouchersRoute = createRoute({
   component: VouchersPage,
 });
 
+const dashboardPromoRoute = createRoute({
+  getParentRoute: () => dashboardRoute,
+  path: '/promo',
+  component: function DashboardPromoRedirect() {
+    return <Navigate to="/vouchers" replace />;
+  },
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
@@ -332,6 +446,15 @@ const routeTree = rootRoute.addChildren([
   publicKantinRoute,
   publicKantinDetailRoute,
   publicKeranjangRoute,
+  publicVouchersRoute,
+  publicPromoRoute,
+  publicPembayaranRoute,
+  publicTokoSayaRoute,
+  publicPesananTokoRoute,
+  publicTugasKurirRoute,
+  publicUsersRoute,
+  publicPertokoanRoute,
+  publicAdminPesananRoute,
   dashboardRoute.addChildren([
     dashboardIndexRoute, 
     userManagementRoute,
@@ -340,6 +463,7 @@ const routeTree = rootRoute.addChildren([
     adminLogsRoute,
     adminVouchersRoute,
     vouchersRoute,
+    dashboardPromoRoute,
     panduanRoute,
     tokoSayaRoute,
     promoVoucherRoute,
@@ -358,9 +482,12 @@ const router = createRouter({
   routeTree,
   defaultNotFoundComponent: () => {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh] text-center px-4">
-        <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">404</h1>
-        <p className="text-gray-500 dark:text-gray-400">Halaman atau fitur ini belum tersedia.</p>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
+        <h1 className="text-4xl font-black text-gray-900 dark:text-white mb-2">404</h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Laman ini tidak tersedia atau bukan milik hak akses akun Anda.</p>
+        <a href="/dashboard" className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-bold text-xs uppercase tracking-wider rounded-none transition-colors">
+          Kembali ke Dashboard Akun
+        </a>
       </div>
     );
   }

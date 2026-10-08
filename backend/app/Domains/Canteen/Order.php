@@ -15,13 +15,15 @@ class Order extends Model
 {
     use HasFactory, LogsActivity, SoftDeletes;
 
-    // Konstanta Bisnis Finansial & Tarif Higo Pondok (Opsi B)
+    // Konstanta Bisnis Finansial & Tarif Higo Pondok
     public const BASE_DELIVERY_FEE = 3000.0;
     public const BASE_ADMIN_FEE = 2000.0;
     public const EXTRA_DELIVERY_PER_5_ITEMS = 2000.0;
     public const EXTRA_ADMIN_PER_5_ITEMS = 3000.0;
-    public const USER_THRESHOLD_COURIER_CUT = 2000.0; // Potongan ongkir dialihkan ke admin untuk user ke-4 dst
-    public const USER_THRESHOLD_LIMIT = 3;            // 3 user pertama tidak dipotong
+    public const USER_RANK_2_COURIER_CUT = 1000.0;     // Santri ke-2 dialihkan Rp 1.000 ke admin
+    public const USER_RANK_3_PLUS_COURIER_CUT = 2000.0; // Santri ke-3 dst dialihkan Rp 2.000 ke admin
+    public const USER_THRESHOLD_COURIER_CUT = 2000.0;   // Fallback backward compatibility
+    public const USER_THRESHOLD_LIMIT = 1;              // Santri ke-1 utuh
 
     /**
      * Dapatkan konfigurasi tarif terpusat (membaca dari config/pricing.php dengan fallback ke konstanta kelas)
@@ -29,12 +31,14 @@ class Order extends Model
     public static function getPricingConfig(): array
     {
         return [
-            'base_delivery_fee'          => (float) config('pricing.base_delivery_fee', self::BASE_DELIVERY_FEE),
-            'base_admin_fee'             => (float) config('pricing.base_admin_fee', self::BASE_ADMIN_FEE),
-            'extra_delivery_per_5_items' => (float) config('pricing.extra_delivery_per_5_items', self::EXTRA_DELIVERY_PER_5_ITEMS),
-            'extra_admin_per_5_items'    => (float) config('pricing.extra_admin_per_5_items', self::EXTRA_ADMIN_PER_5_ITEMS),
-            'user_threshold_limit'       => (int) config('pricing.user_threshold_limit', self::USER_THRESHOLD_LIMIT),
-            'user_threshold_courier_cut' => (float) config('pricing.user_threshold_courier_cut', self::USER_THRESHOLD_COURIER_CUT),
+            'base_delivery_fee'            => (float) config('pricing.base_delivery_fee', self::BASE_DELIVERY_FEE),
+            'base_admin_fee'               => (float) config('pricing.base_admin_fee', self::BASE_ADMIN_FEE),
+            'extra_delivery_per_5_items'   => (float) config('pricing.extra_delivery_per_5_items', self::EXTRA_DELIVERY_PER_5_ITEMS),
+            'extra_admin_per_5_items'      => (float) config('pricing.extra_admin_per_5_items', self::EXTRA_ADMIN_PER_5_ITEMS),
+            'user_rank_2_courier_cut'      => (float) config('pricing.user_rank_2_courier_cut', self::USER_RANK_2_COURIER_CUT),
+            'user_rank_3_plus_courier_cut' => (float) config('pricing.user_rank_3_plus_courier_cut', self::USER_RANK_3_PLUS_COURIER_CUT),
+            'user_threshold_limit'         => (int) config('pricing.user_threshold_limit', self::USER_THRESHOLD_LIMIT),
+            'user_threshold_courier_cut'   => (float) config('pricing.user_threshold_courier_cut', self::USER_THRESHOLD_COURIER_CUT),
         ];
     }
 
@@ -189,8 +193,9 @@ class Order extends Model
      * pada toko yang sama dalam 1 hari kalender.
      *
      * Aturan:
-     *   - User ke-1, 2, 3 : delivery_fee utuh, admin_fee normal.
-     *   - User ke-4+       : delivery_fee dipotong (dialihkan ke admin).
+     *   - User ke-1 : ongkir kurir 100% utuh (cut Rp 0).
+     *   - User ke-2 : potongan Rp 1.000 dialihkan ke kas admin.
+     *   - User ke-3+: potongan Rp 2.000 dialihkan ke kas admin.
      *
      * Grand Total yang dibayar user TETAP SAMA; hanya distribusi internal bergeser.
      *
@@ -202,9 +207,14 @@ class Order extends Model
         $cfg = self::getPricingConfig();
         $base = self::calculateOrderFees($totalQuantity);
 
-        $courierCut = ($userDailyIndex > $cfg['user_threshold_limit'])
-            ? min($base['delivery_fee'], (float) $cfg['user_threshold_courier_cut'])
-            : 0.0;
+        $cutRate = 0.0;
+        if ($userDailyIndex === 2) {
+            $cutRate = (float) ($cfg['user_rank_2_courier_cut'] ?? 1000.0);
+        } elseif ($userDailyIndex >= 3) {
+            $cutRate = (float) ($cfg['user_rank_3_plus_courier_cut'] ?? 2000.0);
+        }
+
+        $courierCut = min($base['delivery_fee'], $cutRate);
 
         return array_merge($base, [
             'delivery_fee'         => $base['delivery_fee'] - $courierCut,
@@ -298,14 +308,20 @@ class Order extends Model
 
     /**
      * Hitung metrik keuangan komprehensif untuk satu pesanan
-     * Memperhitungkan batas user unik harian per toko (3 user pertama utuh, ke-4 dst dipotong)
+     * Memperhitungkan batas user unik harian per toko (user 1 utuh, user 2 cut 1.000, user 3+ cut 2.000)
      * Serta memperhitungkan alokasi diskon voucher (ongkir, admin, produk) secara presisi
      */
     public function getFinancialMetrics(int $userDailyIndex = 1): array
     {
         $cfg = self::getPricingConfig();
-        $baseAdminStandard = (float) $cfg['base_admin_fee'];
-        $baseDeliveryStandard = (float) $cfg['base_delivery_fee'];
+
+        $totalQty = 1;
+        if ($this->relationLoaded('items') && $this->items && $this->items->isNotEmpty()) {
+            $totalQty = max(1, (int) $this->items->sum('quantity'));
+        }
+        $standardFees = self::calculateOrderFees($totalQty);
+        $baseAdminStandard = (float) $standardFees['admin_fee'];
+        $baseDeliveryStandard = (float) $standardFees['delivery_fee'];
 
         $voucherDiscount = (float) ($this->voucher_discount ?? 0);
         if ($voucherDiscount <= 0 && $this->voucher) {
@@ -322,23 +338,29 @@ class Order extends Model
         $actualDeliveryFee = !is_null($this->delivery_fee) ? (float) $this->delivery_fee : max(0.0, $baseDeliveryStandard - $deliveryDiscount);
         $actualAdminFee = !is_null($this->admin_fee) ? (float) $this->admin_fee : max(0.0, $baseAdminStandard - $adminDiscount);
 
-        // Tarif ongkir kotor standar sebelum subsidi voucher
-        $standardGrossDeliveryFee = $actualDeliveryFee + $deliveryDiscount;
-        if ($standardGrossDeliveryFee <= 0 && !is_null($this->courier_id)) {
-            $standardGrossDeliveryFee = $baseDeliveryStandard;
+        // Potongan ambang batas user bertingkat ke admin:
+        // Santri 1: cut Rp 0 (utuh)
+        // Santri 2: cut Rp 1.000 (ke admin)
+        // Santri 3+: cut Rp 2.000 (ke admin)
+        $discountRate = 0.0;
+        if ($userDailyIndex === 2) {
+            $discountRate = (float) ($cfg['user_rank_2_courier_cut'] ?? 1000.0);
+        } elseif ($userDailyIndex >= 3) {
+            $discountRate = (float) ($cfg['user_rank_3_plus_courier_cut'] ?? 2000.0);
         }
 
-        // Potongan ambang batas user ke-4+ ke admin
-        $discountRate = ($userDailyIndex > $cfg['user_threshold_limit']) ? $cfg['user_threshold_courier_cut'] : 0.0;
         $courierCutToAdmin = 0.0;
         if ($actualAdminFee > $baseAdminStandard) {
-            $courierCutToAdmin = $actualAdminFee - $baseAdminStandard;
-        } elseif ($discountRate > 0 && $actualDeliveryFee > $discountRate) {
-            $courierCutToAdmin = min($actualDeliveryFee, $discountRate);
+            $courierCutToAdmin = min($baseDeliveryStandard, $actualAdminFee - $baseAdminStandard);
+        } elseif ($discountRate > 0) {
+            $courierCutToAdmin = min($baseDeliveryStandard, $discountRate);
         }
 
-        // Ongkir bersih untuk kurir (kurir tetap berhak menerima ongkir penuh yang disubsidi oleh voucher)
-        $courierNetDeliveryFee = max(0.0, $standardGrossDeliveryFee - $courierCutToAdmin);
+        // Tarif ongkir kotor standar sebelum potongan bertingkat
+        $standardGrossDeliveryFee = $baseDeliveryStandard;
+
+        // Ongkir bersih untuk kurir (apa yang dibayar santri + subsidi voucher jika gratis ongkir)
+        $courierNetDeliveryFee = !is_null($this->courier_id) ? max(0.0, $actualDeliveryFee + $deliveryDiscount) : 0.0;
 
         // Subtotal produk kotor (harga menu riil)
         if ($this->relationLoaded('items') && $this->items && $this->items->isNotEmpty()) {
@@ -403,8 +425,7 @@ class Order extends Model
         $productBreakdown = [];
 
         // Lacak urutan user unik per toko/kantin per tanggal (dalam 1 hari)
-        // Aturan: 3 user pertama tidak terkena potongan (ongkir kurir utuh).
-        // User ke-4 dan seterusnya terpotong 2.000 dialihkan ke admin.
+        // Aturan: User ke-1 utuh, User ke-2 dialihkan 1.000 ke admin, User ke-3+ dialihkan 2.000 ke admin.
         $seenUsersPerDayCanteen = [];
 
         foreach ($orders as $order) {

@@ -6,7 +6,7 @@ import {
   FileText, Image as ImageIcon, Search, Store, User, MapPin, 
   ChevronDown, ChevronRight, Layers, Clock, Truck, RefreshCw, 
   Phone, CheckSquare, AlertCircle, ShoppingBag, Filter, Calendar,
-  Download, ExternalLink, Printer
+  Download, ExternalLink, Printer, Flame
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api, { getStorageUrl } from '../../lib/axios';
@@ -14,6 +14,7 @@ import { useAuthStore } from '../../store/authStore';
 import santriData from '../../data/santri.json';
 import { getFileType, isImageFile, isHeifFile, isPdfFile, formatFileSize, getFileNameFromPath, compressImageFiles } from '../../lib/fileUtils';
 import ThermalReceiptModal from '../../components/receipt/ThermalReceiptModal';
+import LoadingSpinner from '../../components/common/LoadingSpinner';
 
 function getSantriGender(santriName = '', santriRoom = '') {
   const sName = (santriName || '').toLowerCase().trim();
@@ -144,6 +145,99 @@ export const getOrderModalBelanja = (order) => {
   return subtotal > 1000 ? (subtotal - 1000) : subtotal;
 };
 
+// Helper Normalisasi Kategori Produk (Makanan, Minuman, Camilan, Custom)
+export const normalizeCategory = (category, productName = '') => {
+  const cat = (category || '').toLowerCase();
+  const name = (productName || '').toLowerCase();
+  
+  if (cat.includes('minum') || name.includes('es ') || name.includes('teh') || name.includes('milo') || name.includes('kopi') || name.includes('jus') || name.includes('air') || name.includes('susu') || name.includes('drink')) {
+    return 'minuman';
+  }
+  if (cat.includes('camilan') || cat.includes('snack') || name.includes('pangsit') || name.includes('udang keju') || name.includes('udang rambutan') || name.includes('dimsum') || name.includes('kentang') || name.includes('siomay') || name.includes('roti') || name.includes('kerupuk') || name.includes('gorengan')) {
+    return 'camilan';
+  }
+  return 'makanan';
+};
+
+// Helper Level Kepedasan (e.g. Mie Gacoan Level 1, 2, 3, 4, 6, 8)
+export const getSpicyLevelNumber = (str = '') => {
+  const match = (str || '').match(/(?:level|lv|lvl)\s*(\d+)/i) || (str || '').match(/\b(\d+)\b/);
+  return match ? parseInt(match[1], 10) : null;
+};
+
+// Helper Badge Style Varian / Tingkat Pedas / Catatan
+export const getVariantBadgeStyle = (label = '') => {
+  const lower = (label || '').toLowerCase();
+  const lvl = getSpicyLevelNumber(label);
+
+  if (lvl !== null) {
+    if (lvl === 0 || lvl === 1) {
+      return {
+        badge: 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800',
+        dot: 'bg-emerald-500',
+        icon: '🌶️',
+        levelText: `Level ${lvl}`
+      };
+    }
+    if (lvl === 2) {
+      return {
+        badge: 'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800',
+        dot: 'bg-amber-500',
+        icon: '🌶️',
+        levelText: `Level ${lvl}`
+      };
+    }
+    if (lvl >= 3 && lvl <= 5) {
+      return {
+        badge: 'bg-orange-100 text-orange-950 border-orange-400 dark:bg-orange-950/60 dark:text-orange-300 dark:border-orange-800',
+        dot: 'bg-orange-500',
+        icon: '🔥',
+        levelText: `Level ${lvl}`
+      };
+    }
+    if (lvl >= 6) {
+      return {
+        badge: 'bg-red-100 text-red-950 border-red-500 dark:bg-red-950/60 dark:text-red-300 dark:border-red-800',
+        dot: 'bg-red-600',
+        icon: '💥',
+        levelText: `Level ${lvl}`
+      };
+    }
+  }
+
+  if (lower.includes('pedas') || lower.includes('mercon') || lower.includes('hot')) {
+    return {
+      badge: 'bg-red-100 text-red-900 border-red-300 dark:bg-red-950/60 dark:text-red-300 dark:border-red-800',
+      dot: 'bg-red-500',
+      icon: '🌶️',
+      levelText: 'Pedas'
+    };
+  }
+  if (lower.includes('es') || lower.includes('dingin') || lower.includes('manis')) {
+    return {
+      badge: 'bg-sky-100 text-sky-900 border-sky-300 dark:bg-sky-950/60 dark:text-sky-300 dark:border-sky-800',
+      dot: 'bg-sky-500',
+      icon: '🧊',
+      levelText: 'Dingin / Manis'
+    };
+  }
+  return {
+    badge: 'bg-gray-100 text-gray-800 border-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700',
+    dot: 'bg-gray-400',
+    icon: '📝',
+    levelText: 'Catatan'
+  };
+};
+
+// Helper Deteksi Pesanan Guru / Tenaga Pendidik
+export const checkIsTeacherOrder = (order) => {
+  return Boolean(
+    order?.order_for === 'guru' ||
+    order?.user?.is_teacher ||
+    (order?.is_priority && !order?.user?.santri_name)
+  );
+};
+
 // Optimistic Update Helper for React Query caches
 const mutateOrderInCaches = async (queryClient, queryKeyPrefix, targetId, updateFn) => {
   await queryClient.cancelQueries({ queryKey: [queryKeyPrefix] });
@@ -247,8 +341,11 @@ export default function TugasKurir() {
   // View & Filter States
   const [viewMode, setViewMode] = useState('list'); // 'list' | 'canteen'
   const [statusTab, setStatusTab] = useState('processing'); // Default: 'processing' (Sedang Diantar)
+  const [recipientFilter, setRecipientFilter] = useState('all'); // 'all' | 'guru' | 'santri'
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCanteenFilter, setSelectedCanteenFilter] = useState('all');
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all'); // 'all' | 'makanan' | 'minuman' | 'camilan' | 'custom'
+  const [selectedVariantFilter, setSelectedVariantFilter] = useState({}); // { [canteenId]: variantNameOrNull }
   const [expandedCanteen, setExpandedCanteen] = useState({});
 
   // Modals States
@@ -561,12 +658,30 @@ export default function TugasKurir() {
         if (order.status !== 'completed') return false;
       }
 
+      // 1b. Recipient Type Filter (Semua / Guru / Santri)
+      const isTeacher = checkIsTeacherOrder(order);
+      if (recipientFilter === 'guru' && !isTeacher) return false;
+      if (recipientFilter === 'santri' && isTeacher) return false;
+
       // 2. Canteen Filter
       if (selectedCanteenFilter !== 'all') {
         if (order.canteen_id?.toString() !== selectedCanteenFilter.toString()) return false;
       }
 
-      // 3. Search Query Filter
+      // 3. Category Filter
+      if (selectedCategoryFilter !== 'all') {
+        if (selectedCategoryFilter === 'custom') {
+          if (!order.is_custom && !order.custom_notes) return false;
+        } else {
+          const hasMatchingCat = order.items?.some(i => {
+            const cat = normalizeCategory(i.product?.category, i.product?.name);
+            return cat === selectedCategoryFilter;
+          });
+          if (!hasMatchingCat) return false;
+        }
+      }
+
+      // 4. Search Query Filter
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const matchesId = order.id?.toString().includes(q);
@@ -599,8 +714,8 @@ export default function TugasKurir() {
       }
 
       // Prioritas Guru/Staff diantar lebih dulu di status yang sama
-      const isPriorityA = (a.is_priority || a.order_for === 'guru') ? 1 : 0;
-      const isPriorityB = (b.is_priority || b.order_for === 'guru') ? 1 : 0;
+      const isPriorityA = (a.is_priority || checkIsTeacherOrder(a)) ? 1 : 0;
+      const isPriorityB = (b.is_priority || checkIsTeacherOrder(b)) ? 1 : 0;
       if (isPriorityA !== isPriorityB) {
         return isPriorityB - isPriorityA;
       }
@@ -612,11 +727,20 @@ export default function TugasKurir() {
 
       return (b.id || 0) - (a.id || 0);
     });
-  }, [orders, statusTab, selectedCanteenFilter, searchQuery, currentUser?.id]);
+  }, [orders, statusTab, recipientFilter, selectedCanteenFilter, selectedCategoryFilter, searchQuery, currentUser?.id]);
 
+  // Recipient Counts for Filter Switcher
+  const recipientCounts = useMemo(() => {
+    let guru = 0;
+    let santri = 0;
+    orders.forEach(order => {
+      if (checkIsTeacherOrder(order)) guru++;
+      else santri++;
+    });
+    return { all: orders.length, guru, santri };
+  }, [orders]);
 
-
-  // Grouped by Toko / Kantin
+  // Grouped by Toko / Kantin with Variant & Category Details
   const groupedByCanteen = useMemo(() => {
     const map = {};
 
@@ -636,6 +760,7 @@ export default function TugasKurir() {
           orders: [],
           customersMap: {},
           itemRecap: {},
+          categoryStats: { makanan: 0, minuman: 0, camilan: 0, custom: 0 },
           totalCost: 0,
           totalDeliveryFee: 0,
           totalItemCount: 0,
@@ -664,10 +789,10 @@ export default function TugasKurir() {
 
       // Group customer info for "siapa aja"
       const u = order.user;
-      const isTeacherOrder = order.order_for === 'guru';
-      const santriName = isTeacherOrder ? `🎓 [GURU] ${u?.name || 'Guru / Staff'}` : (u?.santri_name || u?.name || 'Santri Tanpa Nama');
+      const isTeacherOrder = checkIsTeacherOrder(order);
+      const santriName = isTeacherOrder ? (u?.name || 'Guru / Staff') : (u?.santri_name || u?.name || 'Santri Tanpa Nama');
       const custKey = `${u?.id || 0}_${santriName}_${isTeacherOrder ? 'guru' : 'santri'}`;
-      const gender = isTeacherOrder ? 'putra' : getSantriGender(santriName, u?.santri_room);
+      const gender = isTeacherOrder ? 'guru' : getSantriGender(santriName, u?.santri_room);
 
       let santriClass = isTeacherOrder ? `Unit ${u?.teacher_unit || 'Yayasan'}` : (u?.santri_class || '');
       let santriLevel = isTeacherOrder ? (u?.niy ? `NIY: ${u.niy}` : 'Staff') : (u?.santri_level || '');
@@ -701,7 +826,10 @@ export default function TugasKurir() {
           userId: u?.id,
           santriName,
           gender,
-          waliName: u?.name || 'Wali Santri',
+          isTeacher: isTeacherOrder,
+          teacherUnit: u?.teacher_unit,
+          niy: u?.niy,
+          waliName: isTeacherOrder ? null : (u?.name || 'Wali Santri'),
           santriRoom,
           santriClass,
           santriLevel,
@@ -718,25 +846,53 @@ export default function TugasKurir() {
 
       if (order.items && order.items.length > 0) {
         order.items.forEach(item => {
-          const qty = parseInt(item.quantity || 1);
+          const qty = parseInt(item.quantity || 1, 10);
           const name = item.product?.name || 'Makanan';
+          const itemCat = normalizeCategory(item.product?.category, item.product?.name);
+          const itemHppTotal = getItemModalTotalHpp(item);
+          const variantLabel = (item.notes && item.notes.trim()) ? item.notes.trim() : 'Standar / Original';
+
           map[canteenId].totalItemCount += qty;
+          map[canteenId].categoryStats[itemCat] = (map[canteenId].categoryStats[itemCat] || 0) + qty;
           map[canteenId].customersMap[custKey].totalItemCount += qty;
           map[canteenId].customersMap[custKey].items.push({
             ...item,
+            category: itemCat,
+            variantLabel,
             orderId: order.id,
             orderStatus: order.status,
           });
 
           if (!map[canteenId].itemRecap[name]) {
-            map[canteenId].itemRecap[name] = { quantity: 0, total: 0 };
+            map[canteenId].itemRecap[name] = { 
+              name, 
+              category: itemCat,
+              quantity: 0, 
+              total: 0,
+              variants: {} 
+            };
           }
           map[canteenId].itemRecap[name].quantity += qty;
-          map[canteenId].itemRecap[name].total += getItemModalTotalHpp(item);
+          map[canteenId].itemRecap[name].total += itemHppTotal;
+
+          if (!map[canteenId].itemRecap[name].variants[variantLabel]) {
+            map[canteenId].itemRecap[name].variants[variantLabel] = {
+              label: variantLabel,
+              quantity: 0,
+              total: 0,
+              santriNames: []
+            };
+          }
+          map[canteenId].itemRecap[name].variants[variantLabel].quantity += qty;
+          map[canteenId].itemRecap[name].variants[variantLabel].total += itemHppTotal;
+          if (!map[canteenId].itemRecap[name].variants[variantLabel].santriNames.includes(santriName)) {
+            map[canteenId].itemRecap[name].variants[variantLabel].santriNames.push(santriName);
+          }
         });
       } else if (order.is_custom || order.custom_notes) {
         const customModalPrice = getOrderModalBelanja(order);
         map[canteenId].totalItemCount += 1;
+        map[canteenId].categoryStats.custom += 1;
         map[canteenId].customersMap[custKey].totalItemCount += 1;
         const customItem = {
           id: `custom_${order.id}`,
@@ -747,33 +903,92 @@ export default function TugasKurir() {
           price: customModalPrice,
           subtotal: customModalPrice,
           notes: 'Pesanan Khusus',
+          category: 'custom',
+          variantLabel: 'Pesanan Khusus'
         };
         map[canteenId].customersMap[custKey].items.push(customItem);
 
         const customName = `Titip Beli: ${order.custom_notes || 'Pesanan Khusus'}`;
         if (!map[canteenId].itemRecap[customName]) {
-          map[canteenId].itemRecap[customName] = { quantity: 0, total: 0 };
+          map[canteenId].itemRecap[customName] = { 
+            name: customName, 
+            category: 'custom',
+            quantity: 0, 
+            total: 0,
+            variants: {}
+          };
         }
         map[canteenId].itemRecap[customName].quantity += 1;
         map[canteenId].itemRecap[customName].total += customModalPrice;
+        if (!map[canteenId].itemRecap[customName].variants['Pesanan Khusus']) {
+          map[canteenId].itemRecap[customName].variants['Pesanan Khusus'] = {
+            label: 'Pesanan Khusus',
+            quantity: 1,
+            total: customModalPrice,
+            santriNames: [santriName]
+          };
+        } else {
+          map[canteenId].itemRecap[customName].variants['Pesanan Khusus'].quantity += 1;
+          map[canteenId].itemRecap[customName].variants['Pesanan Khusus'].total += customModalPrice;
+        }
       }
     });
 
     return Object.values(map).map(c => {
-      const customers = Object.values(c.customersMap);
-      const customersPutra = customers.filter(cust => cust.gender === 'putra');
-      const customersPutri = customers.filter(cust => cust.gender === 'putri');
+      let customers = Object.values(c.customersMap);
+
+      // Check if specific variant is filtered for this canteen
+      const activeVariant = selectedVariantFilter[c.canteenId];
+      if (activeVariant) {
+        customers = customers.filter(cust => 
+          cust.items.some(it => it.variantLabel === activeVariant || it.notes === activeVariant)
+        );
+      }
+
+      const customersGuru = customers.filter(cust => cust.isTeacher);
+      const customersPutra = customers.filter(cust => !cust.isTeacher && cust.gender === 'putra');
+      const customersPutri = customers.filter(cust => !cust.isTeacher && cust.gender === 'putri');
+
+      // Build item recap list
+      let itemRecapList = Object.keys(c.itemRecap).map(k => {
+        const item = c.itemRecap[k];
+        const variantsList = Object.values(item.variants || {}).sort((va, vb) => {
+          const lvA = getSpicyLevelNumber(va.label);
+          const lvB = getSpicyLevelNumber(vb.label);
+          if (lvA !== null && lvB !== null) return lvA - lvB;
+          if (lvA !== null) return -1;
+          if (lvB !== null) return 1;
+          return vb.quantity - va.quantity;
+        });
+
+        return {
+          name: k,
+          ...item,
+          variantsList
+        };
+      }).sort((a, b) => b.quantity - a.quantity);
+
+      if (selectedCategoryFilter !== 'all') {
+        itemRecapList = itemRecapList.filter(it => {
+          if (selectedCategoryFilter === 'custom') return it.category === 'custom';
+          return it.category === selectedCategoryFilter;
+        });
+      }
 
       return {
         ...c,
         customers,
+        customersGuru,
         customersPutra,
         customersPutri,
-        itemRecapList: Object.keys(c.itemRecap).map(k => ({
-          name: k,
-          ...c.itemRecap[k]
-        })).sort((a, b) => b.quantity - a.quantity)
+        itemRecapList
       };
+    }).filter(c => {
+      // If category filter is active, only show canteens that have items matching the category
+      if (selectedCategoryFilter !== 'all') {
+        return c.itemRecapList.length > 0;
+      }
+      return true;
     }).sort((a, b) => {
       // Prioritaskan toko yang masih memiliki antaran aktif (Sedang Diantar > Menunggu > Selesai)
       const scoreA = (a.hasProcessing ? 2 : 0) + (a.hasPending ? 1 : 0);
@@ -781,18 +996,68 @@ export default function TugasKurir() {
       if (scoreB !== scoreA) return scoreB - scoreA;
       return b.orders.length - a.orders.length;
     });
-  }, [filteredOrders]);
+  }, [filteredOrders, selectedCategoryFilter, selectedVariantFilter]);
 
-  // Counts for tabs
+  // Counts for tabs (aware of recipientFilter)
   const tabCounts = useMemo(() => {
+    const baseOrders = orders.filter(o => {
+      const isTeacher = checkIsTeacherOrder(o);
+      if (recipientFilter === 'guru' && !isTeacher) return false;
+      if (recipientFilter === 'santri' && isTeacher) return false;
+      return true;
+    });
+
     return {
-      all: orders.length,
-      my_tasks: orders.filter(o => o.courier_id === currentUser?.id).length,
-      pending: orders.filter(o => o.status === 'pending').length,
-      processing: orders.filter(o => o.status === 'processing').length,
-      completed: orders.filter(o => o.status === 'completed').length,
+      all: baseOrders.length,
+      my_tasks: baseOrders.filter(o => o.courier_id === currentUser?.id).length,
+      pending: baseOrders.filter(o => o.status === 'pending').length,
+      processing: baseOrders.filter(o => o.status === 'processing').length,
+      completed: baseOrders.filter(o => o.status === 'completed').length,
     };
-  }, [orders, currentUser?.id]);
+  }, [orders, currentUser?.id, recipientFilter]);
+
+  // Counts for categories (across current filtered status, recipient, canteen & date)
+  const categoryCounts = useMemo(() => {
+    let makanan = 0;
+    let minuman = 0;
+    let camilan = 0;
+    let custom = 0;
+
+    const baseOrders = orders.filter(order => {
+      if (statusTab === 'my_tasks' && order.courier_id !== currentUser?.id) return false;
+      if (statusTab === 'pending' && order.status !== 'pending') return false;
+      if (statusTab === 'processing' && order.status !== 'processing') return false;
+      if (statusTab === 'completed' && order.status !== 'completed') return false;
+      if (selectedCanteenFilter !== 'all' && order.canteen_id?.toString() !== selectedCanteenFilter.toString()) return false;
+      const isTeacher = checkIsTeacherOrder(order);
+      if (recipientFilter === 'guru' && !isTeacher) return false;
+      if (recipientFilter === 'santri' && isTeacher) return false;
+      return true;
+    });
+
+    baseOrders.forEach(order => {
+      if (order.items && order.items.length > 0) {
+        order.items.forEach(it => {
+          const qty = parseInt(it.quantity || 1, 10);
+          const cat = normalizeCategory(it.product?.category, it.product?.name);
+          if (cat === 'minuman') minuman += qty;
+          else if (cat === 'camilan') camilan += qty;
+          else makanan += qty;
+        });
+      }
+      if (order.is_custom || order.custom_notes) {
+        custom += 1;
+      }
+    });
+
+    return {
+      all: makanan + minuman + camilan + custom,
+      makanan,
+      minuman,
+      camilan,
+      custom
+    };
+  }, [orders, statusTab, recipientFilter, selectedCanteenFilter, currentUser?.id]);
 
   // Printable orders count for current filter
   const printableOrdersCount = useMemo(() => {
@@ -820,14 +1085,6 @@ export default function TugasKurir() {
     };
   }, [filteredOrders]);
 
-  if (isLoading) {
-    return (
-      <div className="flex flex-col justify-center items-center h-screen bg-gray-50 dark:bg-gray-950 font-sans gap-3">
-        <div className="animate-spin rounded-full h-10 w-10 border-4 border-green-600 border-t-transparent shadow-md"></div>
-        <p className="text-sm font-semibold text-gray-500 animate-pulse">Memuat semua pesanan kurir...</p>
-      </div>
-    );
-  }
 
   return (
     <div className="bg-gray-50 dark:bg-gray-950 min-h-screen pb-28 font-sans">
@@ -867,227 +1124,170 @@ export default function TugasKurir() {
         </div>
       </div>
 
-      <div className="p-3 sm:p-4 max-w-7xl mx-auto space-y-3">
-        {/* UNIFIED FILTER CARD: PERIOD, CANTEEN, SEARCH */}
-        <div className="bg-white dark:bg-gray-900 p-3 sm:p-3.5 rounded-2xl border border-green-300/80 dark:border-green-800 shadow-xs space-y-2.5">
-          {/* Header & Active Period Badge */}
-          <div className="flex items-center justify-between flex-wrap gap-1.5 border-b border-gray-200 dark:border-gray-700 pb-2">
-            <h3 className="text-xs sm:text-sm font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
-              <Filter className="w-3.5 h-3.5 text-green-600" />
-              Filter Periode & Toko
-            </h3>
-            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-green-50 text-green-700 dark:bg-green-950/60 dark:text-green-300 border border-green-200 dark:border-green-800 flex items-center gap-1">
-              <Calendar className="w-3 h-3" />
-              <span>📅 Periode: <strong>{getFilterLabel()}</strong></span>
-            </span>
-          </div>
-
-          {/* Mode Selector Buttons */}
-          <div className="flex gap-1 overflow-x-auto pb-0.5 no-scrollbar">
-            {[
-              { id: 'day', label: 'Harian (Per Tanggal)' },
-              { id: 'week', label: 'Mingguan' },
-              { id: 'month', label: 'Bulanan' },
-              { id: 'year', label: 'Tahunan' },
-              { id: 'all', label: 'Semua Waktu' }
-            ].map((m) => (
-              <button
-                key={m.id}
-                onClick={() => {
-                  setFilterMode(m.id);
-                  if (m.id === 'week') {
-                    setFilterWeekIndex(getCurrentWeekIndex(filterYear, filterMonth));
-                  }
-                }}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold whitespace-nowrap transition-all shadow-xs ${
-                  filterMode === m.id
-                    ? 'bg-green-600 text-white shadow-xs ring-2 ring-green-600/20'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300'
-                }`}
-              >
-                {m.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Dynamic Grid Inputs */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 pt-0.5">
-            {/* 1. Date Inputs depending on filterMode */}
-            {filterMode === 'day' && (
-              <div>
-                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-0.5">
-                  PILIH TANGGAL:
-                </label>
-                <div className="relative group">
-                  <input
-                    type="date"
-                    value={filterDate}
-                    onChange={(e) => setFilterDate(e.target.value)}
-                    onClick={(e) => {
-                      try {
-                        e.target.showPicker();
-                      } catch {
-                        // Fallback for older browsers
-                      }
-                    }}
-                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
-                    title="Klik untuk memilih hari / tanggal / bulan / tahun"
-                  />
-                  <div className="w-full flex items-center justify-between px-2.5 py-1.5 border rounded-lg text-xs bg-gray-50 dark:bg-gray-800 dark:border-gray-700 text-gray-800 dark:text-white font-semibold group-hover:border-green-500 group-hover:bg-green-50/20 dark:group-hover:bg-green-950/20 transition-all shadow-xs">
-                    <span className="truncate">
-                      {formatFullDate(filterDate)}
-                    </span>
-                    <Calendar className="w-3.5 h-3.5 text-green-600 dark:text-green-400 shrink-0 ml-1.5 group-hover:scale-110 transition-transform" />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {filterMode === 'week' && (
-              <>
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-0.5">
-                    PILIH BULAN:
-                  </label>
-                  <select
-                    value={filterMonth}
-                    onChange={(e) => {
-                      const newMonth = parseInt(e.target.value);
-                      setFilterMonth(newMonth);
-                      setFilterWeekIndex(getCurrentWeekIndex(filterYear, newMonth));
-                    }}
-                    className="w-full px-2.5 py-1.5 border rounded-lg text-xs bg-gray-50 dark:bg-gray-800 dark:border-gray-700 text-gray-800 dark:text-white font-semibold focus:ring-2 focus:ring-green-500 focus:outline-none"
-                  >
-                    {['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'].map(
-                      (m, i) => (
-                        <option key={i} value={i}>
-                          {m}
-                        </option>
-                      )
-                    )}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-0.5">
-                    PILIH RENTANG MINGGU:
-                  </label>
-                  <select
-                    value={filterWeekIndex < getWeeksInMonth(filterYear, filterMonth).length ? filterWeekIndex : 0}
-                    onChange={(e) => setFilterWeekIndex(parseInt(e.target.value))}
-                    className="w-full px-2.5 py-1.5 border rounded-lg text-xs bg-gray-50 dark:bg-gray-800 dark:border-gray-700 text-gray-800 dark:text-white font-semibold focus:ring-2 focus:ring-green-500 focus:outline-none"
-                  >
-                    {getWeeksInMonth(filterYear, filterMonth).map((w, i) => (
-                      <option key={i} value={i}>
-                        {w.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </>
-            )}
-
-            {filterMode === 'month' && (
-              <div>
-                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-0.5">
-                  PILIH BULAN:
-                </label>
-                <select
-                  value={filterMonth}
-                  onChange={(e) => {
-                    const newMonth = parseInt(e.target.value);
-                    setFilterMonth(newMonth);
-                    setFilterWeekIndex(getCurrentWeekIndex(filterYear, newMonth));
-                  }}
-                  className="w-full px-2.5 py-1.5 border rounded-lg text-xs bg-gray-50 dark:bg-gray-800 dark:border-gray-700 text-gray-800 dark:text-white font-semibold focus:ring-2 focus:ring-green-500 focus:outline-none"
-                >
-                  {['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'].map(
-                    (m, i) => (
-                      <option key={i} value={i}>
-                        {m}
-                      </option>
-                    )
-                  )}
-                </select>
-              </div>
-            )}
-
-            {(filterMode === 'week' || filterMode === 'month' || filterMode === 'year') && (
-              <div>
-                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-0.5">
-                  PILIH TAHUN:
-                </label>
-                <select
-                  value={filterYear}
-                  onChange={(e) => {
-                    const newYear = parseInt(e.target.value);
-                    setFilterYear(newYear);
-                    setFilterWeekIndex(getCurrentWeekIndex(newYear, filterMonth));
-                  }}
-                  className="w-full px-2.5 py-1.5 border rounded-lg text-xs bg-gray-50 dark:bg-gray-800 dark:border-gray-700 text-gray-800 dark:text-white font-semibold focus:ring-2 focus:ring-green-500 focus:outline-none"
-                >
-                  {[2024, 2025, 2026, 2027, 2028].map((y) => (
-                    <option key={y} value={y}>
-                      {y}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* 2. Canteen Filter */}
+      <div className="p-2 sm:p-3 max-w-7xl mx-auto space-y-2">
+        {/* UNIFIED COMPACT FILTER CARD: ALL DROPDOWNS */}
+        <div className="bg-white dark:bg-gray-900 p-1.5 sm:p-2 rounded-none border border-green-600/30 dark:border-green-800 shadow-xs space-y-1.5">
+          {/* Row 1: Periode + Toko dalam 2 kolom */}
+          <div className="grid grid-cols-2 gap-1.5">
+            {/* Dropdown Periode */}
             <div>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-0.5">
-                PILIH KANTIN / TOKO:
+              <label className="block text-[9px] font-bold text-gray-500 uppercase tracking-wider mb-0.5 flex items-center gap-1">
+                <Calendar className="w-2.5 h-2.5 text-green-600" /> Periode
+              </label>
+              <select
+                value={filterMode}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setFilterMode(val);
+                  if (val === 'week') setFilterWeekIndex(getCurrentWeekIndex(filterYear, filterMonth));
+                }}
+                className="w-full px-2 py-1 border border-gray-200 dark:border-gray-700 rounded-none text-xs bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-semibold focus:outline-none focus:border-green-500"
+              >
+                <option value="day">📅 Harian</option>
+                <option value="week">📆 Mingguan</option>
+                <option value="month">🗓️ Bulanan</option>
+                <option value="year">📊 Tahunan</option>
+                <option value="all">⏳ Semua Waktu</option>
+              </select>
+            </div>
+
+            {/* Dropdown Kantin / Toko */}
+            <div>
+              <label className="block text-[9px] font-bold text-gray-500 uppercase tracking-wider mb-0.5 flex items-center gap-1">
+                <Store className="w-2.5 h-2.5 text-green-600" /> Kantin / Toko
               </label>
               <select
                 value={selectedCanteenFilter}
                 onChange={(e) => setSelectedCanteenFilter(e.target.value)}
-                className="w-full px-2.5 py-1.5 bg-gray-50 dark:bg-gray-800 dark:border-gray-700 border border-gray-200 rounded-lg text-xs font-semibold text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500/20"
+                className="w-full px-2 py-1 bg-gray-50 dark:bg-gray-800 dark:border-gray-700 border border-gray-200 rounded-none text-xs font-semibold text-gray-700 dark:text-gray-300 focus:outline-none focus:border-green-500 truncate"
               >
-                <option value="all">🏪 Semua Kantin ({canteens.length} Toko)</option>
+                <option value="all">🏪 Semua ({canteens.length} Toko)</option>
                 {canteens.map(c => (
-                  <option key={c.id} value={c.id}>🏪 {c.name} ({c.category === 'kota' ? 'Luar/Kota' : 'Kauman'})</option>
+                  <option key={c.id} value={c.id}>🏪 {c.name}</option>
                 ))}
               </select>
             </div>
+          </div>
 
-            {/* 3. Search Bar */}
-            <div className={(filterMode === 'week' || filterMode === 'month' || filterMode === 'year' || filterMode === 'day') ? 'sm:col-span-2 lg:col-span-2' : 'sm:col-span-2 lg:col-span-3'}>
-              <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-0.5">
-                PENCARIAN CEPAT:
-              </label>
-              <div className="relative">
-                <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                <input 
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Cari santri, wali, kamar, kantin, atau makanan..."
-                  className="w-full pl-8 pr-7 py-1.5 bg-gray-50 dark:bg-gray-800 dark:border-gray-700 border border-gray-200 rounded-lg text-xs text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-600 transition-all font-medium"
-                />
-                {searchQuery && (
-                  <button 
-                    onClick={() => setSearchQuery('')}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
+          {/* Row 2: Sub-selector Tanggal / Minggu / Bulan / Tahun (muncul kondisional) */}
+          {filterMode === 'day' && (
+            <div className="relative group">
+              <input
+                type="date"
+                value={filterDate}
+                onChange={(e) => setFilterDate(e.target.value)}
+                onClick={(e) => { try { e.target.showPicker(); } catch {} }}
+                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
+              />
+              <div className="w-full flex items-center justify-between px-2 py-1 border border-gray-200 dark:border-gray-700 rounded-none text-xs bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-semibold group-hover:border-green-500 transition-all">
+                <span className="truncate">📅 {formatFullDate(filterDate)}</span>
+                <Calendar className="w-3 h-3 text-green-600 shrink-0 ml-1" />
               </div>
             </div>
+          )}
+
+          {filterMode === 'week' && (
+            <div className="grid grid-cols-2 gap-1">
+              <select value={filterMonth} onChange={(e) => { const m = parseInt(e.target.value); setFilterMonth(m); setFilterWeekIndex(getCurrentWeekIndex(filterYear, m)); }}
+                className="w-full px-1.5 py-1 border border-gray-200 dark:border-gray-700 rounded-none text-xs bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-semibold focus:outline-none">
+                {['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'].map((m,i)=>(
+                  <option key={i} value={i}>{m}</option>
+                ))}
+              </select>
+              <select value={filterWeekIndex < getWeeksInMonth(filterYear, filterMonth).length ? filterWeekIndex : 0} onChange={(e) => setFilterWeekIndex(parseInt(e.target.value))}
+                className="w-full px-1.5 py-1 border border-gray-200 dark:border-gray-700 rounded-none text-xs bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-semibold focus:outline-none">
+                {getWeeksInMonth(filterYear, filterMonth).map((w,i)=>(
+                  <option key={i} value={i}>{w.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {(filterMode === 'month' || filterMode === 'year') && (
+            <div className="grid grid-cols-2 gap-1">
+              {filterMode === 'month' && (
+                <select value={filterMonth} onChange={(e) => { const m = parseInt(e.target.value); setFilterMonth(m); setFilterWeekIndex(getCurrentWeekIndex(filterYear, m)); }}
+                  className="w-full px-1.5 py-1 border border-gray-200 dark:border-gray-700 rounded-none text-xs bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-semibold focus:outline-none">
+                  {['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'].map((m,i)=>(
+                    <option key={i} value={i}>{m}</option>
+                  ))}
+                </select>
+              )}
+              <select value={filterYear} onChange={(e) => { const y = parseInt(e.target.value); setFilterYear(y); setFilterWeekIndex(getCurrentWeekIndex(y, filterMonth)); }}
+                className="w-full px-1.5 py-1 border border-gray-200 dark:border-gray-700 rounded-none text-xs bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-semibold focus:outline-none font-mono">
+                {[2024, 2025, 2026, 2027, 2028].map(y=>(
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Row 3: Kategori + Penerima dalam 2 kolom */}
+          <div className="grid grid-cols-2 gap-1.5">
+            {/* Dropdown Kategori */}
+            <div>
+              <label className="block text-[9px] font-bold text-gray-500 uppercase tracking-wider mb-0.5 flex items-center gap-1">
+                <Filter className="w-2.5 h-2.5 text-green-600" /> Kategori
+              </label>
+              <select
+                value={selectedCategoryFilter}
+                onChange={(e) => setSelectedCategoryFilter(e.target.value)}
+                className="w-full px-2 py-1 border border-gray-200 dark:border-gray-700 rounded-none text-xs bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-semibold focus:outline-none focus:border-green-500"
+              >
+                <option value="all">🍽️ Semua ({categoryCounts.all})</option>
+                <option value="makanan">🍜 Makanan ({categoryCounts.makanan})</option>
+                <option value="minuman">🥤 Minuman ({categoryCounts.minuman})</option>
+                <option value="camilan">🥟 Camilan ({categoryCounts.camilan})</option>
+                {categoryCounts.custom > 0 && (
+                  <option value="custom">⚡ Titip Beli ({categoryCounts.custom})</option>
+                )}
+              </select>
+            </div>
+
+            {/* Dropdown Penerima */}
+            <div>
+              <label className="block text-[9px] font-bold text-gray-500 uppercase tracking-wider mb-0.5 flex items-center gap-1">
+                <User className="w-2.5 h-2.5 text-green-600" /> Penerima
+              </label>
+              <select
+                value={recipientFilter}
+                onChange={(e) => setRecipientFilter(e.target.value)}
+                className="w-full px-2 py-1 border border-gray-200 dark:border-gray-700 rounded-none text-xs bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-semibold focus:outline-none focus:border-green-500"
+              >
+                <option value="all">👥 Semua ({recipientCounts.all})</option>
+                <option value="guru">🎓 Guru / Staff ({recipientCounts.guru})</option>
+                <option value="santri">👦 Santri & Wali ({recipientCounts.santri})</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Row 4: Search Bar */}
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Cari santri, kamar, toko, makanan, varian..."
+              className="w-full pl-7 pr-7 py-1 bg-gray-50 dark:bg-gray-800 dark:border-gray-700 border border-gray-200 rounded-none text-xs text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-green-500 font-medium"
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery('')} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
 
-        {/* VIEW MODE TOGGLE & STATUS TABS */}
+        {/* VIEW MODE TOGGLE & STATUS TABS & FINANCIAL SUMMARY */}
         <div className="space-y-1.5">
-          {/* Dual Mode Switcher */}
-          <div className="grid grid-cols-2 gap-1.5 bg-gray-200/80 dark:bg-gray-800 p-0.5 rounded-xl shadow-inner">
+          {/* Dual Mode Switcher (Daftar Pesanan vs Rekap Per Toko) */}
+          <div className="grid grid-cols-2 gap-1 bg-gray-200 dark:bg-gray-800 p-0.5 rounded-none border border-gray-300 dark:border-gray-700">
             <button
               onClick={() => setViewMode('list')}
-              className={`py-1.5 px-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${
+              className={`py-1.5 px-2 text-xs font-bold transition-all rounded-none flex items-center justify-center gap-1.5 ${
                 viewMode === 'list' 
-                  ? 'bg-white dark:bg-gray-900 text-green-700 dark:text-green-400 shadow-xs' 
+                  ? 'bg-white dark:bg-gray-900 text-green-700 dark:text-green-400 border border-gray-300 dark:border-gray-700 shadow-xs' 
                   : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
               }`}
             >
@@ -1096,9 +1296,9 @@ export default function TugasKurir() {
             </button>
             <button
               onClick={() => setViewMode('canteen')}
-              className={`py-1.5 px-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${
+              className={`py-1.5 px-2 text-xs font-bold transition-all rounded-none flex items-center justify-center gap-1.5 ${
                 viewMode === 'canteen' 
-                  ? 'bg-white dark:bg-gray-900 text-green-700 dark:text-green-400 shadow-xs' 
+                  ? 'bg-white dark:bg-gray-900 text-green-700 dark:text-green-400 border border-gray-300 dark:border-gray-700 shadow-xs' 
                   : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
               }`}
             >
@@ -1107,73 +1307,77 @@ export default function TugasKurir() {
             </button>
           </div>
 
-          {/* Status Filter Horizontal Tabs + Totals in Line */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-1.5 pt-0.5">
-            {/* Horizontal Filter Tabs */}
-            <div className="flex gap-1 overflow-x-auto pb-0.5 no-scrollbar shrink-0">
-              {[
-                { id: 'all', label: 'Semua', count: tabCounts.all },
-                { id: 'my_tasks', label: 'Tugas Saya', count: tabCounts.my_tasks },
-                { id: 'pending', label: 'Menunggu', count: tabCounts.pending },
-                { id: 'processing', label: 'Sedang Diantar', count: tabCounts.processing },
-                { id: 'completed', label: 'Selesai', count: tabCounts.completed },
-              ].map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => setStatusTab(tab.id)}
-                  className={`px-2.5 py-1 rounded-full text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1 ${
-                    statusTab === tab.id
-                      ? 'bg-green-600 text-white shadow-xs'
-                      : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 border border-gray-200 dark:border-gray-700'
-                  }`}
-                >
-                  <span>{tab.label}</span>
-                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${statusTab === tab.id ? 'bg-white/20 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-500'}`}>
-                    {tab.count}
-                  </span>
-                </button>
-              ))}
+          {/* Recipient indicator (sudah pindah ke filter card atas) */}
+          {recipientCounts.guru > 0 && recipientFilter !== 'guru' && (
+            <div className="flex items-center gap-1 px-2 py-0.5 bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 text-[10px] font-bold text-purple-700 dark:text-purple-300">
+              <span>⚡</span>
+              <span>Ada {recipientCounts.guru} pesanan guru prioritas meja</span>
+            </div>
+          )}
+
+          {/* Status Filter + Summary Row */}
+          <div className="grid grid-cols-2 gap-1.5 items-end">
+            {/* Dropdown Status */}
+            <div>
+              <label className="block text-[9px] font-bold text-gray-500 uppercase tracking-wider mb-0.5 flex items-center gap-1">
+                <Clock className="w-2.5 h-2.5 text-green-600" /> Status
+              </label>
+              <select
+                value={statusTab}
+                onChange={(e) => setStatusTab(e.target.value)}
+                className="w-full px-2 py-1 border border-gray-200 dark:border-gray-700 rounded-none text-xs bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white font-semibold focus:outline-none focus:border-green-500"
+              >
+                <option value="all">📋 Semua ({tabCounts.all})</option>
+                <option value="my_tasks">🙋 Tugas Saya ({tabCounts.my_tasks})</option>
+                <option value="pending">⏳ Menunggu ({tabCounts.pending})</option>
+                <option value="processing">🚴 Sedang Diantar ({tabCounts.processing})</option>
+                <option value="completed">✅ Selesai ({tabCounts.completed})</option>
+              </select>
             </div>
 
-            {/* Total Uang Produk & Total Ongkir & Tombol Cetak Rekap */}
-            <div className="flex items-center gap-1.5 flex-wrap justify-end">
-              <button
-                onClick={handlePrintBatchReceipt}
-                className="py-1 px-2.5 bg-gray-900 hover:bg-black text-white dark:bg-gray-800 dark:hover:bg-gray-700 rounded-lg text-xs font-bold transition-all flex items-center gap-1 shadow-xs active:scale-95"
-                title={`Cetak Rekap Pesanan (${printableOrdersCount} Pesanan)`}
-              >
-                <Printer className="w-3 h-3 text-green-400" />
-                <span>🖨️ Cetak Rekap ({printableOrdersCount})</span>
-              </button>
+            {/* Tombol Cetak */}
+            <button
+              onClick={handlePrintBatchReceipt}
+              className="py-1 px-2 bg-gray-900 hover:bg-black text-white dark:bg-gray-800 dark:hover:bg-gray-700 rounded-none text-xs font-bold transition-all flex items-center justify-center gap-1 shadow-xs border border-gray-700 h-[26px]"
+              title={`Cetak Rekap Pesanan (${printableOrdersCount} Pesanan)`}
+            >
+              <Printer className="w-3 h-3 text-green-400" />
+              <span>🖨️ Cetak ({printableOrdersCount})</span>
+            </button>
+          </div>
 
-              <div className="flex items-center gap-1 px-2.5 py-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-xs shadow-xs">
-                <span className="text-gray-500 dark:text-gray-400 font-medium">Modal Belanja:</span>
-                <span className="font-extrabold text-gray-900 dark:text-white">
-                  Rp {formatRupiah(filteredSummary.totalProducts)}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-1 px-2.5 py-1 bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/60 rounded-lg text-xs shadow-xs">
-                <span className="text-blue-700 dark:text-blue-300 font-medium">Total Ongkir:</span>
-                <span className="font-extrabold text-blue-700 dark:text-blue-300">
-                  Rp {formatRupiah(filteredSummary.totalDeliveryFee)}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-1 px-2.5 py-1 bg-green-50/80 dark:bg-green-950/40 border border-green-200 dark:border-green-800/60 rounded-lg text-xs shadow-xs">
-                <span className="text-green-700 dark:text-green-300 font-medium">Modal + Ongkir:</span>
-                <span className="font-extrabold text-green-700 dark:text-green-400">
-                  Rp {formatRupiah(filteredSummary.grandTotal)}
-                </span>
-              </div>
+          {/* Financial Summary Row */}
+          <div className="flex items-center gap-1 flex-wrap">
+            <div className="flex items-center gap-1 px-2 py-0.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-none text-xs flex-1 min-w-0">
+              <span className="text-gray-500 font-medium shrink-0">Modal:</span>
+              <span className="font-extrabold font-mono text-gray-900 dark:text-white truncate">Rp {formatRupiah(filteredSummary.totalProducts)}</span>
+            </div>
+            <div className="flex items-center gap-1 px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 rounded-none text-xs flex-1 min-w-0">
+              <span className="text-emerald-700 dark:text-emerald-300 font-medium shrink-0">Ongkir:</span>
+              <span className="font-extrabold font-mono text-emerald-700 dark:text-emerald-300 truncate">Rp {formatRupiah(filteredSummary.totalDeliveryFee)}</span>
+            </div>
+            <div className="flex items-center gap-1 px-2 py-0.5 bg-green-100 dark:bg-green-950/60 border border-green-400 dark:border-green-800 rounded-none text-xs flex-1 min-w-0">
+              <span className="text-green-800 dark:text-green-300 font-medium shrink-0">Total:</span>
+              <span className="font-extrabold font-mono text-green-800 dark:text-green-400 truncate">Rp {formatRupiah(filteredSummary.grandTotal)}</span>
             </div>
           </div>
         </div>
 
-        {/* ======================================================== */}
-        {/* MODE 1: DAFTAR PESANAN LENGKAP (LIST MODE) */}
-        {/* ======================================================== */}
-        {viewMode === 'list' && (
+
+        {isLoading ? (
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-xs">
+            <LoadingSpinner 
+              text="Memuat Tugas Kurir..." 
+              subtext="Mengambil antrean pesanan siap antar & riwayat pengiriman" 
+              minHeight="min-h-[160px]"
+            />
+          </div>
+        ) : (
+          <>
+            {/* ======================================================== */}
+            {/* MODE 1: DAFTAR PESANAN LENGKAP (LIST MODE) */}
+            {/* ======================================================== */}
+            {viewMode === 'list' && (
           <div>
             {filteredOrders.length === 0 ? (
               <div className="bg-white dark:bg-gray-900 rounded-2xl p-8 text-center border border-gray-200 dark:border-gray-700 shadow-xs">
@@ -1193,7 +1397,7 @@ export default function TugasKurir() {
                   const isCompleted = order.status === 'completed';
                   const isCancelled = order.status === 'cancelled';
                   const isMyTask = order.courier_id === currentUser?.id;
-                  const isTeacherOrder = order.order_for === 'guru' || (order.is_priority && !order.user?.santri_name);
+                  const isTeacherOrder = checkIsTeacherOrder(order);
                   const isPriority = order.is_priority || isTeacherOrder;
                   const santriName = order.user?.santri_name || order.user?.name || 'Santri';
                   const waliName = order.user?.name || 'Wali';
@@ -1228,7 +1432,9 @@ export default function TugasKurir() {
                     <div 
                       key={order.id} 
                       className={`bg-white dark:bg-gray-900 rounded-none border shadow-sm hover:shadow-md transition-all p-3 sm:p-3.5 flex flex-col justify-between gap-2 ${
-                        isPriority
+                        isTeacherOrder
+                          ? 'border-purple-600 dark:border-purple-500 ring-2 ring-purple-600/30 bg-purple-50/15 dark:bg-purple-950/15'
+                          : isPriority
                           ? 'border-indigo-500 dark:border-indigo-400 ring-2 ring-indigo-500/30 bg-indigo-50/15 dark:bg-indigo-950/10'
                           : isProcessing 
                           ? 'border-green-400 dark:border-green-600 ring-1 ring-green-500/20' 
@@ -1240,17 +1446,27 @@ export default function TugasKurir() {
                       }`}
                     >
                       {/* Priority Strip for Teacher Orders */}
-                      {isPriority && (
-                        <div className="bg-gradient-to-r from-indigo-700 via-purple-700 to-indigo-800 text-white px-2.5 py-1 rounded-none flex items-center justify-between text-[11px] font-black tracking-tight -mx-3 -mt-3 mb-1 shadow-xs">
+                      {isTeacherOrder ? (
+                        <div className="bg-gradient-to-r from-purple-800 via-indigo-900 to-purple-800 text-white px-2.5 py-1 rounded-none flex items-center justify-between text-[11px] font-black tracking-tight -mx-3 -mt-3 mb-1 shadow-xs border-b border-purple-700">
                           <span className="flex items-center gap-1.5">
-                            <span>⚡</span>
-                            <span>PRIORITAS ANTAR LANGSUNG • GURU / STAFF</span>
+                            <span>🎓</span>
+                            <span>PESANAN GURU / STAFF</span>
+                            <span className="bg-amber-400 text-purple-950 px-1 py-0.2 rounded-none text-[9px] font-black shadow-2xs">
+                              ⚡ PRIORITAS MEJA
+                            </span>
                           </span>
-                          <span className="bg-amber-400 text-indigo-950 px-1.5 py-0.2 rounded-none uppercase text-[10px] font-mono font-black shadow-2xs">
+                          <span className="bg-white/20 text-white px-1.5 py-0.2 rounded-none uppercase text-[10px] font-mono font-bold">
                             UNIT {order.user?.teacher_unit || 'YAYASAN'}
                           </span>
                         </div>
-                      )}
+                      ) : isPriority ? (
+                        <div className="bg-gradient-to-r from-indigo-700 via-purple-700 to-indigo-800 text-white px-2.5 py-1 rounded-none flex items-center justify-between text-[11px] font-black tracking-tight -mx-3 -mt-3 mb-1 shadow-xs">
+                          <span className="flex items-center gap-1.5">
+                            <span>⚡</span>
+                            <span>PRIORITAS ANTAR LANGSUNG</span>
+                          </span>
+                        </div>
+                      ) : null}
 
                       {/* 1. CARD HEADER: TOKO, ID, TIME & STATUS BADGES */}
                       <div className="space-y-1.5">
@@ -1259,6 +1475,15 @@ export default function TugasKurir() {
                             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-none bg-blue-50 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200 dark:border-blue-800 truncate max-w-[120px]">
                               🏪 {order.canteen?.name || 'Kantin'}
                             </span>
+                            {order.canteen?.category && (
+                              <span className={`text-[9px] font-black px-1.5 py-0.5 uppercase rounded-none border ${
+                                order.canteen.category === 'kota'
+                                    ? 'bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300 dark:border-amber-700'
+                                    : 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700'
+                              }`}>
+                                {order.canteen.category === 'kota' ? '🛵 Kota' : '📍 Kauman'}
+                              </span>
+                            )}
                             <span className="text-[11px] font-bold text-gray-800 dark:text-gray-200">
                               #{order.id}
                             </span>
@@ -1308,27 +1533,36 @@ export default function TugasKurir() {
 
                         {/* 2. SANTRI / TEACHER & ROOM INFO */}
                         {isTeacherOrder ? (
-                          <div className="text-xs space-y-1">
+                          <div className="text-xs space-y-1 bg-purple-50/60 dark:bg-purple-950/40 p-2 border border-purple-200 dark:border-purple-800 rounded-none">
                             <div className="flex items-center justify-between gap-1.5">
-                              <span className="font-bold text-indigo-950 dark:text-indigo-100 truncate flex items-center gap-1">
+                              <span className="font-extrabold text-purple-950 dark:text-purple-100 truncate flex items-center gap-1 text-xs">
                                 <span className="text-sm">🎓</span>
                                 <span className="truncate">{order.user?.name || 'Guru / Staff'}</span>
                               </span>
-                              <span className="text-xs font-black text-indigo-900 dark:text-indigo-200 bg-indigo-100 dark:bg-indigo-950/70 px-2 py-0.5 rounded-none border border-indigo-300 dark:border-indigo-700 shrink-0 flex items-center gap-1 shadow-2xs">
+                              <span className="text-[11px] font-black text-purple-950 dark:text-purple-100 bg-purple-200 dark:bg-purple-900 px-2 py-0.5 rounded-none border border-purple-300 dark:border-purple-700 shrink-0 flex items-center gap-1 shadow-2xs">
                                 <span>📍</span>
                                 <span className="font-mono">{santriRoom || `Ruang Guru ${order.user?.teacher_unit || ''}`}</span>
                               </span>
                             </div>
 
-                            <div className="flex items-center gap-1.5 flex-wrap text-[11px] text-gray-600 dark:text-gray-300 pt-0.5">
-                              <span className="font-mono text-purple-700 dark:text-purple-300 font-bold bg-purple-50 dark:bg-purple-950/50 px-1.5 py-0.2 border border-purple-200 dark:border-purple-800">
+                            <div className="flex items-center gap-1.5 flex-wrap text-[11px] pt-0.5">
+                              <span className="font-mono text-purple-900 dark:text-purple-200 font-bold bg-white dark:bg-purple-900/60 px-1.5 py-0.2 border border-purple-300 dark:border-purple-700">
                                 NIY: {order.user?.niy || '-'}
                               </span>
-                              <span className="inline-flex items-center px-1.5 py-0.2 rounded-none bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-[10px] font-bold">
+                              <span className="inline-flex items-center px-1.5 py-0.2 rounded-none bg-purple-100 dark:bg-purple-900/60 text-purple-800 dark:text-purple-200 border border-purple-300 dark:border-purple-700 text-[10px] font-bold">
                                 Unit {order.user?.teacher_unit || 'Yayasan'}
                               </span>
                               {order.user?.phone && (
-                                <span className="font-mono text-gray-500">• +{order.user.phone}</span>
+                                <a
+                                  href={`https://wa.me/${order.user.phone.replace(/^0/, '62')}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="font-mono text-green-700 dark:text-green-400 font-bold hover:underline flex items-center gap-1 bg-green-50 dark:bg-green-950/40 px-1.5 py-0.2 border border-green-200 dark:border-green-800 text-[10px]"
+                                  title="Chat WhatsApp Guru"
+                                >
+                                  <MessageCircle className="w-3 h-3 text-green-600" />
+                                  <span>+{order.user.phone}</span>
+                                </a>
                               )}
                             </div>
                           </div>
@@ -1366,9 +1600,22 @@ export default function TugasKurir() {
                           {order.items && order.items.length > 0 ? (
                             order.items.map(item => (
                               <div key={item.id} className="flex justify-between items-center text-[11px]">
-                                <span className="text-gray-800 dark:text-gray-200 truncate pr-2">
-                                  <strong className="text-gray-900 dark:text-white font-bold">{item.quantity}x</strong> {item.product?.name || 'Produk'}
-                                  {item.notes && <span className="text-gray-400 italic text-[10px]"> ({item.notes})</span>}
+                                <span className="text-gray-800 dark:text-gray-200 truncate pr-2 flex items-center gap-1">
+                                  {item.product?.category && (
+                                    <span className={`text-[8.5px] font-extrabold px-1 py-0.2 rounded-none uppercase shrink-0 border ${
+                                      item.product.category.toLowerCase().includes('minum')
+                                        ? 'bg-sky-100 text-sky-800 dark:bg-sky-950/60 dark:text-sky-300 border-sky-300 dark:border-sky-800'
+                                        : item.product.category.toLowerCase().includes('snack') || item.product.category.toLowerCase().includes('camilan')
+                                        ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border-rose-300 dark:border-rose-800'
+                                        : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300 dark:border-amber-800'
+                                    }`}>
+                                      {item.product.category}
+                                    </span>
+                                  )}
+                                  <span className="truncate">
+                                    <strong className="text-gray-900 dark:text-white font-bold">{item.quantity}x</strong> {item.product?.name || 'Produk'}
+                                    {item.notes && <span className="text-gray-400 italic text-[10px]"> ({item.notes})</span>}
+                                  </span>
                                 </span>
                                 <span className="font-bold text-gray-900 dark:text-white shrink-0">
                                   Rp {formatRupiah(getItemModalTotalHpp(item))}
@@ -1552,77 +1799,94 @@ export default function TugasKurir() {
         {/* MODE 2: REKAP PER TOKO / KANTIN (CANTEEN GROUPED VIEW) */}
         {/* ======================================================== */}
         {viewMode === 'canteen' && (
-          <div className="space-y-3.5 animate-fade-in-up">
-            <div className="bg-blue-50 dark:bg-blue-950/40 p-3 rounded-2xl border border-blue-200 dark:border-blue-800 text-xs text-blue-900 dark:text-blue-300 flex items-start gap-2">
-              <Store className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
-              <div>
-                <strong>Mode Rekap Per Toko / Kantin:</strong> Menampilkan total makanan yang harus diambil di setiap toko, serta daftar <strong>siapa saja santri/pemesan</strong> yang memesan di toko tersebut.
+          <div className="space-y-2 animate-fade-in-up">
+            {/* 1-Line Compact Mode Info */}
+            <div className="bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1.5 border border-emerald-300 dark:border-emerald-800 text-[11px] text-emerald-900 dark:text-emerald-300 flex items-center justify-between gap-2 rounded-none">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <Store className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span className="truncate">
+                  <strong>Mode Rekap Per Toko:</strong> Rekapitulasi belanja & rincian varian level kepedasan per toko.
+                </span>
               </div>
+              <span className="text-[10px] font-bold uppercase tracking-wider shrink-0 text-emerald-700 dark:text-emerald-400">
+                {groupedByCanteen.length} Toko
+              </span>
             </div>
 
             {groupedByCanteen.length === 0 ? (
-              <div className="bg-white dark:bg-gray-900 rounded-2xl p-8 text-center border border-gray-200 dark:border-gray-700 shadow-xs">
-                <Store className="w-12 h-12 text-gray-300 dark:text-gray-700 mx-auto mb-2" />
-                <p className="text-gray-500 dark:text-gray-400 font-semibold text-sm">Tidak ada data toko/pesanan pada filter saat ini.</p>
+              <div className="bg-white dark:bg-gray-900 rounded-none p-6 text-center border border-gray-300 dark:border-gray-700 shadow-xs">
+                <Store className="w-10 h-10 text-gray-300 dark:text-gray-700 mx-auto mb-1.5" />
+                <p className="text-gray-500 dark:text-gray-400 font-semibold text-xs">Tidak ada data toko/pesanan pada filter saat ini.</p>
+                <p className="text-[11px] text-gray-400 mt-0.5">Coba ganti filter tanggal, toko, atau kategori di atas.</p>
               </div>
             ) : (
               groupedByCanteen.map(canteen => {
                 const isExpanded = !!expandedCanteen[canteen.canteenId];
+                const activeVariant = selectedVariantFilter[canteen.canteenId];
 
                 return (
                   <div 
                     key={canteen.canteenId}
-                    className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-xs overflow-hidden transition-all"
+                    className="bg-white dark:bg-gray-900 rounded-none border border-gray-300 dark:border-gray-700 shadow-xs overflow-hidden transition-all"
                   >
-                    {/* CANTEEN HEADER BAR */}
+                    {/* CANTEEN COMPACT HEADER BAR */}
                     <div 
                       onClick={() => toggleCanteenExpand(canteen.canteenId)}
-                      className="p-3.5 sm:p-4 cursor-pointer hover:bg-gray-50/70 dark:hover:bg-gray-800/40 transition-colors flex items-start justify-between gap-2"
+                      className="p-2 sm:p-2.5 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/40 transition-colors flex items-start justify-between gap-2"
                     >
-                      <div className="flex items-start gap-3 flex-1 min-w-0">
-                        <div className="w-10 h-10 rounded-2xl bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 flex items-center justify-center font-extrabold text-sm shrink-0 shadow-xs">
-                          <Store className="w-5 h-5" />
+                      <div className="flex items-start gap-2.5 flex-1 min-w-0">
+                        <div className="w-8 h-8 rounded-none bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 flex items-center justify-center font-bold text-xs shrink-0 border border-emerald-300 dark:border-emerald-800">
+                          <Store className="w-4 h-4" />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h3 className="font-bold text-gray-900 dark:text-white text-base leading-tight">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <h3 className="font-extrabold text-gray-900 dark:text-white text-sm leading-tight">
                               {canteen.canteenName}
                             </h3>
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200 dark:border-blue-800 capitalize">
-                              {canteen.canteenCategory || 'Kantin'}
+                            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-none bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 border border-gray-300 dark:border-gray-700 uppercase">
+                              {canteen.canteenCategory === 'kota' ? 'Kota' : 'Kauman'}
                             </span>
                             {canteen.hasPending && (
-                              <span className="px-2 py-0.2 bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 text-[10px] font-bold rounded-full">
+                              <span className="px-1.5 py-0.2 bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300 text-[9px] font-bold rounded-none border border-amber-300 dark:border-amber-800">
                                 Perlu Diambil
                               </span>
                             )}
                             {canteen.hasProcessing && (
-                              <span className="px-2 py-0.2 bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300 text-[10px] font-bold rounded-full">
+                              <span className="px-1.5 py-0.2 bg-green-100 text-green-900 dark:bg-green-950/60 dark:text-green-300 text-[9px] font-bold rounded-none border border-green-400 dark:border-green-800">
                                 Sedang Diantar
                               </span>
                             )}
                             {canteen.allCompleted && (
-                              <span className="px-2 py-0.2 bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 text-[10px] font-bold rounded-full">
+                              <span className="px-1.5 py-0.2 bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 text-[9px] font-bold rounded-none border border-gray-300 dark:border-gray-700">
                                 Selesai
                               </span>
                             )}
                           </div>
                           
-                          <p className="text-xs font-semibold text-gray-600 dark:text-gray-300 mt-1 flex items-center gap-1.5 flex-wrap">
-                            <span>🛍️ <strong>{canteen.totalItemCount} Makanan</strong></span>
+                          <p className="text-[11px] text-gray-600 dark:text-gray-300 mt-0.5 flex items-center gap-1 flex-wrap">
+                            <span>🛍️ <strong>{canteen.totalItemCount} Item</strong></span>
+                            {canteen.categoryStats?.makanan > 0 && (
+                              <span className="text-gray-500 font-medium">🍜 {canteen.categoryStats.makanan} Mkn</span>
+                            )}
+                            {canteen.categoryStats?.minuman > 0 && (
+                              <span className="text-gray-500 font-medium">🥤 {canteen.categoryStats.minuman} Mnm</span>
+                            )}
+                            {canteen.categoryStats?.camilan > 0 && (
+                              <span className="text-gray-500 font-medium">🥟 {canteen.categoryStats.camilan} Cmln</span>
+                            )}
                             <span>•</span>
-                            <span>📦 <strong>{canteen.orders.length} Pesanan</strong></span>
+                            <span>📦 <strong>{canteen.orders.length} Order</strong></span>
                             <span>•</span>
-                            <span>👥 <strong>{canteen.customers.length} Pemesan</strong></span>
+                            <span>👥 <strong>{canteen.customers.length} Santri</strong></span>
                           </p>
 
-                          <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
-                            Total Modal Belanja Toko: <strong className="text-green-600 dark:text-green-400">Rp {formatRupiah(canteen.totalCost)}</strong>
+                          <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 font-mono">
+                            Modal Belanja Toko: <strong className="text-green-700 dark:text-green-400 font-bold">Rp {formatRupiah(canteen.totalCost)}</strong>
                           </p>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-center gap-1 shrink-0">
                         {/* Print Canteen Manifest */}
                         <button
                           type="button"
@@ -1638,13 +1902,13 @@ export default function TugasKurir() {
                               mode: 'batch',
                               order: null,
                               orders: canteenOrders,
-                              title: `Rekap ${canteen.canteenName} (${canteenOrders.length} Pesanan)`
+                              title: `Rekap Toko ${canteen.canteenName} (${canteenOrders.length} Pesanan)`
                             });
                           }}
-                          className="p-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl transition-colors"
+                          className="p-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-none border border-gray-300 dark:border-gray-700 transition-colors"
                           title={`Cetak Rekap Toko ${canteen.canteenName}`}
                         >
-                          <Printer className="w-4 h-4 text-green-600 dark:text-green-400" />
+                          <Printer className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
                         </button>
 
                         {canteen.canteenPhone && (
@@ -1655,111 +1919,209 @@ export default function TugasKurir() {
                               const phone = canteen.canteenPhone.replace(/^0/, '62');
                               window.open(`https://wa.me/${phone}`, '_blank');
                             }}
-                            className="p-2 bg-green-50 hover:bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-xl transition-colors"
+                            className="p-1.5 bg-green-50 hover:bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-none border border-green-300 dark:border-green-800 transition-colors"
                             title="Hubungi Toko via WA"
                           >
-                            <Phone className="w-4 h-4" />
+                            <Phone className="w-3.5 h-3.5" />
                           </button>
                         )}
-                        <div className="p-1 text-gray-400">
-                          {isExpanded ? <ChevronDown className="w-5 h-5 text-blue-600" /> : <ChevronRight className="w-5 h-5" />}
+                        <div className="p-0.5 text-gray-400">
+                          {isExpanded ? <ChevronDown className="w-4 h-4 text-green-600" /> : <ChevronRight className="w-4 h-4" />}
                         </div>
                       </div>
                     </div>
 
                     {/* EXPANDED CONTENT: SUMMARY OF FOOD TO PICK UP + WHO ORDERED WHAT */}
                     {isExpanded && (
-                      <div className="p-3.5 sm:p-4 bg-gray-50/70 dark:bg-gray-800/40 border-t border-gray-200 dark:border-gray-700 space-y-4">
+                      <div className="p-2 sm:p-2.5 bg-gray-50/70 dark:bg-gray-800/40 border-t border-gray-300 dark:border-gray-700 space-y-2.5">
                         
-                        {/* 1. REKAP TOTAL MAKANAN DI TOKO INI */}
-                        <div className="bg-white dark:bg-gray-900 p-3.5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-xs space-y-2">
-                          <h4 className="text-xs font-bold text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                            🍽️ Total Makanan yang Harus Diambil di {canteen.canteenName}:
-                          </h4>
+                        {/* 1. REKAP TOTAL MAKANAN DI TOKO INI DENGAN RINCIAN VARIAN / LEVEL */}
+                        <div className="bg-white dark:bg-gray-900 p-2 sm:p-2.5 rounded-none border border-gray-300 dark:border-gray-700 shadow-xs space-y-1.5">
+                          <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-800 pb-1 flex-wrap gap-1">
+                            <h4 className="text-[11px] font-bold text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                              🍽️ Total Menu yang Harus Diambil di {canteen.canteenName}:
+                            </h4>
+                            <span className="text-[10px] text-gray-500 font-mono">
+                              {canteen.itemRecapList.length} Menu Berbeda
+                            </span>
+                          </div>
 
-                          <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                          <div className="divide-y divide-gray-200 dark:divide-gray-800">
                             {canteen.itemRecapList.map((item, idx) => (
-                              <div key={idx} className="py-2 first:pt-1 last:pb-0 flex items-center justify-between gap-2">
-                                <div className="flex items-center gap-2">
-                                  <span className="w-6 h-6 rounded-lg bg-blue-600 text-white text-xs font-bold flex items-center justify-center shrink-0">
-                                    {item.quantity}x
-                                  </span>
-                                  <span className="text-xs font-bold text-gray-900 dark:text-white">
-                                    {item.name}
-                                  </span>
+                              <div key={idx} className="py-2 first:pt-1 last:pb-1 space-y-1.5">
+                                {/* Main Product Row */}
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="px-2 py-0.5 bg-green-700 text-white text-xs font-mono font-black shrink-0 rounded-none">
+                                      {item.quantity}x
+                                    </span>
+                                    <div className="min-w-0">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-tight">
+                                          {item.name}
+                                        </span>
+                                        <span className="text-[9px] font-bold px-1.5 py-0.2 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-700 uppercase">
+                                          {item.category}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="text-right shrink-0">
+                                    <span className="text-xs font-black font-mono text-gray-900 dark:text-white">
+                                      Rp {formatRupiah(item.total)}
+                                    </span>
+                                  </div>
                                 </div>
-                                <span className="text-xs font-bold text-gray-900 dark:text-white">
-                                  Rp {formatRupiah(item.total)}
-                                </span>
+
+                                {/* Variant / Spicy Level Breakdown Grid / Table */}
+                                {item.variantsList && item.variantsList.length > 0 && (
+                                  <div className="pl-6 sm:pl-7">
+                                    <div className="bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 p-1.5 rounded-none space-y-1">
+                                      <div className="text-[9px] font-bold text-gray-500 uppercase tracking-wider flex items-center justify-between px-1">
+                                        <span>Rincian Varian / Level ({item.variantsList.length} Pilihan):</span>
+                                        <span className="font-mono text-gray-400">Klik varian untuk filter santri</span>
+                                      </div>
+
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1">
+                                        {item.variantsList.map((v, vIdx) => {
+                                          const badgeStyle = getVariantBadgeStyle(v.label);
+                                          const isVariantActive = activeVariant === v.label;
+
+                                          return (
+                                            <button
+                                              key={vIdx}
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setSelectedVariantFilter(prev => ({
+                                                  ...prev,
+                                                  [canteen.canteenId]: prev[canteen.canteenId] === v.label ? null : v.label
+                                                }));
+                                              }}
+                                              className={`px-1.5 py-1 text-left border rounded-none flex items-center justify-between gap-1 transition-all ${
+                                                isVariantActive 
+                                                  ? 'bg-amber-100 dark:bg-amber-950/80 border-amber-500 ring-1 ring-amber-500 font-bold' 
+                                                  : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-750 hover:border-gray-400'
+                                              }`}
+                                              title={`Klik untuk filter santri pemesan ${v.label}`}
+                                            >
+                                              <div className="flex items-center gap-1 min-w-0">
+                                                <span className="text-xs shrink-0">{badgeStyle.icon}</span>
+                                                <span className={`text-[10px] truncate ${isVariantActive ? 'text-amber-950 dark:text-amber-200 font-black' : 'text-gray-800 dark:text-gray-200'}`}>
+                                                  {v.label}
+                                                </span>
+                                              </div>
+                                              <div className="flex items-center gap-1 shrink-0">
+                                                <span className={`px-1 py-0.2 text-[10px] font-mono font-black rounded-none ${
+                                                  isVariantActive ? 'bg-amber-500 text-gray-950' : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white'
+                                                }`}>
+                                                  {v.quantity}x
+                                                </span>
+                                              </div>
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             ))}
                           </div>
 
-                          <div className="pt-2.5 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between text-xs font-bold">
-                            <span className="text-gray-600 dark:text-gray-400">Total Nilai Produk:</span>
-                            <span className="text-green-600 dark:text-green-400 text-sm">
+                          <div className="pt-2 border-t border-gray-200 dark:border-gray-800 flex items-center justify-between text-xs font-bold">
+                            <span className="text-gray-600 dark:text-gray-400">Total Modal Belanja Toko:</span>
+                            <span className="text-green-700 dark:text-green-400 text-sm font-mono font-black">
                               Rp {formatRupiah(canteen.totalCost)}
                             </span>
                           </div>
                         </div>
 
                         {/* 2. SIAPA AJA YANG PESAN DI TOKO INI (DIPISAHKAN PUTRA & PUTRI) */}
-                        <div className="space-y-4 pt-1">
-                          <div className="flex items-center justify-between flex-wrap gap-2">
-                            <h4 className="text-xs font-bold text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                        <div className="space-y-2 pt-0.5">
+                          {/* Active Variant Filter Notification Bar */}
+                          {activeVariant && (
+                            <div className="bg-amber-400 text-gray-950 px-2.5 py-1 text-xs font-bold flex items-center justify-between rounded-none shadow-xs">
+                              <span className="flex items-center gap-1.5 truncate">
+                                <span>🔍</span>
+                                <span>Memfilter santri yang pesan: <strong>{activeVariant}</strong></span>
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedVariantFilter(prev => ({ ...prev, [canteen.canteenId]: null }))}
+                                className="underline text-[10px] font-black hover:text-white shrink-0 ml-2"
+                              >
+                                Tampilkan Semua
+                              </button>
+                            </div>
+                          )}
+
+                          <div className="flex items-center justify-between flex-wrap gap-1">
+                            <h4 className="text-[11px] font-bold text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
                               👥 Siapa Aja yang Pesan ({canteen.customers.length} Pemesan):
                             </h4>
-                            <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] font-bold">
-                              <span className="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300">
+                            <div className="flex items-center gap-1 text-[10px] font-bold flex-wrap">
+                              {canteen.customersGuru && canteen.customersGuru.length > 0 && (
+                                <span className="px-1.5 py-0.2 rounded-none bg-purple-100 dark:bg-purple-900/40 text-purple-900 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                                  🎓 Guru: {canteen.customersGuru.length}
+                                </span>
+                              )}
+                              <span className="px-1.5 py-0.2 rounded-none bg-blue-100 dark:bg-blue-900/40 text-blue-900 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
                                 👦 Putra: {canteen.customersPutra.length}
                               </span>
-                              <span className="px-2 py-0.5 rounded-full bg-pink-100 dark:bg-pink-900/40 text-pink-800 dark:text-pink-300">
+                              <span className="px-1.5 py-0.2 rounded-none bg-pink-100 dark:bg-pink-900/40 text-pink-900 dark:text-pink-300 border border-pink-200 dark:border-pink-800">
                                 👧 Putri: {canteen.customersPutri.length}
                               </span>
                             </div>
                           </div>
 
-                          {/* KELOMPOK 1: SANTRI PUTRA (LAKI-LAKI) */}
-                          {canteen.customersPutra.length > 0 && (
-                            <div className="space-y-2.5">
-                              <div className="flex items-center justify-between bg-blue-50/80 dark:bg-blue-950/40 px-3 py-1.5 rounded-xl border border-blue-200 dark:border-blue-800">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm">👦</span>
-                                  <span className="text-xs font-bold text-blue-900 dark:text-blue-300">
-                                    Santri Putra (Laki-laki)
+                          {/* KELOMPOK 0: GURU / TENAGA PENDIDIK (PRIORITAS ANTAR LANGSUNG) */}
+                          {canteen.customersGuru && canteen.customersGuru.length > 0 && (
+                            <div className="space-y-1.5">
+                              <div className="flex items-center justify-between bg-purple-100/70 dark:bg-purple-950/60 px-2 py-1 rounded-none border border-purple-300 dark:border-purple-800">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-xs">🎓</span>
+                                  <span className="text-[11px] font-black text-purple-950 dark:text-purple-200 flex items-center gap-1.5">
+                                    <span>Guru & Tenaga Pendidik</span>
+                                    <span className="bg-purple-700 text-white text-[9px] px-1 py-0.2 rounded-none uppercase font-bold tracking-tight">
+                                      ⚡ Prioritas Meja
+                                    </span>
                                   </span>
                                 </div>
-                                <span className="text-[10px] font-bold px-2 py-0.2 rounded-full bg-blue-200/70 dark:bg-blue-900 text-blue-800 dark:text-blue-200">
-                                  {canteen.customersPutra.length} Santri
+                                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-none bg-purple-200 dark:bg-purple-900 text-purple-950 dark:text-purple-200 font-mono">
+                                  {canteen.customersGuru.length} Guru / Staff
                                 </span>
                               </div>
 
-                              <div className="space-y-2.5">
-                                {canteen.customersPutra.map(cust => (
+                              <div className="space-y-1.5">
+                                {canteen.customersGuru.map(cust => (
                                   <div 
                                     key={cust.custKey}
-                                    className="bg-white dark:bg-gray-900 rounded-xl p-3 border border-blue-100 dark:border-blue-900/40 shadow-xs space-y-2"
+                                    className="bg-purple-50/20 dark:bg-gray-900 rounded-none p-2 border-2 border-purple-300 dark:border-purple-800/80 shadow-xs space-y-1.5"
                                   >
                                     {/* Customer Header */}
-                                    <div className="flex items-start justify-between gap-2">
-                                      <div className="flex items-start gap-2.5 min-w-0">
-                                        <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300 flex items-center justify-center font-bold text-xs shrink-0">
-                                          👦
+                                    <div className="flex items-start justify-between gap-1.5">
+                                      <div className="flex items-start gap-2 min-w-0">
+                                        <div className="w-6 h-6 rounded-none bg-purple-200 text-purple-900 dark:bg-purple-900/60 dark:text-purple-200 flex items-center justify-center font-bold text-xs shrink-0 border border-purple-300 dark:border-purple-700">
+                                          🎓
                                         </div>
                                         <div className="min-w-0">
-                                          <div className="flex items-center gap-1.5 flex-wrap">
-                                            <h5 className="font-bold text-gray-900 dark:text-white text-sm">
+                                          <div className="flex items-center gap-1 flex-wrap">
+                                            <h5 className="font-extrabold text-gray-900 dark:text-white text-xs">
                                               {cust.santriName}
                                             </h5>
-                                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
-                                              Putra
+                                            <span className="text-[9px] font-bold px-1 py-0.2 rounded-none bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300 border border-purple-200">
+                                              Unit {cust.teacherUnit || 'Yayasan'}
                                             </span>
-                                            <span className="text-[10px] text-gray-500 font-medium bg-gray-100 dark:bg-gray-800 px-1.5 py-0.2 rounded">
-                                              Wali: {cust.waliName}
-                                            </span>
+                                            {cust.niy && (
+                                              <span className="text-[9px] text-purple-800 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 px-1 py-0.2 rounded-none border border-purple-200 dark:border-purple-800 font-mono">
+                                                NIY: {cust.niy}
+                                              </span>
+                                            )}
                                           </div>
-                                          <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
-                                            🏠 {cust.santriRoom} {cust.santriClass ? `• Kelas ${cust.santriClass}/${cust.santriLevel}` : ''}
+                                          <p className="text-[10px] text-purple-950 dark:text-purple-200 font-bold mt-0.5 flex items-center gap-1">
+                                            <span>📍</span>
+                                            <span>{cust.santriRoom}</span>
                                           </p>
                                         </div>
                                       </div>
@@ -1771,29 +2133,30 @@ export default function TugasKurir() {
                                             const phone = cust.phone.replace(/^0/, '62');
                                             window.open(`https://wa.me/${phone}`, '_blank');
                                           }}
-                                          className="text-green-600 hover:text-green-700 bg-green-50 hover:bg-green-100 dark:bg-green-900/30 p-1.5 rounded-full shrink-0"
-                                          title="Hubungi Wali Santri"
+                                          className="text-green-600 hover:text-green-700 bg-green-50 hover:bg-green-100 dark:bg-green-900/30 p-1 rounded-none border border-green-300 dark:border-green-800 shrink-0"
+                                          title="Hubungi Guru"
                                         >
-                                          <MessageCircle className="w-3.5 h-3.5" />
+                                          <MessageCircle className="w-3 h-3" />
                                         </button>
                                       )}
                                     </div>
 
                                     {/* Customer's items from this store */}
-                                    <div className="bg-gray-50 dark:bg-gray-800/60 p-2.5 rounded-lg space-y-1.5 border border-gray-200 dark:border-gray-750">
+                                    <div className="bg-purple-50/40 dark:bg-gray-800/60 p-1.5 rounded-none space-y-1 border border-purple-100 dark:border-gray-700 text-xs">
                                       {cust.items.map((it, idx) => (
-                                        <div key={idx} className="flex justify-between items-start text-xs">
-                                          <div>
-                                            <span className="font-semibold text-gray-800 dark:text-gray-200">
+                                        <div key={idx} className="flex justify-between items-start gap-1">
+                                          <div className="min-w-0">
+                                            <span className="font-bold text-gray-900 dark:text-white text-[11px]">
                                               {it.quantity}x {it.product?.name || 'Makanan'}
                                             </span>
                                             {it.notes && (
-                                              <p className="text-[10px] text-amber-700 dark:text-amber-300">
-                                                📝 {it.notes}
+                                              <p className="text-[10px] text-amber-700 dark:text-amber-400 font-semibold flex items-center gap-1 mt-0.5">
+                                                <span>📝</span>
+                                                <span>{it.notes}</span>
                                               </p>
                                             )}
                                           </div>
-                                          <span className="font-medium text-gray-900 dark:text-white shrink-0 ml-2">
+                                          <span className="font-mono font-bold text-gray-900 dark:text-white shrink-0 text-[11px]">
                                             Rp {formatRupiah(it.subtotal || it.price || 0)}
                                           </span>
                                         </div>
@@ -1801,17 +2164,17 @@ export default function TugasKurir() {
                                     </div>
 
                                     {/* Order IDs and Actions */}
-                                    <div className="flex items-center justify-between pt-1 border-t border-gray-200 dark:border-gray-700 text-xs flex-wrap gap-2">
-                                      <div className="flex items-center gap-1.5 flex-wrap">
-                                        <span className="text-[11px] text-gray-500 font-medium">Order:</span>
+                                    <div className="flex items-center justify-between pt-1 border-t border-purple-200 dark:border-gray-700 text-xs flex-wrap gap-1">
+                                      <div className="flex items-center gap-1 flex-wrap">
+                                        <span className="text-[10px] text-gray-500 font-medium">Order:</span>
                                         {cust.orders.map(o => (
-                                          <span key={o.id} className="font-bold text-gray-800 dark:text-gray-200 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded text-[11px]">
+                                          <span key={o.id} className="font-bold text-gray-800 dark:text-gray-200 bg-gray-100 dark:bg-gray-800 px-1 py-0.2 rounded-none text-[10px] font-mono">
                                             #{o.id} ({o.status})
                                           </span>
                                         ))}
                                       </div>
 
-                                      <div className="flex items-center gap-1.5">
+                                      <div className="flex items-center gap-1">
                                         {cust.orders.map(o => (
                                           <React.Fragment key={o.id}>
                                             {o.status === 'pending' && (!o.courier_id || o.courier_id !== currentUser?.id) && (
@@ -1819,9 +2182,9 @@ export default function TugasKurir() {
                                                 type="button"
                                                 onClick={() => takeOrderMutation.mutate(o.id)}
                                                 disabled={takeOrderMutation.isPending}
-                                                className="px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-xs"
+                                                className="px-1.5 py-0.5 bg-green-700 hover:bg-green-800 text-white rounded-none text-[10px] font-bold flex items-center gap-1 shadow-xs"
                                               >
-                                                <CheckCircle className="w-3 h-3" /> Ambil #{o.id}
+                                                <CheckCircle className="w-2.5 h-2.5" /> Ambil #{o.id}
                                               </button>
                                             )}
                                             {o.status === 'processing' && o.courier_id === currentUser?.id && (
@@ -1831,9 +2194,137 @@ export default function TugasKurir() {
                                                   setSelectedOrder(o);
                                                   setUploadType('delivery');
                                                 }}
-                                                className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-xs"
+                                                className="px-1.5 py-0.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-none text-[10px] font-bold flex items-center gap-1 shadow-xs"
                                               >
-                                                <Camera className="w-3 h-3" /> + Bukti #{o.id}
+                                                <Camera className="w-2.5 h-2.5" /> + Bukti #{o.id}
+                                              </button>
+                                            )}
+                                          </React.Fragment>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* KELOMPOK 1: SANTRI PUTRA (LAKI-LAKI) */}
+                          {canteen.customersPutra.length > 0 && (
+                            <div className="space-y-1.5">
+                              <div className="flex items-center justify-between bg-blue-50 dark:bg-blue-950/40 px-2 py-1 rounded-none border border-blue-200 dark:border-blue-800">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-xs">👦</span>
+                                  <span className="text-[11px] font-bold text-blue-900 dark:text-blue-300">
+                                    Santri Putra (Laki-laki)
+                                  </span>
+                                </div>
+                                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-none bg-blue-200 dark:bg-blue-900 text-blue-900 dark:text-blue-200 font-mono">
+                                  {canteen.customersPutra.length} Santri
+                                </span>
+                              </div>
+
+                              <div className="space-y-1.5">
+                                {canteen.customersPutra.map(cust => (
+                                  <div 
+                                    key={cust.custKey}
+                                    className="bg-white dark:bg-gray-900 rounded-none p-2 border border-blue-200 dark:border-blue-900/40 shadow-xs space-y-1.5"
+                                  >
+                                    {/* Customer Header */}
+                                    <div className="flex items-start justify-between gap-1.5">
+                                      <div className="flex items-start gap-2 min-w-0">
+                                        <div className="w-6 h-6 rounded-none bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300 flex items-center justify-center font-bold text-xs shrink-0 border border-blue-300 dark:border-blue-800">
+                                          👦
+                                        </div>
+                                        <div className="min-w-0">
+                                          <div className="flex items-center gap-1 flex-wrap">
+                                            <h5 className="font-extrabold text-gray-900 dark:text-white text-xs">
+                                              {cust.santriName}
+                                            </h5>
+                                            <span className="text-[9px] font-bold px-1 py-0.2 rounded-none bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200">
+                                              Putra
+                                            </span>
+                                            <span className="text-[9px] text-gray-500 bg-gray-100 dark:bg-gray-800 px-1 py-0.2 rounded-none">
+                                              Wali: {cust.waliName}
+                                            </span>
+                                          </div>
+                                          <p className="text-[10px] text-gray-600 dark:text-gray-400 mt-0.5">
+                                            🏠 {cust.santriRoom} {cust.santriClass ? `• Kelas ${cust.santriClass}` : ''}
+                                          </p>
+                                        </div>
+                                      </div>
+
+                                      {cust.phone && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const phone = cust.phone.replace(/^0/, '62');
+                                            window.open(`https://wa.me/${phone}`, '_blank');
+                                          }}
+                                          className="text-green-600 hover:text-green-700 bg-green-50 hover:bg-green-100 dark:bg-green-900/30 p-1 rounded-none border border-green-300 dark:border-green-800 shrink-0"
+                                          title="Hubungi Wali Santri"
+                                        >
+                                          <MessageCircle className="w-3 h-3" />
+                                        </button>
+                                      )}
+                                    </div>
+
+                                    {/* Customer's items from this store */}
+                                    <div className="bg-gray-50 dark:bg-gray-800/60 p-1.5 rounded-none space-y-1 border border-gray-200 dark:border-gray-700 text-xs">
+                                      {cust.items.map((it, idx) => (
+                                        <div key={idx} className="flex justify-between items-start gap-1">
+                                          <div className="min-w-0">
+                                            <span className="font-bold text-gray-900 dark:text-white text-[11px]">
+                                              {it.quantity}x {it.product?.name || 'Makanan'}
+                                            </span>
+                                            {it.notes && (
+                                              <p className="text-[10px] text-amber-700 dark:text-amber-400 font-semibold flex items-center gap-1 mt-0.5">
+                                                <span>📝</span>
+                                                <span>{it.notes}</span>
+                                              </p>
+                                            )}
+                                          </div>
+                                          <span className="font-mono font-bold text-gray-900 dark:text-white shrink-0 text-[11px]">
+                                            Rp {formatRupiah(it.subtotal || it.price || 0)}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+
+                                    {/* Order IDs and Actions */}
+                                    <div className="flex items-center justify-between pt-1 border-t border-gray-200 dark:border-gray-700 text-xs flex-wrap gap-1">
+                                      <div className="flex items-center gap-1 flex-wrap">
+                                        <span className="text-[10px] text-gray-500 font-medium">Order:</span>
+                                        {cust.orders.map(o => (
+                                          <span key={o.id} className="font-bold text-gray-800 dark:text-gray-200 bg-gray-100 dark:bg-gray-800 px-1 py-0.2 rounded-none text-[10px] font-mono">
+                                            #{o.id} ({o.status})
+                                          </span>
+                                        ))}
+                                      </div>
+
+                                      <div className="flex items-center gap-1">
+                                        {cust.orders.map(o => (
+                                          <React.Fragment key={o.id}>
+                                            {o.status === 'pending' && (!o.courier_id || o.courier_id !== currentUser?.id) && (
+                                              <button
+                                                type="button"
+                                                onClick={() => takeOrderMutation.mutate(o.id)}
+                                                disabled={takeOrderMutation.isPending}
+                                                className="px-1.5 py-0.5 bg-green-700 hover:bg-green-800 text-white rounded-none text-[10px] font-bold flex items-center gap-1 shadow-xs"
+                                              >
+                                                <CheckCircle className="w-2.5 h-2.5" /> Ambil #{o.id}
+                                              </button>
+                                            )}
+                                            {o.status === 'processing' && o.courier_id === currentUser?.id && (
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setSelectedOrder(o);
+                                                  setUploadType('delivery');
+                                                }}
+                                                className="px-1.5 py-0.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-none text-[10px] font-bold flex items-center gap-1 shadow-xs"
+                                              >
+                                                <Camera className="w-2.5 h-2.5" /> + Bukti #{o.id}
                                               </button>
                                             )}
                                           </React.Fragment>
@@ -1848,45 +2339,45 @@ export default function TugasKurir() {
 
                           {/* KELOMPOK 2: SANTRI PUTRI (PEREMPUAN) */}
                           {canteen.customersPutri.length > 0 && (
-                            <div className="space-y-2.5">
-                              <div className="flex items-center justify-between bg-pink-50/80 dark:bg-pink-950/40 px-3 py-1.5 rounded-xl border border-pink-200 dark:border-pink-800">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm">👧</span>
-                                  <span className="text-xs font-bold text-pink-900 dark:text-pink-300">
+                            <div className="space-y-1.5">
+                              <div className="flex items-center justify-between bg-pink-50 dark:bg-pink-950/40 px-2 py-1 rounded-none border border-pink-200 dark:border-pink-800">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-xs">👧</span>
+                                  <span className="text-[11px] font-bold text-pink-900 dark:text-pink-300">
                                     Santri Putri (Perempuan)
                                   </span>
                                 </div>
-                                <span className="text-[10px] font-bold px-2 py-0.2 rounded-full bg-pink-200/70 dark:bg-pink-900 text-pink-800 dark:text-pink-200">
+                                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-none bg-pink-200 dark:bg-pink-900 text-pink-900 dark:text-pink-200 font-mono">
                                   {canteen.customersPutri.length} Santri
                                 </span>
                               </div>
 
-                              <div className="space-y-2.5">
+                              <div className="space-y-1.5">
                                 {canteen.customersPutri.map(cust => (
                                   <div 
                                     key={cust.custKey}
-                                    className="bg-white dark:bg-gray-900 rounded-xl p-3 border border-pink-100 dark:border-pink-900/40 shadow-xs space-y-2"
+                                    className="bg-white dark:bg-gray-900 rounded-none p-2 border border-pink-200 dark:border-pink-900/40 shadow-xs space-y-1.5"
                                   >
                                     {/* Customer Header */}
-                                    <div className="flex items-start justify-between gap-2">
-                                      <div className="flex items-start gap-2.5 min-w-0">
-                                        <div className="w-7 h-7 rounded-lg bg-pink-100 text-pink-700 dark:bg-pink-900/50 dark:text-pink-300 flex items-center justify-center font-bold text-xs shrink-0">
+                                    <div className="flex items-start justify-between gap-1.5">
+                                      <div className="flex items-start gap-2 min-w-0">
+                                        <div className="w-6 h-6 rounded-none bg-pink-100 text-pink-800 dark:bg-pink-900/50 dark:text-pink-300 flex items-center justify-center font-bold text-xs shrink-0 border border-pink-300 dark:border-pink-800">
                                           👧
                                         </div>
                                         <div className="min-w-0">
-                                          <div className="flex items-center gap-1.5 flex-wrap">
-                                            <h5 className="font-bold text-gray-900 dark:text-white text-sm">
+                                          <div className="flex items-center gap-1 flex-wrap">
+                                            <h5 className="font-extrabold text-gray-900 dark:text-white text-xs">
                                               {cust.santriName}
                                             </h5>
-                                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-pink-50 text-pink-700 dark:bg-pink-900/30 dark:text-pink-300">
+                                            <span className="text-[9px] font-bold px-1 py-0.2 rounded-none bg-pink-50 text-pink-700 dark:bg-pink-900/30 dark:text-pink-300 border border-pink-200">
                                               Putri
                                             </span>
-                                            <span className="text-[10px] text-gray-500 font-medium bg-gray-100 dark:bg-gray-800 px-1.5 py-0.2 rounded">
+                                            <span className="text-[9px] text-gray-500 bg-gray-100 dark:bg-gray-800 px-1 py-0.2 rounded-none">
                                               Wali: {cust.waliName}
                                             </span>
                                           </div>
-                                          <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
-                                            🏠 {cust.santriRoom} {cust.santriClass ? `• Kelas ${cust.santriClass}/${cust.santriLevel}` : ''}
+                                          <p className="text-[10px] text-gray-600 dark:text-gray-400 mt-0.5">
+                                            🏠 {cust.santriRoom} {cust.santriClass ? `• Kelas ${cust.santriClass}` : ''}
                                           </p>
                                         </div>
                                       </div>
@@ -1898,29 +2389,30 @@ export default function TugasKurir() {
                                             const phone = cust.phone.replace(/^0/, '62');
                                             window.open(`https://wa.me/${phone}`, '_blank');
                                           }}
-                                          className="text-green-600 hover:text-green-700 bg-green-50 hover:bg-green-100 dark:bg-green-900/30 p-1.5 rounded-full shrink-0"
+                                          className="text-green-600 hover:text-green-700 bg-green-50 hover:bg-green-100 dark:bg-green-900/30 p-1 rounded-none border border-green-300 dark:border-green-800 shrink-0"
                                           title="Hubungi Wali Santri"
                                         >
-                                          <MessageCircle className="w-3.5 h-3.5" />
+                                          <MessageCircle className="w-3 h-3" />
                                         </button>
                                       )}
                                     </div>
 
                                     {/* Customer's items from this store */}
-                                    <div className="bg-gray-50 dark:bg-gray-800/60 p-2.5 rounded-lg space-y-1.5 border border-gray-200 dark:border-gray-750">
+                                    <div className="bg-gray-50 dark:bg-gray-800/60 p-1.5 rounded-none space-y-1 border border-gray-200 dark:border-gray-700 text-xs">
                                       {cust.items.map((it, idx) => (
-                                        <div key={idx} className="flex justify-between items-start text-xs">
-                                          <div>
-                                            <span className="font-semibold text-gray-800 dark:text-gray-200">
+                                        <div key={idx} className="flex justify-between items-start gap-1">
+                                          <div className="min-w-0">
+                                            <span className="font-bold text-gray-900 dark:text-white text-[11px]">
                                               {it.quantity}x {it.product?.name || 'Makanan'}
                                             </span>
                                             {it.notes && (
-                                              <p className="text-[10px] text-amber-700 dark:text-amber-300">
-                                                📝 {it.notes}
+                                              <p className="text-[10px] text-amber-700 dark:text-amber-400 font-semibold flex items-center gap-1 mt-0.5">
+                                                <span>📝</span>
+                                                <span>{it.notes}</span>
                                               </p>
                                             )}
                                           </div>
-                                          <span className="font-medium text-gray-900 dark:text-white shrink-0 ml-2">
+                                          <span className="font-mono font-bold text-gray-900 dark:text-white shrink-0 text-[11px]">
                                             Rp {formatRupiah(it.subtotal || it.price || 0)}
                                           </span>
                                         </div>
@@ -1928,17 +2420,17 @@ export default function TugasKurir() {
                                     </div>
 
                                     {/* Order IDs and Actions */}
-                                    <div className="flex items-center justify-between pt-1 border-t border-gray-200 dark:border-gray-700 text-xs flex-wrap gap-2">
-                                      <div className="flex items-center gap-1.5 flex-wrap">
-                                        <span className="text-[11px] text-gray-500 font-medium">Order:</span>
+                                    <div className="flex items-center justify-between pt-1 border-t border-gray-200 dark:border-gray-700 text-xs flex-wrap gap-1">
+                                      <div className="flex items-center gap-1 flex-wrap">
+                                        <span className="text-[10px] text-gray-500 font-medium">Order:</span>
                                         {cust.orders.map(o => (
-                                          <span key={o.id} className="font-bold text-gray-800 dark:text-gray-200 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded text-[11px]">
+                                          <span key={o.id} className="font-bold text-gray-800 dark:text-gray-200 bg-gray-100 dark:bg-gray-800 px-1 py-0.2 rounded-none text-[10px] font-mono">
                                             #{o.id} ({o.status})
                                           </span>
                                         ))}
                                       </div>
 
-                                      <div className="flex items-center gap-1.5">
+                                      <div className="flex items-center gap-1">
                                         {cust.orders.map(o => (
                                           <React.Fragment key={o.id}>
                                             {o.status === 'pending' && (!o.courier_id || o.courier_id !== currentUser?.id) && (
@@ -1946,9 +2438,9 @@ export default function TugasKurir() {
                                                 type="button"
                                                 onClick={() => takeOrderMutation.mutate(o.id)}
                                                 disabled={takeOrderMutation.isPending}
-                                                className="px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-xs"
+                                                className="px-1.5 py-0.5 bg-green-700 hover:bg-green-800 text-white rounded-none text-[10px] font-bold flex items-center gap-1 shadow-xs"
                                               >
-                                                <CheckCircle className="w-3 h-3" /> Ambil #{o.id}
+                                                <CheckCircle className="w-2.5 h-2.5" /> Ambil #{o.id}
                                               </button>
                                             )}
                                             {o.status === 'processing' && o.courier_id === currentUser?.id && (
@@ -1958,9 +2450,9 @@ export default function TugasKurir() {
                                                   setSelectedOrder(o);
                                                   setUploadType('delivery');
                                                 }}
-                                                className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-xs"
+                                                className="px-1.5 py-0.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-none text-[10px] font-bold flex items-center gap-1 shadow-xs"
                                               >
-                                                <Camera className="w-3 h-3" /> + Bukti #{o.id}
+                                                <Camera className="w-2.5 h-2.5" /> + Bukti #{o.id}
                                               </button>
                                             )}
                                           </React.Fragment>
@@ -1974,8 +2466,8 @@ export default function TugasKurir() {
                           )}
 
                           {canteen.customers.length === 0 && (
-                            <div className="text-center py-4 text-xs text-gray-500">
-                              Belum ada pemesan di toko ini.
+                            <div className="text-center py-3 text-xs text-gray-500 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700">
+                              {activeVariant ? `Tidak ada santri yang memesan varian "${activeVariant}".` : 'Belum ada pemesan di toko ini.'}
                             </div>
                           )}
                         </div>
@@ -1988,6 +2480,8 @@ export default function TugasKurir() {
             )}
           </div>
         )}
+        </>
+        )}
 
 
       </div>
@@ -1996,26 +2490,26 @@ export default function TugasKurir() {
       {/* UPLOAD PROOF MODAL (RECEIPT / DELIVERY PROOF) */}
       {/* ======================================================== */}
       {selectedOrder && createPortal(
-        <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 shadow-2xl my-auto">
-            <div className="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
-              <h3 className="text-base font-bold text-gray-900 dark:text-white">
+        <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 overflow-y-auto">
+          <div className="bg-white dark:bg-gray-900 rounded-none w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 shadow-2xl my-auto border border-gray-300 dark:border-gray-700">
+            <div className="flex justify-between items-center p-3 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-sm font-bold text-gray-900 dark:text-white">
                 Upload Foto Bukti #{selectedOrder.id}
               </h3>
-              <button onClick={handleCloseModal} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-                <X className="w-6 h-6" />
+              <button onClick={handleCloseModal} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1">
+                <X className="w-5 h-5" />
               </button>
             </div>
             
-            <div className="p-4 sm:p-5 space-y-4">
+            <div className="p-3 sm:p-4 space-y-3">
               {/* Type Switcher */}
-              <div className="grid grid-cols-2 gap-2 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl">
+              <div className="grid grid-cols-2 gap-1.5 bg-gray-100 dark:bg-gray-800 p-0.5 rounded-none border border-gray-200 dark:border-gray-700">
                 <button
                   type="button"
                   onClick={() => setUploadType('purchase')}
-                  className={`py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1 ${
+                  className={`py-1.5 text-xs font-bold rounded-none transition-all flex items-center justify-center gap-1 ${
                     uploadType === 'purchase' 
-                      ? 'bg-purple-600 text-white shadow-xs' 
+                      ? 'bg-purple-700 text-white shadow-xs' 
                       : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
                   }`}
                 >
@@ -2024,9 +2518,9 @@ export default function TugasKurir() {
                 <button
                   type="button"
                   onClick={() => setUploadType('delivery')}
-                  className={`py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1 ${
+                  className={`py-1.5 text-xs font-bold rounded-none transition-all flex items-center justify-center gap-1 ${
                     uploadType === 'delivery' 
-                      ? 'bg-blue-600 text-white shadow-xs' 
+                      ? 'bg-emerald-700 text-white shadow-xs' 
                       : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
                   }`}
                 >
@@ -2035,7 +2529,7 @@ export default function TugasKurir() {
               </div>
 
               <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
-                Upload <span className="font-bold text-gray-900 dark:text-white">{uploadType === 'delivery' ? 'Bukti Serah Terima (Antar Santri)' : 'Struk Pembelian Kantin'}</span> untuk <span className="font-bold text-green-600 dark:text-green-400">{selectedOrder.user?.santri_name || selectedOrder.user?.name}</span> ({selectedOrder.user?.santri_room || 'Asrama'}).
+                Upload <span className="font-bold text-gray-900 dark:text-white">{uploadType === 'delivery' ? 'Bukti Serah Terima' : 'Struk Pembelian'}</span> untuk <span className="font-bold text-green-700 dark:text-green-400">{checkIsTeacherOrder(selectedOrder) ? (selectedOrder.user?.name || 'Guru') : (selectedOrder.user?.santri_name || selectedOrder.user?.name)}</span> ({checkIsTeacherOrder(selectedOrder) ? (selectedOrder.delivery_location || `Ruang Guru ${selectedOrder.user?.teacher_unit || ''}`) : (selectedOrder.user?.santri_room || 'Asrama')}).
               </p>
 
               {/* CURRENTLY SAVED PHOTOS FOR THIS TYPE */}
@@ -2048,22 +2542,22 @@ export default function TugasKurir() {
                 if (currentPhotos.length === 0) return null;
 
                 return (
-                  <div className="bg-gray-50 dark:bg-gray-800/60 p-3 rounded-xl border border-gray-200 dark:border-gray-700 space-y-2">
+                  <div className="bg-gray-50 dark:bg-gray-800/60 p-2.5 rounded-none border border-gray-200 dark:border-gray-700 space-y-1.5">
                     <span className="text-xs font-bold text-gray-700 dark:text-gray-300">
                       Berkas Tersimpan ({currentPhotos.length}):
                     </span>
-                    <div className="grid grid-cols-3 gap-2 max-h-36 overflow-y-auto">
+                    <div className="grid grid-cols-3 gap-1.5 max-h-36 overflow-y-auto">
                       {currentPhotos.map((path, idx) => {
                         const fileType = getFileType(path);
                         const isImg = fileType === 'image';
 
                         return (
-                          <div key={idx} className="relative aspect-square rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600 bg-black/10 flex items-center justify-center group">
+                          <div key={idx} className="relative aspect-square rounded-none overflow-hidden border border-gray-300 dark:border-gray-600 bg-black/10 flex items-center justify-center group">
                             {isImg ? (
                               <img src={getStorageUrl(path)} alt={`Saved ${idx + 1}`} className="w-full h-full object-cover" />
                             ) : (
                               <div className="flex flex-col items-center justify-center p-1 text-center text-gray-600 dark:text-gray-300">
-                                <FileText className="w-6 h-6" />
+                                <FileText className="w-5 h-5" />
                                 <span className="text-[9px] font-mono mt-0.5 uppercase truncate max-w-full px-1">{fileType}</span>
                               </div>
                             )}
@@ -2074,7 +2568,7 @@ export default function TugasKurir() {
                                   deleteProofMutation.mutate({ id: selectedOrder.id, type: currentField, path });
                                 }
                               }}
-                              className="absolute top-1 right-1 bg-red-600 hover:bg-red-700 text-white p-1 rounded-full shadow-md transition-transform active:scale-95 z-10"
+                              className="absolute top-1 right-1 bg-red-600 hover:bg-red-700 text-white p-1 rounded-none shadow-md transition-transform active:scale-95 z-10"
                               title="Hapus berkas ini"
                             >
                               <Trash2 className="w-3 h-3" />
@@ -2088,54 +2582,49 @@ export default function TugasKurir() {
               })()}
               
               {/* NEW PREVIEWS */}
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {photoFiles.length > 0 && (
-                  <div className="border-2 border-dashed border-green-500 bg-green-50/50 dark:bg-green-900/10 rounded-xl p-3">
-                    <p className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">
+                  <div className="border border-dashed border-green-500 bg-green-50/50 dark:bg-green-900/10 rounded-none p-2.5">
+                    <p className="text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">
                       Berkas Baru Dipilih ({photoFiles.length}):
                     </p>
-                    <div className="grid grid-cols-2 gap-2.5 max-h-48 overflow-y-auto pr-1">
+                    <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
                       {photoFiles.map((file, idx) => {
                         const isImg = isImageFile(file);
                         const isPdf = isPdfFile(file);
                         const isHeif = isHeifFile(file);
 
                         return (
-                          <div key={idx} className="relative rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2 flex flex-col justify-between group shadow-xs">
+                          <div key={idx} className="relative rounded-none overflow-hidden border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-1.5 flex flex-col justify-between group shadow-xs">
                             {isImg ? (
-                              <div className="aspect-video w-full rounded-lg overflow-hidden bg-black/5 mb-1.5">
+                              <div className="aspect-video w-full rounded-none overflow-hidden bg-black/5 mb-1">
                                 <img src={URL.createObjectURL(file)} alt={`Preview ${idx + 1}`} className="w-full h-full object-cover" />
                               </div>
                             ) : (
-                              <div className="aspect-video w-full rounded-lg bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/40 flex flex-col items-center justify-center text-blue-600 dark:text-blue-400 mb-1.5">
-                                <FileText className="w-6 h-6" />
+                              <div className="aspect-video w-full rounded-none bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/40 flex flex-col items-center justify-center text-blue-600 dark:text-blue-400 mb-1">
+                                <FileText className="w-5 h-5" />
                                 <span className="text-[10px] font-mono font-bold mt-0.5 uppercase">
                                   {isPdf ? 'PDF' : isHeif ? 'HEIF' : file.name.split('.').pop() || 'FILE'}
                                 </span>
                               </div>
                             )}
 
-                            <div className="pr-6">
+                            <div className="pr-5">
                               <p className="text-xs font-semibold text-gray-800 dark:text-gray-200 truncate" title={file.name}>
                                 {file.name}
                               </p>
-                              <p className="text-[10px] text-gray-400 flex items-center gap-1">
-                                <span>{formatFileSize(file.size)}</span>
-                                {file.originalSize && file.originalSize > file.size && (
-                                  <span className="text-blue-600 dark:text-blue-400 font-bold">
-                                    (Hemat {Math.round((1 - file.size / file.originalSize) * 100)}%)
-                                  </span>
-                                )}
+                              <p className="text-[10px] text-gray-400 font-mono">
+                                {formatFileSize(file.size)}
                               </p>
                             </div>
 
                             <button
                               type="button"
                               onClick={(e) => handleRemoveNewPhoto(idx, e)}
-                              className="absolute top-1.5 right-1.5 bg-red-600 hover:bg-red-700 text-white p-1 rounded-full shadow-md transition-transform active:scale-95 z-10"
+                              className="absolute top-1 right-1 bg-red-600 hover:bg-red-700 text-white p-1 rounded-none shadow-md transition-transform active:scale-95 z-10"
                               title="Hapus"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              <Trash2 className="w-3 h-3" />
                             </button>
                           </div>
                         );
@@ -2144,27 +2633,27 @@ export default function TugasKurir() {
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-2.5">
+                <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
                     onClick={() => document.getElementById('cameraInput').click()}
-                    className="flex flex-col items-center justify-center gap-1.5 p-3.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                    className="flex flex-col items-center justify-center gap-1 p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-none hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                   >
-                    <div className="w-9 h-9 bg-blue-100 dark:bg-blue-900/30 text-blue-600 rounded-full flex items-center justify-center">
-                      <Camera className="w-4 h-4" />
+                    <div className="w-7 h-7 bg-blue-100 dark:bg-blue-900/30 text-blue-600 rounded-none flex items-center justify-center">
+                      <Camera className="w-3.5 h-3.5" />
                     </div>
-                    <span className="text-xs font-bold text-gray-700 dark:text-gray-300">Kamera Langsung</span>
+                    <span className="text-[11px] font-bold text-gray-700 dark:text-gray-300">Kamera Langsung</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => document.getElementById('galleryInput').click()}
-                    className="flex flex-col items-center justify-center gap-1.5 p-3.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                    className="flex flex-col items-center justify-center gap-1 p-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-none hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                   >
-                    <div className="w-9 h-9 bg-purple-100 dark:bg-purple-900/30 text-purple-600 rounded-full flex items-center justify-center">
-                      <ImageIcon className="w-4 h-4" />
+                    <div className="w-7 h-7 bg-purple-100 dark:bg-purple-900/30 text-purple-600 rounded-none flex items-center justify-center">
+                      <ImageIcon className="w-3.5 h-3.5" />
                     </div>
-                    <span className="text-xs font-bold text-gray-700 dark:text-gray-300">Pilih Berkas / Galeri</span>
+                    <span className="text-[11px] font-bold text-gray-700 dark:text-gray-300">Pilih Galeri</span>
                   </button>
                 </div>
 
@@ -2187,10 +2676,10 @@ export default function TugasKurir() {
               </div>
             </div>
             
-            <div className="p-4 sm:p-5 pt-0 flex gap-2.5">
+            <div className="p-3 sm:p-4 pt-0 flex gap-2">
               <button 
                 onClick={handleCloseModal}
-                className="flex-1 py-2.5 rounded-xl font-bold text-gray-600 bg-gray-100 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-200 transition-colors text-xs"
+                className="flex-1 py-2 rounded-none font-bold text-gray-600 bg-gray-100 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-200 transition-colors text-xs border border-gray-300 dark:border-gray-700"
               >
                 Batal
               </button>
@@ -2198,13 +2687,13 @@ export default function TugasKurir() {
                 type="button"
                 onClick={handleSubmitProof}
                 disabled={photoFiles.length === 0 || uploadProofMutation.isPending || isCompressing}
-                className={`flex-[2] py-2.5 rounded-xl font-bold text-white disabled:opacity-50 transition-colors flex justify-center items-center gap-1.5 text-xs ${
-                  uploadType === 'delivery' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-purple-600 hover:bg-purple-700'
+                className={`flex-[2] py-2 rounded-none font-bold text-white disabled:opacity-50 transition-colors flex justify-center items-center gap-1.5 text-xs ${
+                  uploadType === 'delivery' ? 'bg-emerald-700 hover:bg-emerald-800' : 'bg-purple-700 hover:bg-purple-800'
                 }`}
               >
                 {uploadProofMutation.isPending || isCompressing ? (
                   <span className="flex items-center gap-1.5">
-                    <span className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent inline-block"></span>
+                    <span className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white border-t-transparent inline-block"></span>
                     <span>{isCompressing ? 'Mengompresi...' : 'Mengunggah...'}</span>
                   </span>
                 ) : (
@@ -2225,45 +2714,45 @@ export default function TugasKurir() {
       {/* ======================================================== */}
       {selectedProofs.length > 0 && createPortal(
         <div className="fixed inset-0 z-[110] bg-black/95 flex flex-col animate-in fade-in duration-200">
-          <div className="flex justify-between items-center px-4 py-3 bg-black/80 shrink-0 border-b border-gray-800">
-            <span className="text-white font-bold text-sm flex items-center gap-2">
-              <FileText className="w-4 h-4 text-green-400" />
+          <div className="flex justify-between items-center px-3 py-2 bg-black/80 shrink-0 border-b border-gray-800">
+            <span className="text-white font-bold text-xs flex items-center gap-2">
+              <FileText className="w-3.5 h-3.5 text-green-400" />
               Berkas Bukti ({selectedProofs.length})
             </span>
             <button 
               onClick={() => setSelectedProofs([])}
-              className="w-9 h-9 bg-white/10 rounded-full flex items-center justify-center text-white hover:bg-white/20 active:scale-95 transition-all"
+              className="w-7 h-7 bg-white/10 rounded-none flex items-center justify-center text-white hover:bg-white/20 active:scale-95 transition-all"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
           </div>
           
-          <div className="flex-1 overflow-y-auto flex flex-col items-center gap-4 p-4 pb-12">
+          <div className="flex-1 overflow-y-auto flex flex-col items-center gap-3 p-3 pb-10">
             {selectedProofs.map((proof, idx) => {
               const fileType = getFileType(proof);
               const fileName = getFileNameFromPath(proof);
 
               if (fileType === 'pdf') {
                 return (
-                  <div key={idx} className="w-full max-w-2xl bg-gray-900 border border-gray-800 rounded-2xl p-4 flex flex-col items-center gap-3 shadow-xl">
-                    <div className="w-full flex items-center justify-between text-xs text-gray-400 border-b border-gray-800 pb-2">
+                  <div key={idx} className="w-full max-w-2xl bg-gray-900 border border-gray-800 rounded-none p-3 flex flex-col items-center gap-2.5 shadow-xl">
+                    <div className="w-full flex items-center justify-between text-xs text-gray-400 border-b border-gray-800 pb-1.5">
                       <span className="font-semibold text-white flex items-center gap-1.5">
-                        <FileText className="w-4 h-4 text-red-400" /> Bukti {idx + 1}: {fileName}
+                        <FileText className="w-3.5 h-3.5 text-red-400" /> Bukti {idx + 1}: {fileName}
                       </span>
-                      <span className="px-2 py-0.5 bg-red-900/40 text-red-300 rounded font-mono text-[10px]">PDF</span>
+                      <span className="px-1.5 py-0.2 bg-red-900/40 text-red-300 rounded-none font-mono text-[10px]">PDF</span>
                     </div>
                     <iframe 
                       src={proof} 
                       title={`Bukti PDF ${idx + 1}`} 
-                      className="w-full h-[55vh] rounded-xl bg-white border border-gray-700" 
+                      className="w-full h-[55vh] rounded-none bg-white border border-gray-700" 
                     />
                     <a
                       href={proof}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="w-full py-2.5 px-4 bg-green-600 hover:bg-green-700 active:scale-98 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-md"
+                      className="w-full py-2 px-3 bg-green-700 hover:bg-green-800 active:scale-98 text-white rounded-none text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-md"
                     >
-                      <ExternalLink className="w-4 h-4" /> Buka / Unduh Dokumen PDF
+                      <ExternalLink className="w-3.5 h-3.5" /> Buka / Unduh Dokumen PDF
                     </a>
                   </div>
                 );
@@ -2271,8 +2760,8 @@ export default function TugasKurir() {
 
               if (fileType === 'image') {
                 return (
-                  <div key={idx} className="w-full max-w-lg bg-gray-900 border border-gray-800 rounded-2xl p-2.5 flex flex-col items-center gap-2">
-                    <div className="w-full flex items-center justify-between px-2 text-xs text-gray-400">
+                  <div key={idx} className="w-full max-w-lg bg-gray-900 border border-gray-800 rounded-none p-2 flex flex-col items-center gap-1.5">
+                    <div className="w-full flex items-center justify-between px-1 text-xs text-gray-400">
                       <span className="font-medium">Bukti {idx + 1} dari {selectedProofs.length}</span>
                       <a 
                         href={proof} 
@@ -2286,7 +2775,7 @@ export default function TugasKurir() {
                     <img 
                       src={proof}
                       alt={`Foto ${idx + 1}`}
-                      className="w-full rounded-xl shadow-2xl object-contain bg-black/40"
+                      className="w-full rounded-none shadow-2xl object-contain bg-black/40"
                       style={{ maxHeight: '75vh' }}
                     />
                   </div>
@@ -2295,22 +2784,22 @@ export default function TugasKurir() {
 
               // HEIF / Document / Other
               return (
-                <div key={idx} className="w-full max-w-lg bg-gray-900 border border-gray-800 rounded-2xl p-5 flex flex-col items-center gap-4 text-center shadow-xl">
-                  <div className="w-16 h-16 rounded-2xl bg-green-950/60 border border-green-800/50 flex items-center justify-center text-green-400">
-                    <FileText className="w-8 h-8" />
+                <div key={idx} className="w-full max-w-lg bg-gray-900 border border-gray-800 rounded-none p-4 flex flex-col items-center gap-3 text-center shadow-xl">
+                  <div className="w-12 h-12 rounded-none bg-green-950/60 border border-green-800/50 flex items-center justify-center text-green-400">
+                    <FileText className="w-6 h-6" />
                   </div>
                   <div>
-                    <p className="text-white font-bold text-sm break-all">{fileName}</p>
-                    <p className="text-gray-400 text-xs mt-1">Berkas Bukti #{idx + 1}</p>
+                    <p className="text-white font-bold text-xs break-all">{fileName}</p>
+                    <p className="text-gray-400 text-[10px] mt-0.5">Berkas Bukti #{idx + 1}</p>
                   </div>
                   <a
                     href={proof}
                     target="_blank"
                     download
                     rel="noopener noreferrer"
-                    className="w-full py-2.5 px-4 bg-green-600 hover:bg-green-700 active:scale-98 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-md"
+                    className="w-full py-2 px-3 bg-green-700 hover:bg-green-800 active:scale-98 text-white rounded-none text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-md"
                   >
-                    <Download className="w-4 h-4" /> Unduh / Buka Berkas
+                    <Download className="w-3.5 h-3.5" /> Unduh / Buka Berkas
                   </a>
                 </div>
               );
@@ -2324,36 +2813,36 @@ export default function TugasKurir() {
       {/* CONFIRMATION MODAL FOR COMPLETING ORDER */}
       {/* ======================================================== */}
       {confirmCompleteOrder && createPortal(
-        <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200 shadow-2xl p-5 text-center space-y-3 my-auto">
+        <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 overflow-y-auto">
+          <div className="bg-white dark:bg-gray-900 rounded-none w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200 shadow-2xl p-4 text-center space-y-2.5 my-auto border border-gray-300 dark:border-gray-700">
             {!(confirmCompleteOrder.proof_of_purchase?.length > 0 || confirmCompleteOrder.proof_of_delivery?.length > 0) ? (
-              <div className="w-14 h-14 bg-amber-100 dark:bg-amber-900/30 text-amber-600 rounded-full flex items-center justify-center mx-auto">
-                <AlertCircle className="w-7 h-7" />
+              <div className="w-10 h-10 bg-amber-100 dark:bg-amber-900/30 text-amber-600 rounded-none flex items-center justify-center mx-auto border border-amber-300">
+                <AlertCircle className="w-5 h-5" />
               </div>
             ) : (
-              <div className="w-14 h-14 bg-green-100 dark:bg-green-900/30 text-green-600 rounded-full flex items-center justify-center mx-auto">
-                <CheckCircle className="w-7 h-7" />
+              <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 text-green-600 rounded-none flex items-center justify-center mx-auto border border-green-300">
+                <CheckCircle className="w-5 h-5" />
               </div>
             )}
             
-            <h3 className="text-base font-bold text-gray-900 dark:text-white">
+            <h3 className="text-sm font-bold text-gray-900 dark:text-white">
               Selesaikan Pesanan #{confirmCompleteOrder.id}?
             </h3>
             
             {!(confirmCompleteOrder.proof_of_purchase?.length > 0 || confirmCompleteOrder.proof_of_delivery?.length > 0) ? (
-              <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 p-2.5 rounded-xl border border-amber-200 dark:border-amber-800 text-left font-medium">
-                ⚠️ <strong>Perhatian:</strong> Anda belum mengunggah foto struk kantin ataupun foto serah terima santri. Pastikan pesanan benar-benar sudah diserahkan.
+              <p className="text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 p-2 rounded-none border border-amber-200 dark:border-amber-800 text-left font-medium">
+                ⚠️ <strong>Perhatian:</strong> Anda belum mengunggah foto struk ataupun bukti serah terima santri. Pastikan pesanan benar-benar sudah diserahkan.
               </p>
             ) : (
               <p className="text-xs text-gray-600 dark:text-gray-300">
-                Pesanan atas nama <strong className="text-gray-900 dark:text-white">{confirmCompleteOrder.user?.santri_name || confirmCompleteOrder.user?.name}</strong> akan ditandai selesai dan saldo ongkir akan masuk ke akun Anda.
+                Pesanan atas nama <strong className="text-gray-900 dark:text-white">{confirmCompleteOrder.user?.santri_name || confirmCompleteOrder.user?.name}</strong> akan ditandai selesai.
               </p>
             )}
 
-            <div className="flex gap-2.5 pt-2">
+            <div className="flex gap-2 pt-1">
               <button 
                 onClick={() => setConfirmCompleteOrder(null)}
-                className="flex-1 py-2.5 rounded-xl font-bold text-gray-600 bg-gray-100 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-200 transition-colors text-xs"
+                className="flex-1 py-1.5 rounded-none font-bold text-gray-600 bg-gray-100 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-200 transition-colors text-xs border border-gray-300 dark:border-gray-700"
               >
                 Batal
               </button>
@@ -2362,7 +2851,7 @@ export default function TugasKurir() {
                   markCompleteMutation.mutate(confirmCompleteOrder.id);
                   setConfirmCompleteOrder(null);
                 }}
-                className="flex-1 py-2.5 rounded-xl font-bold text-white bg-green-600 hover:bg-green-700 transition-colors text-xs shadow-xs"
+                className="flex-1 py-1.5 rounded-none font-bold text-white bg-green-700 hover:bg-green-800 transition-colors text-xs shadow-xs"
               >
                 Ya, Selesaikan!
               </button>
@@ -2376,40 +2865,32 @@ export default function TugasKurir() {
       {/* CONFIRMATION MODAL FOR CANCELLING ORDER (COURIER) */}
       {/* ======================================================== */}
       {confirmCancelOrder && createPortal(
-        <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200 shadow-2xl p-5 text-center space-y-3 my-auto">
-            <div className="w-14 h-14 bg-red-100 dark:bg-red-900/30 text-red-600 rounded-full flex items-center justify-center mx-auto">
-              <AlertCircle className="w-7 h-7" />
+        <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 overflow-y-auto">
+          <div className="bg-white dark:bg-gray-900 rounded-none w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200 shadow-2xl p-4 text-center space-y-2.5 my-auto border border-gray-300 dark:border-gray-700">
+            <div className="w-10 h-10 bg-red-100 dark:bg-red-900/30 text-red-600 rounded-none flex items-center justify-center mx-auto border border-red-300">
+              <AlertCircle className="w-5 h-5" />
             </div>
             
-            <h3 className="text-base font-bold text-gray-900 dark:text-white">
+            <h3 className="text-sm font-bold text-gray-900 dark:text-white">
               Batalkan Pesanan #{confirmCancelOrder.id}?
             </h3>
             
             <p className="text-xs text-gray-600 dark:text-gray-300">
-              {confirmCancelOrder.status === 'completed' ? (
-                <>
-                  Pesanan atas nama <strong>{confirmCancelOrder.user?.santri_name || confirmCancelOrder.user?.name}</strong> yang sudah selesai ini akan diubah statusnya menjadi <strong className="text-red-600">Dibatalkan</strong> dan stok toko akan dipulihkan.
-                </>
-              ) : (
-                <>
-                  Pesanan atas nama <strong>{confirmCancelOrder.user?.santri_name || confirmCancelOrder.user?.name}</strong> akan diubah statusnya menjadi <strong className="text-red-600">Dibatalkan</strong>.
-                </>
-              )}
+              Pesanan atas nama <strong>{confirmCancelOrder.user?.santri_name || confirmCancelOrder.user?.name}</strong> akan diubah statusnya menjadi <strong className="text-red-600">Dibatalkan</strong>.
             </p>
 
-            <div className="flex gap-2.5 pt-2">
+            <div className="flex gap-2 pt-1">
               <button 
                 onClick={() => setConfirmCancelOrder(null)}
                 disabled={courierCancelOrderMutation.isPending}
-                className="flex-1 py-2.5 rounded-xl font-bold text-gray-600 bg-gray-100 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-200 transition-colors text-xs"
+                className="flex-1 py-1.5 rounded-none font-bold text-gray-600 bg-gray-100 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-200 transition-colors text-xs border border-gray-300 dark:border-gray-700"
               >
                 Batal
               </button>
               <button 
                 onClick={() => courierCancelOrderMutation.mutate(confirmCancelOrder.id)}
                 disabled={courierCancelOrderMutation.isPending}
-                className="flex-1 py-2.5 rounded-xl font-bold text-white bg-red-600 hover:bg-red-700 transition-colors text-xs shadow-xs disabled:opacity-50 flex items-center justify-center gap-1.5"
+                className="flex-1 py-1.5 rounded-none font-bold text-white bg-red-700 hover:bg-red-800 transition-colors text-xs shadow-xs disabled:opacity-50 flex items-center justify-center gap-1.5"
               >
                 {courierCancelOrderMutation.isPending ? (
                   <>

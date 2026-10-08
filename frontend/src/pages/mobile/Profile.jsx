@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { ArrowLeft, Edit2, ShieldCheck, PlusCircle, CreditCard, Users, Bookmark, Activity, Ticket, Shield, LogOut, ChevronRight, Store, Camera, Save, X, Plus, BookOpen, Calculator, Coins, Smartphone, MapPin, GraduationCap } from 'lucide-react';
-import { ROLES, getUserRole } from '../../config/roles';
+import { ArrowLeft, Edit2, ShieldCheck, PlusCircle, CreditCard, Users, Bookmark, Activity, Ticket, Shield, LogOut, ChevronRight, ChevronDown, Store, Camera, Save, X, Plus, BookOpen, Calculator, Coins, Smartphone, MapPin, GraduationCap, Search, Check } from 'lucide-react';
+import { ROLES, getUserRole, isAdminLevel } from '../../config/roles';
 import { useAuthStore } from '../../store/authStore';
 import { usePwaStore } from '../../store/pwaStore';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -11,6 +11,7 @@ import api, { getStorageUrl } from '../../lib/axios';
 import santriData from '../../data/santri.json';
 import AdminAccountingModal from '../../components/modals/AdminAccountingModal';
 import ThemeToggle from '../../components/ui/ThemeToggle';
+import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { PRICING_CONFIG, formatRupiah } from '../../config/pricing';
 
 const uniqueJenjang = [...new Set(santriData.data.filter(r => r.length > 5 && r[4]).map(r => r[4]))].sort();
@@ -23,10 +24,31 @@ export default function Profile() {
   const logout = useAuthStore(state => state.logout);
   const navigate = useNavigate();
   const userRole = getUserRole(user);
+  const role = userRole;
 
   const { isStandalone, installApp } = usePwaStore();
   const queryClient = useQueryClient();
   const [filterGender, setFilterGender] = useState('');
+  const [santriSearch, setSantriSearch] = useState('');
+  const [isSantriOpen, setIsSantriOpen] = useState(false);
+  const santriDropdownRef = React.useRef(null);
+
+  React.useEffect(() => {
+    function handleClickOutside(event) {
+      if (santriDropdownRef.current && !santriDropdownRef.current.contains(event.target)) {
+        setIsSantriOpen(false);
+      }
+    }
+    if (isSantriOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [isSantriOpen]);
+
   const [showEditUserModal, setShowEditUserModal] = useState(false);
   const [showKeluargaModal, setShowKeluargaModal] = useState(false);
   const [userAvatarFile, setUserAvatarFile] = useState(null);
@@ -62,6 +84,16 @@ export default function Profile() {
       });
     }
   }, [user]);
+
+  // Otomatis buka modal data santri jika diarahkan dari keranjang atau link khusus
+  React.useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('tab') === 'santri' || params.get('editSantri') === 'true') {
+        setShowKeluargaModal(true);
+      }
+    } catch (_) {}
+  }, []);
   
   // Store Management States
   const [showStoreListModal, setShowStoreListModal] = useState(false);
@@ -111,9 +143,15 @@ export default function Profile() {
       if (filterGender) {
         matchGender = nameCol.endsWith(filterGender);
       }
-      return matchJenjang && matchKelas && matchGender;
+      let matchSearch = true;
+      if (santriSearch.trim()) {
+        const q = santriSearch.toLowerCase().trim();
+        const cleanName = nameCol.replace(' Laki-laki', '').replace(' Perempuan', '').toLowerCase();
+        matchSearch = cleanName.includes(q);
+      }
+      return matchJenjang && matchKelas && matchGender && matchSearch;
     });
-  }, [userData.santri_level, userData.santri_class, filterGender]);
+  }, [userData.santri_level, userData.santri_class, filterGender, santriSearch]);
 
   // Fetch multiple canteens
   const { data: canteens = [], isLoading: isLoadingCanteens } = useQuery({
@@ -270,7 +308,7 @@ export default function Profile() {
 
   const handleLogout = () => {
     logout();
-    window.location.href = '/login';
+    window.location.href = '/';
   };
 
   const getInitials = (name) => {
@@ -353,27 +391,89 @@ export default function Profile() {
             </button>
           </div>
 
-          {/* Banner strip – Indigo for Teacher, Amber for Santri */}
-          <div 
-            onClick={() => setShowEditUserModal(true)}
-            className={`px-3.5 py-2 flex items-center justify-between text-xs font-bold cursor-pointer hover:opacity-95 transition-opacity border-t ${
-              user?.is_teacher
-                ? 'bg-gradient-to-r from-indigo-700 via-purple-700 to-indigo-800 text-white border-indigo-600 dark:border-indigo-500'
-                : 'bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-400 dark:from-amber-600 dark:to-yellow-600 text-amber-950 dark:text-white border-amber-300 dark:border-amber-700'
-            }`}
-          >
-            <div className="flex items-center gap-1.5 truncate">
-              <span className="text-xs">{user?.is_teacher ? '🎓' : '⭐'}</span>
-              <span className="font-extrabold">{user?.is_teacher ? `Guru / Staff ${user?.teacher_unit || ''}` : 'Santri Al-Mannan'}</span>
-              <span className="text-[10.5px] font-normal opacity-90 truncate">
-                • {user?.is_teacher ? (user?.niy ? `NIY: ${user.niy}` : 'Belum isi NIY') : `Kamar: ${user?.santri_room || 'Belum diisi'}`}
-              </span>
+          {/* Banner strip spesifik per role */}
+          {userRole === ROLES.SUPER_ADMIN ? (
+            <div 
+              onClick={() => setShowEditUserModal(true)}
+              className="px-3.5 py-2 flex items-center justify-between text-xs font-bold cursor-pointer hover:opacity-95 transition-opacity border-t bg-gradient-to-r from-amber-500 via-amber-600 to-yellow-600 text-white border-amber-600 shadow-2xs"
+            >
+              <div className="flex items-center gap-1.5 truncate">
+                <span className="text-xs">🛡️</span>
+                <span className="font-extrabold">Super Administrator</span>
+                <span className="text-[10.5px] font-normal opacity-90 truncate">• Hak Akses Penuh Sistem</span>
+              </div>
+              <div className="flex items-center gap-0.5 text-[10.5px] font-black shrink-0">
+                <span>Edit</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </div>
             </div>
-            <div className="flex items-center gap-0.5 text-[10.5px] font-black shrink-0">
-              <span>Ubah</span>
-              <ChevronRight className="w-3.5 h-3.5" />
+          ) : userRole === ROLES.ADMIN ? (
+            <div 
+              onClick={() => setShowEditUserModal(true)}
+              className="px-3.5 py-2 flex items-center justify-between text-xs font-bold cursor-pointer hover:opacity-95 transition-opacity border-t bg-gradient-to-r from-emerald-600 via-green-600 to-teal-700 text-white border-green-600 shadow-2xs"
+            >
+              <div className="flex items-center gap-1.5 truncate">
+                <span className="text-xs">🛡️</span>
+                <span className="font-extrabold">Administrator</span>
+                <span className="text-[10.5px] font-normal opacity-90 truncate">• Pengelola & Manajemen Pondok</span>
+              </div>
+              <div className="flex items-center gap-0.5 text-[10.5px] font-black shrink-0">
+                <span>Edit</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </div>
             </div>
-          </div>
+          ) : userRole === ROLES.KANTIN ? (
+            <div 
+              onClick={() => setShowEditUserModal(true)}
+              className="px-3.5 py-2 flex items-center justify-between text-xs font-bold cursor-pointer hover:opacity-95 transition-opacity border-t bg-gradient-to-r from-purple-700 via-purple-600 to-indigo-700 text-white border-purple-600 shadow-2xs"
+            >
+              <div className="flex items-center gap-1.5 truncate">
+                <span className="text-xs">🏪</span>
+                <span className="font-extrabold">Mitra Toko / Kantin</span>
+                <span className="text-[10.5px] font-normal opacity-90 truncate">• Pengelola Outlet Pondok</span>
+              </div>
+              <div className="flex items-center gap-0.5 text-[10.5px] font-black shrink-0">
+                <span>Edit</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </div>
+            </div>
+          ) : userRole === ROLES.KURIR ? (
+            <div 
+              onClick={() => setShowEditUserModal(true)}
+              className="px-3.5 py-2 flex items-center justify-between text-xs font-bold cursor-pointer hover:opacity-95 transition-opacity border-t bg-gradient-to-r from-teal-700 via-cyan-700 to-blue-800 text-white border-teal-600 shadow-2xs"
+            >
+              <div className="flex items-center gap-1.5 truncate">
+                <span className="text-xs">🛵</span>
+                <span className="font-extrabold">Kurir Pengantaran</span>
+                <span className="text-[10.5px] font-normal opacity-90 truncate">• Tim Pengantar Asrama</span>
+              </div>
+              <div className="flex items-center gap-0.5 text-[10.5px] font-black shrink-0">
+                <span>Edit</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </div>
+            </div>
+          ) : (
+            <div 
+              onClick={() => setShowEditUserModal(true)}
+              className={`px-3.5 py-2 flex items-center justify-between text-xs font-bold cursor-pointer hover:opacity-95 transition-opacity border-t ${
+                user?.is_teacher
+                  ? 'bg-gradient-to-r from-indigo-700 via-purple-700 to-indigo-800 text-white border-indigo-600 dark:border-indigo-500'
+                  : 'bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-400 dark:from-amber-600 dark:to-yellow-600 text-amber-950 dark:text-white border-amber-300 dark:border-amber-700'
+              }`}
+            >
+              <div className="flex items-center gap-1.5 truncate">
+                <span className="text-xs">{user?.is_teacher ? '🎓' : '⭐'}</span>
+                <span className="font-extrabold">{user?.is_teacher ? `Guru / Staff ${user?.teacher_unit || ''}` : 'Santri Al-Mannan'}</span>
+                <span className="text-[10.5px] font-normal opacity-90 truncate">
+                  • {user?.is_teacher ? (user?.niy ? `NIY: ${user.niy}` : 'Belum isi NIY') : `Kamar: ${user?.santri_room || 'Belum diisi'}`}
+                </span>
+              </div>
+              <div className="flex items-center gap-0.5 text-[10.5px] font-black shrink-0">
+                <span>Ubah</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </div>
+            </div>
+          )}
 
         </div>
 
@@ -409,27 +509,33 @@ export default function Profile() {
               title="Keamanan Akun & Sandi" 
               onClick={() => setShowEditUserModal(true)} 
             />
-            <MenuItem 
-              icon={MapPin} 
-              title="Kamar & Lokasi Pengantaran" 
-              badge={user?.is_teacher ? (user?.teacher_unit ? `Ruang Guru ${user.teacher_unit}` : 'Ruang Guru') : (user?.santri_room ? user.santri_room : 'Atur Kamar')}
-              badgeColor={user?.is_teacher ? 'bg-indigo-700' : (user?.santri_room ? 'bg-green-600' : 'bg-amber-600')}
-              onClick={() => setShowEditUserModal(true)} 
-            />
-            <MenuItem 
-              icon={CreditCard} 
-              title="Metode Pembayaran Pondok" 
-              badge="QRIS / Tunai"
-              badgeColor="bg-blue-600"
-              onClick={() => navigate({ to: '/dashboard/pembayaran' })} 
-            />
-            <MenuItem 
-              icon={Users} 
-              title={user?.is_teacher ? "Akun Santri Terhubung (Opsional)" : "Akun Keluarga / Wali Santri"} 
-              badge={user?.santri_name ? 'Terisi' : (user?.is_teacher ? 'Opsional' : 'Wajib')}
-              badgeColor={user?.santri_name ? 'bg-green-600' : (user?.is_teacher ? 'bg-gray-500' : 'bg-amber-600')}
-              onClick={() => setShowKeluargaModal(true)} 
-            />
+
+            {/* Menu Khusus Santri / Wali (User) */}
+            {(!userRole || userRole === ROLES.USER) && (
+              <>
+                <MenuItem 
+                  icon={MapPin} 
+                  title="Kamar & Lokasi Pengantaran" 
+                  badge={user?.is_teacher ? (user?.teacher_unit ? `Ruang Guru ${user.teacher_unit}` : 'Ruang Guru') : (user?.santri_room ? user.santri_room : 'Atur Kamar')}
+                  badgeColor={user?.is_teacher ? 'bg-indigo-700' : (user?.santri_room ? 'bg-green-600' : 'bg-amber-600')}
+                  onClick={() => setShowEditUserModal(true)} 
+                />
+                <MenuItem 
+                  icon={CreditCard} 
+                  title="Metode Pembayaran Pondok" 
+                  badge="QRIS / Tunai"
+                  badgeColor="bg-blue-600"
+                  onClick={() => navigate({ to: '/dashboard/pembayaran' })} 
+                />
+                <MenuItem 
+                  icon={Users} 
+                  title={user?.is_teacher ? "Akun Santri Terhubung (Opsional)" : "Akun Keluarga / Wali Santri"} 
+                  badge={user?.santri_name ? 'Terisi' : (user?.is_teacher ? 'Opsional' : 'Wajib')}
+                  badgeColor={user?.santri_name ? 'bg-green-600' : (user?.is_teacher ? 'bg-gray-500' : 'bg-amber-600')}
+                  onClick={() => setShowKeluargaModal(true)} 
+                />
+              </>
+            )}
 
             {/* Menu Khusus Kantin */}
             {userRole === ROLES.KANTIN && (
@@ -456,8 +562,19 @@ export default function Profile() {
               </>
             )}
 
-            {/* Menu Khusus Admin */}
-            {userRole === ROLES.ADMIN && (
+            {/* Menu Khusus Kurir */}
+            {userRole === ROLES.KURIR && (
+              <MenuItem 
+                icon={Store} 
+                title="Tugas Pengantaran Hari Ini" 
+                badge="Buka Tugas" 
+                badgeColor="bg-teal-600"
+                onClick={() => navigate({ to: '/dashboard/tugas-kurir' })} 
+              />
+            )}
+
+            {/* Menu Khusus Admin & Super Admin */}
+            {isAdminLevel(userRole) && (
               <>
                 <MenuItem 
                   icon={Calculator} 
@@ -469,7 +586,19 @@ export default function Profile() {
                 <MenuItem 
                   icon={Coins} 
                   title="Rekapitulasi Keuangan & Penjualan" 
-                  onClick={() => navigate({ to: '/dashboard/admin/pesanan' })} 
+                  onClick={() => navigate({ to: userRole === ROLES.ADMIN ? '/dashboard/toko-saya/pesanan' : '/dashboard/admin/pesanan' })} 
+                />
+                {userRole === ROLES.SUPER_ADMIN && (
+                  <MenuItem 
+                    icon={Users} 
+                    title="Manajemen User & Akun" 
+                    onClick={() => navigate({ to: '/dashboard/users' })} 
+                  />
+                )}
+                <MenuItem 
+                  icon={Store} 
+                  title={userRole === ROLES.ADMIN ? "Katalog & Pengelolaan Toko" : "Manajemen Toko & Kantin"} 
+                  onClick={() => navigate({ to: userRole === ROLES.ADMIN ? '/dashboard/toko-saya' : '/dashboard/pertokoan' })} 
                 />
               </>
             )}
@@ -555,9 +684,11 @@ export default function Profile() {
             
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {isLoadingCanteens ? (
-                <div className="flex justify-center items-center h-32">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
-                </div>
+                <LoadingSpinner 
+                  text="Memuat data toko Anda..." 
+                  subtext="Mengambil daftar kantin yang terdaftar" 
+                  minHeight="min-h-[140px]"
+                />
               ) : canteens.length === 0 ? (
                 <div className="text-center py-8">
                   <Store className="w-12 h-12 text-gray-300 mx-auto mb-3" />
@@ -980,33 +1111,108 @@ export default function Profile() {
                     <option value="Perempuan">Perempuan</option>
                   </select>
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nama Santri</label>
-                  <select 
-                    value={userData.santri_name} 
-                    onChange={e => {
-                       const selectedName = e.target.value;
-                       const row = filteredSantris.find(r => r[1] && r[1].replace(' Laki-laki', '').replace(' Perempuan', '') === selectedName);
-                       setUserData({
-                         ...userData, 
-                         santri_name: selectedName,
-                         santri_level: row && row[4] ? row[4] : userData.santri_level,
-                         santri_class: row && row[5] ? row[5] : userData.santri_class,
-                         santri_room: row && row[10] ? row[10] : userData.santri_room
-                       });
-                    }} 
-                    className="w-full rounded-none border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white p-2.5 text-sm ring-1 ring-inset ring-gray-300 dark:ring-gray-700 focus:ring-2 focus:ring-green-500 outline-none transition-shadow">
-                    <option value="">-- Pilih Santri --</option>
-                    {filteredSantris.map((row, i) => {
-                       const rawName = row[1] || '';
-                       const cleanName = rawName.replace(' Laki-laki', '').replace(' Perempuan', '');
-                       const jenjang = row[4] || '';
-                       const kelas = row[5] || '';
-                       const info = [jenjang, kelas].filter(Boolean).join(' - ');
-                       const label = info ? `${cleanName} (${info})` : cleanName;
-                       return <option key={i} value={cleanName}>{label}</option>;
-                    })}
-                  </select>
+                <div className="relative" ref={santriDropdownRef}>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                      Nama Santri
+                    </label>
+                    <span className="text-[10px] text-gray-400 dark:text-gray-500">
+                      {filteredSantris.length} santri tersedia
+                    </span>
+                  </div>
+
+                  {/* Trigger Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsSantriOpen(!isSantriOpen);
+                      setSantriSearch('');
+                    }}
+                    className={`w-full text-left rounded-none border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white p-2.5 text-sm ring-1 ring-inset ${
+                      isSantriOpen ? 'ring-2 ring-green-500 border-green-500' : 'ring-gray-300 dark:ring-gray-700'
+                    } focus:ring-2 focus:ring-green-500 outline-none transition-shadow flex items-center justify-between`}
+                  >
+                    <span className={`truncate pr-2 ${userData.santri_name ? 'font-semibold text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-500'}`}>
+                      {userData.santri_name 
+                        ? `${userData.santri_name} ${userData.santri_level || userData.santri_class ? `(${[userData.santri_level, userData.santri_class].filter(Boolean).join(' - ')})` : ''}` 
+                        : '-- Pilih Santri --'}
+                    </span>
+                    <ChevronDown className={`w-4 h-4 text-gray-400 shrink-0 transition-transform ${isSantriOpen ? 'rotate-180 text-green-600' : ''}`} />
+                  </button>
+
+                  {/* Dropdown Panel dengan Pencarian Terpadu di dalamnya */}
+                  {isSantriOpen && (
+                    <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-green-500 dark:border-green-600 z-50 shadow-2xl">
+                      {/* Search Bar di bagian atas dropdown */}
+                      <div className="p-2 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/80 flex items-center gap-2">
+                        <Search className="w-4 h-4 text-gray-400 shrink-0" />
+                        <input
+                          type="text"
+                          autoFocus
+                          placeholder="Ketik untuk mencari nama santri..."
+                          value={santriSearch}
+                          onChange={(e) => setSantriSearch(e.target.value)}
+                          className="w-full bg-transparent text-sm text-gray-900 dark:text-white outline-none placeholder:text-gray-400"
+                        />
+                        {santriSearch && (
+                          <button
+                            type="button"
+                            onClick={() => setSantriSearch('')}
+                            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-0.5"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* List Santri */}
+                      <div className="max-h-60 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700">
+                        {filteredSantris.length === 0 ? (
+                          <div className="p-3 text-xs text-gray-500 dark:text-gray-400 text-center">
+                            Santri tidak ditemukan {santriSearch ? `untuk "${santriSearch}"` : ''}
+                          </div>
+                        ) : (
+                          filteredSantris.map((row, i) => {
+                            const rawName = row[1] || '';
+                            const cleanName = rawName.replace(' Laki-laki', '').replace(' Perempuan', '');
+                            const jenjang = row[4] || '';
+                            const kelas = row[5] || '';
+                            const info = [jenjang, kelas].filter(Boolean).join(' - ');
+                            const isSelected = userData.santri_name === cleanName;
+
+                            return (
+                              <button
+                                type="button"
+                                key={i}
+                                onClick={() => {
+                                  setUserData({
+                                    ...userData,
+                                    santri_name: cleanName,
+                                    santri_level: row[4] || userData.santri_level,
+                                    santri_class: row[5] || userData.santri_class,
+                                    santri_room: row[10] || userData.santri_room
+                                  });
+                                  setIsSantriOpen(false);
+                                  setSantriSearch('');
+                                }}
+                                className={`w-full text-left p-2.5 text-xs flex items-center justify-between hover:bg-green-50 dark:hover:bg-green-950/30 transition-colors ${
+                                  isSelected 
+                                    ? 'bg-green-50 dark:bg-green-950/50 text-green-700 dark:text-green-300 font-bold' 
+                                    : 'text-gray-800 dark:text-gray-200'
+                                }`}
+                              >
+                                <div className="truncate pr-2">
+                                  <span className="font-semibold text-gray-900 dark:text-white">{cleanName}</span>
+                                  {info && <span className="ml-1.5 text-[10.5px] text-gray-400 dark:text-gray-500">({info})</span>}
+                                </div>
+                                {isSelected && <Check className="w-4 h-4 text-green-600 shrink-0" />}
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Asrama / Kamar (Isian Bebas)</label>

@@ -32,7 +32,7 @@ import { useCartStore } from '../../store/cartStore';
 import { usePwaStore } from '../../store/pwaStore';
 import AppImage from '../../components/common/AppImage';
 import ThemeToggle from '../../components/ui/ThemeToggle';
-import ActiveCartFloatingBanner from '../../components/cart/ActiveCartFloatingBanner';
+import PublicBottomNav from '../../components/layout/mobile/PublicBottomNav';
 import { ProductOptionModal } from '../../components/modals/ProductOptionModal';
 
 const hasVariants = (product) => {
@@ -372,14 +372,10 @@ export default function Home() {
         <div className="grid grid-cols-4 gap-2 pt-0.5">
           <button
             type="button"
-            onClick={() => setSelectedCategory('makanan')}
-            className={`flex flex-col items-center justify-center p-2.5 bg-white dark:bg-gray-900 border transition-all cursor-pointer ${
-              selectedCategory === 'makanan'
-                ? 'border-green-600 shadow-2xs'
-                : 'border-gray-200 dark:border-gray-800 hover:border-green-500'
-            }`}
+            onClick={() => navigate({ to: '/kantin', search: { category: 'makanan' } })}
+            className="flex flex-col items-center justify-center p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 hover:border-green-500 transition-all cursor-pointer group"
           >
-            <div className="w-10 h-10 bg-red-50 dark:bg-red-950/50 text-red-600 flex items-center justify-center mb-1 text-lg">
+            <div className="w-10 h-10 bg-red-50 dark:bg-red-950/50 text-red-600 flex items-center justify-center mb-1 text-lg group-hover:scale-105 transition-transform">
               🍜
             </div>
             <span className="text-[11px] font-bold text-gray-900 dark:text-white">Makanan</span>
@@ -388,14 +384,10 @@ export default function Home() {
 
           <button
             type="button"
-            onClick={() => setSelectedCategory('minuman')}
-            className={`flex flex-col items-center justify-center p-2.5 bg-white dark:bg-gray-900 border transition-all cursor-pointer ${
-              selectedCategory === 'minuman'
-                ? 'border-green-600 shadow-2xs'
-                : 'border-gray-200 dark:border-gray-800 hover:border-green-500'
-            }`}
+            onClick={() => navigate({ to: '/kantin', search: { category: 'minuman' } })}
+            className="flex flex-col items-center justify-center p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 hover:border-green-500 transition-all cursor-pointer group"
           >
-            <div className="w-10 h-10 bg-blue-50 dark:bg-blue-950/50 text-blue-600 flex items-center justify-center mb-1 text-lg">
+            <div className="w-10 h-10 bg-blue-50 dark:bg-blue-950/50 text-blue-600 flex items-center justify-center mb-1 text-lg group-hover:scale-105 transition-transform">
               🥤
             </div>
             <span className="text-[11px] font-bold text-gray-900 dark:text-white">Minuman</span>
@@ -404,30 +396,27 @@ export default function Home() {
 
           <button
             type="button"
-            onClick={() => setSelectedCategory('snack')}
-            className={`flex flex-col items-center justify-center p-2.5 bg-white dark:bg-gray-900 border transition-all cursor-pointer ${
-              selectedCategory === 'snack'
-                ? 'border-green-600 shadow-2xs'
-                : 'border-gray-200 dark:border-gray-800 hover:border-green-500'
-            }`}
+            onClick={() => navigate({ to: '/kantin', search: { category: 'snack' } })}
+            className="flex flex-col items-center justify-center p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 hover:border-green-500 transition-all cursor-pointer group"
           >
-            <div className="w-10 h-10 bg-amber-50 dark:bg-amber-950/50 text-amber-600 flex items-center justify-center mb-1 text-lg">
+            <div className="w-10 h-10 bg-amber-50 dark:bg-amber-950/50 text-amber-600 flex items-center justify-center mb-1 text-lg group-hover:scale-105 transition-transform">
               🍿
             </div>
             <span className="text-[11px] font-bold text-gray-900 dark:text-white">Camilan</span>
             <span className="text-[9px] text-amber-600 dark:text-amber-400 font-semibold font-mono">Snack</span>
           </button>
 
-          <Link
-            to="/kantin"
-            className="flex flex-col items-center justify-center p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 hover:border-green-500 transition-all cursor-pointer"
+          <button
+            type="button"
+            onClick={() => navigate({ to: '/kantin', search: { category: 'semua' } })}
+            className="flex flex-col items-center justify-center p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 hover:border-green-500 transition-all cursor-pointer group"
           >
-            <div className="w-10 h-10 bg-green-50 dark:bg-green-950/50 text-green-600 flex items-center justify-center mb-1 text-lg">
+            <div className="w-10 h-10 bg-green-50 dark:bg-green-950/50 text-green-600 flex items-center justify-center mb-1 text-lg group-hover:scale-105 transition-transform">
               🏪
             </div>
             <span className="text-[11px] font-bold text-gray-900 dark:text-white">Semua Toko</span>
             <span className="text-[9px] text-green-700 dark:text-green-400 font-semibold font-mono">Kantin</span>
-          </Link>
+          </button>
         </div>
 
         {/* 6. VOUCHER PROMO STRIP (ala Gojek Banner di Foto 4) */}
@@ -448,28 +437,39 @@ export default function Home() {
           </div>
         </Link>
 
-        {/* 7. KATEGORI FILTER TABS */}
+        {/* 7. KATEGORI FILTER TABS (Beautified) */}
         <div className="flex items-center gap-1.5 overflow-x-auto hide-scrollbar pb-1 text-xs">
           {[
-            { id: 'semua', label: 'Semua Menu' },
-            { id: 'buka', label: 'Kantin Buka' },
-            { id: 'makanan', label: 'Makanan Berat' },
-            { id: 'minuman', label: 'Minuman Segar' },
-            { id: 'snack', label: 'Snack & Camilan' }
-          ].map((cat) => (
-            <button
-              key={cat.id}
-              type="button"
-              onClick={() => setSelectedCategory(cat.id)}
-              className={`px-3 py-1.5 shrink-0 text-xs font-bold uppercase tracking-wider border transition-colors cursor-pointer ${
-                selectedCategory === cat.id
-                  ? 'bg-green-600 text-white border-green-600'
-                  : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800'
-              }`}
-            >
-              {cat.label}
-            </button>
-          ))}
+            { id: 'semua', label: 'Semua Menu', icon: Store, iconColor: 'text-emerald-500 dark:text-emerald-400' },
+            { id: 'buka', label: 'Kantin Buka', icon: Clock, iconColor: 'text-green-500 dark:text-green-400', isLive: true },
+            { id: 'makanan', label: 'Makanan Berat', icon: UtensilsCrossed, iconColor: 'text-amber-500 dark:text-amber-400' },
+            { id: 'minuman', label: 'Minuman Segar', icon: Coffee, iconColor: 'text-sky-500 dark:text-sky-400' },
+            { id: 'snack', label: 'Snack & Camilan', icon: Sparkles, iconColor: 'text-rose-500 dark:text-rose-400' }
+          ].map((cat) => {
+            const Icon = cat.icon;
+            const isActive = selectedCategory === cat.id;
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => setSelectedCategory(cat.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 shrink-0 text-xs font-black uppercase tracking-wider border rounded-none transition-all cursor-pointer select-none active:scale-[0.98] ${
+                  isActive
+                    ? 'bg-green-600 text-white border-green-500 shadow-sm shadow-green-900/30 ring-1 ring-green-400/50'
+                    : 'bg-white dark:bg-gray-900/95 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-800 hover:border-green-500/60 hover:bg-gray-50 dark:hover:bg-gray-800/90 hover:text-green-600 dark:hover:text-green-400'
+                }`}
+              >
+                {cat.isLive && (
+                  <span className="relative flex h-2 w-2">
+                    <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isActive ? 'bg-white' : 'bg-green-400'}`} />
+                    <span className={`relative inline-flex rounded-full h-2 w-2 ${isActive ? 'bg-white' : 'bg-green-500'}`} />
+                  </span>
+                )}
+                <Icon className={`w-3.5 h-3.5 shrink-0 transition-transform ${isActive ? 'text-white scale-110' : cat.iconColor}`} />
+                <span>{cat.label}</span>
+              </button>
+            );
+          })}
         </div>
 
         {/* 6. DAFTAR KANTIN / TOKO SANTRI */}
@@ -481,9 +481,18 @@ export default function Home() {
                 Daftar Kantin Pondok
               </h2>
             </div>
-            <span className="text-xs text-gray-500 dark:text-gray-400 font-mono">
-              {filteredCanteens.length} Toko
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500 dark:text-gray-400 font-mono">
+                {filteredCanteens.length} Toko
+              </span>
+              <Link
+                to="/kantin"
+                className="text-xs font-bold text-green-600 dark:text-green-400 hover:underline flex items-center gap-0.5"
+              >
+                <span>Selengkapnya</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
           </div>
 
           {loadingCanteens ? (
@@ -497,54 +506,68 @@ export default function Home() {
               <p className="text-xs text-gray-500">Tidak ada kantin yang sesuai pencarian.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-              {filteredCanteens.map((canteen) => (
-                <Link
-                  key={canteen.id}
-                  to={`/kantin/${canteen.id}`}
-                  className="flex bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 hover:border-green-500 dark:hover:border-green-600 transition-colors p-2.5 group relative"
-                >
-                  <div className="w-20 h-20 bg-gray-100 dark:bg-gray-800 overflow-hidden shrink-0 border border-gray-200 dark:border-gray-700 flex items-center justify-center">
-                    <AppImage
-                      src={canteen.image}
-                      alt={canteen.name}
-                      type="store"
-                      fallbackIcon={<Store className="w-8 h-8 text-gray-400 dark:text-gray-500 opacity-60" />}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                    />
-                  </div>
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                {filteredCanteens.slice(0, 5).map((canteen) => (
+                  <Link
+                    key={canteen.id}
+                    to={`/kantin/${canteen.id}`}
+                    className="flex bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 hover:border-green-500 dark:hover:border-green-600 transition-colors p-2.5 group relative"
+                  >
+                    <div className="w-20 h-20 bg-gray-100 dark:bg-gray-800 overflow-hidden shrink-0 border border-gray-200 dark:border-gray-700 flex items-center justify-center">
+                      <AppImage
+                        src={canteen.image}
+                        alt={canteen.name}
+                        type="store"
+                        fallbackIcon={<Store className="w-8 h-8 text-gray-400 dark:text-gray-500 opacity-60" />}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                      />
+                    </div>
 
-                  <div className="ml-2.5 flex-1 flex flex-col justify-between overflow-hidden">
-                    <div>
-                      <div className="flex items-center justify-between gap-1 mb-0.5">
-                        <h3 className="font-bold text-xs sm:text-sm text-gray-900 dark:text-white truncate">
-                          {canteen.name}
-                        </h3>
-                        <span
-                          className={`text-[9px] font-black px-1.5 py-0.5 uppercase tracking-wider shrink-0 ${
-                            canteen.is_open
-                              ? 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300 border border-green-300 dark:border-green-800'
-                              : 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300 border border-red-300 dark:border-red-800'
-                          }`}
-                        >
-                          {canteen.is_open ? 'Buka' : 'Tutup'}
+                    <div className="ml-2.5 flex-1 flex flex-col justify-between overflow-hidden">
+                      <div>
+                        <div className="flex items-center justify-between gap-1 mb-0.5">
+                          <h3 className="font-bold text-xs sm:text-sm text-gray-900 dark:text-white truncate">
+                            {canteen.name}
+                          </h3>
+                          <span
+                            className={`text-[9px] font-black px-1.5 py-0.5 uppercase tracking-wider shrink-0 ${
+                              canteen.is_open
+                                ? 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300 border border-green-300 dark:border-green-800'
+                                : 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300 border border-red-300 dark:border-red-800'
+                            }`}
+                          >
+                            {canteen.is_open ? 'Buka' : 'Tutup'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-gray-500 dark:text-gray-400 line-clamp-1">
+                          {canteen.description || 'Penyedia jajan & makanan santri Al-Mannan'}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-1 border-t border-gray-100 dark:border-gray-800 text-[10px] text-gray-500 dark:text-gray-400">
+                        <span>{canteen.products?.length || 0} Menu Tersedia</span>
+                        <span className="text-green-600 dark:text-green-400 font-bold flex items-center gap-0.5">
+                          Buka Toko <ChevronRight className="w-3 h-3" />
                         </span>
                       </div>
-                      <p className="text-[11px] text-gray-500 dark:text-gray-400 line-clamp-1">
-                        {canteen.description || 'Penyedia jajan & makanan santri Al-Mannan'}
-                      </p>
                     </div>
+                  </Link>
+                ))}
+              </div>
 
-                    <div className="flex items-center justify-between pt-1 border-t border-gray-100 dark:border-gray-800 text-[10px] text-gray-500 dark:text-gray-400">
-                      <span>{canteen.products?.length || 0} Menu Tersedia</span>
-                      <span className="text-green-600 dark:text-green-400 font-bold flex items-center gap-0.5">
-                        Buka Toko <ChevronRight className="w-3 h-3" />
-                      </span>
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
+              {filteredCanteens.length > 5 && (
+                <div className="pt-2">
+                  <Link
+                    to="/kantin"
+                    className="flex items-center justify-center gap-1.5 w-full py-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 hover:border-green-600 dark:hover:border-green-500 text-gray-800 dark:text-gray-200 font-bold text-xs uppercase tracking-wider transition-colors shadow-xs rounded-none group cursor-pointer"
+                  >
+                    <span>Lihat Semua Kantin ({filteredCanteens.length} Toko)</span>
+                    <ChevronRight className="w-4 h-4 text-green-600 group-hover:translate-x-0.5 transition-transform" />
+                  </Link>
+                </div>
+              )}
+            </>
           )}
         </div>
 
@@ -682,56 +705,8 @@ export default function Home() {
         </div>
       </div>
 
-      {/* 9. FLOATING ACTIVE CART BANNER */}
-      <ActiveCartFloatingBanner />
-
-      {/* 10. MOBILE BOTTOM NAVIGATION (Gojek 4-Tabs ala Foto 4) */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-t border-gray-200 dark:border-gray-800 h-14 flex items-center justify-around px-2">
-        <Link
-          to="/"
-          className="flex flex-col items-center justify-center text-green-600 dark:text-green-400 text-[10px] font-bold"
-        >
-          <Store className="w-5 h-5 mb-0.5" />
-          <span>Beranda</span>
-        </Link>
-
-        <Link
-          to="/vouchers"
-          className="flex flex-col items-center justify-center text-gray-500 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 text-[10px] font-medium relative"
-        >
-          <div className="relative">
-            <Ticket className="w-5 h-5 mb-0.5" />
-            <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-red-500 border border-white dark:border-gray-900"></span>
-          </div>
-          <span>Promo</span>
-        </Link>
-
-        <Link
-          to={token ? "/dashboard/pembayaran" : "/login"}
-          className="flex flex-col items-center justify-center text-gray-500 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 text-[10px] font-medium"
-        >
-          <Activity className="w-5 h-5 mb-0.5" />
-          <span>Aktivitas</span>
-        </Link>
-
-        {token ? (
-          <Link
-            to="/dashboard/profile"
-            className="flex flex-col items-center justify-center text-gray-500 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 text-[10px] font-medium"
-          >
-            <User className="w-5 h-5 mb-0.5" />
-            <span>Profil</span>
-          </Link>
-        ) : (
-          <Link
-            to="/login"
-            className="flex flex-col items-center justify-center text-gray-500 hover:text-green-600 dark:text-gray-400 dark:hover:text-green-400 text-[10px] font-medium"
-          >
-            <LogIn className="w-5 h-5 mb-0.5" />
-            <span>Masuk</span>
-          </Link>
-        )}
-      </nav>
+      {/* 9. MOBILE BOTTOM NAVIGATION */}
+      <PublicBottomNav />
 
       {/* Product Option Modal (Varian Dinamis & Preset) */}
       <ProductOptionModal

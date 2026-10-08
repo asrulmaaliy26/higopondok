@@ -3,7 +3,7 @@ import { CloudDownload, Download, RefreshCw, Database } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useSyncStore } from '../../store/syncStore';
 import { useSyncStatus } from '../../hooks/useDatabaseSync';
-import { ROLES, getUserRole } from '../../config/roles';
+import { ROLES, getUserRole, isAdminLevel } from '../../config/roles';
 
 export default function SyncDbButton({ variant = 'header', className = '' }) {
   const user = useAuthStore((state) => state.user);
@@ -11,7 +11,7 @@ export default function SyncDbButton({ variant = 'header', className = '' }) {
   const { data: statusData, isLoading } = useSyncStatus(user);
 
   const role = getUserRole(user);
-  if (role !== ROLES.ADMIN) {
+  if (role !== ROLES.SUPER_ADMIN) {
     return null;
   }
 
@@ -19,7 +19,7 @@ export default function SyncDbButton({ variant = 'header', className = '' }) {
   const isLocal = statusData ? statusData.is_local : true;
   const exportUrl = statusData?.export_url || '#';
 
-  // Variant Header (Kecil, pil rounded, cocok di samping ThemeToggle)
+  // Variant Header (Kompak, rounded-none di samping ThemeToggle)
   if (variant === 'header') {
     if (isLocal) {
       return (
@@ -27,7 +27,7 @@ export default function SyncDbButton({ variant = 'header', className = '' }) {
           type="button"
           onClick={openModal}
           title="Tarik & Sinkronkan Database dari VPS (Data Live)"
-          className={`inline-flex items-center gap-1.5 h-8 px-3 text-xs font-bold text-white bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 dark:from-amber-600 dark:to-amber-700 rounded-full shadow-xs hover:shadow-md transition-all active:scale-95 cursor-pointer shrink-0 ${className}`}
+          className={`inline-flex items-center gap-1.5 h-7 sm:h-8 px-2 sm:px-3 text-xs font-bold text-amber-950 bg-amber-400 hover:bg-amber-300 dark:bg-amber-500 dark:hover:bg-amber-400 rounded-none shadow-xs border border-amber-600 transition-all active:scale-95 cursor-pointer shrink-0 ${className}`}
         >
           <CloudDownload className="w-3.5 h-3.5 shrink-0" />
           <span className="hidden sm:inline">Tarik DB VPS</span>
@@ -40,7 +40,7 @@ export default function SyncDbButton({ variant = 'header', className = '' }) {
       <a
         href={exportUrl}
         title="Unduh Cadangan Database VPS (.sql.gz)"
-        className={`inline-flex items-center gap-1.5 h-8 px-3 text-xs font-bold text-white bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 rounded-full shadow-xs hover:shadow-md transition-all active:scale-95 cursor-pointer shrink-0 ${className}`}
+        className={`inline-flex items-center gap-1.5 h-7 sm:h-8 px-2 sm:px-3 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-none shadow-xs border border-emerald-700 transition-all active:scale-95 cursor-pointer shrink-0 ${className}`}
       >
         <Download className="w-3.5 h-3.5 shrink-0" />
         <span className="hidden sm:inline">Backup DB</span>
@@ -57,10 +57,10 @@ export default function SyncDbButton({ variant = 'header', className = '' }) {
           type="button"
           onClick={openModal}
           title="Tarik & Sinkronkan Database dari VPS"
-          className={`w-full flex items-center justify-between p-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/50 border border-amber-200/70 dark:border-amber-800/60 text-amber-800 dark:text-amber-200 text-xs font-bold transition-all active:scale-[0.98] cursor-pointer ${className}`}
+          className={`w-full flex items-center justify-between p-2.5 rounded-none bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/50 border border-amber-200/70 dark:border-amber-800/60 text-amber-800 dark:text-amber-200 text-xs font-bold transition-all active:scale-[0.98] cursor-pointer ${className}`}
         >
           <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-amber-500 text-white shadow-xs">
+            <div className="p-1.5 rounded-none bg-amber-500 text-white shadow-xs">
               <CloudDownload className="w-4 h-4" />
             </div>
             <div className="text-left">
@@ -68,7 +68,7 @@ export default function SyncDbButton({ variant = 'header', className = '' }) {
               <span className="text-[10px] font-normal text-amber-700/80 dark:text-amber-300/80">Sinkron Data Live</span>
             </div>
           </div>
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-200/60 dark:bg-amber-800/60 text-amber-900 dark:text-amber-100 font-mono">
+          <span className="text-[10px] px-1.5 py-0.5 rounded-none bg-amber-200/60 dark:bg-amber-800/60 text-amber-900 dark:text-amber-100 font-mono">
             1-Klik
           </span>
         </button>
@@ -79,10 +79,10 @@ export default function SyncDbButton({ variant = 'header', className = '' }) {
       <a
         href={exportUrl}
         title="Unduh Cadangan Database VPS (.sql.gz)"
-        className={`w-full flex items-center justify-between p-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50 border border-emerald-200/70 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-200 text-xs font-bold transition-all active:scale-[0.98] cursor-pointer ${className}`}
+        className={`w-full flex items-center justify-between p-2.5 rounded-none bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50 border border-emerald-200/70 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-200 text-xs font-bold transition-all active:scale-[0.98] cursor-pointer ${className}`}
       >
         <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-emerald-600 text-white shadow-xs">
+          <div className="p-1.5 rounded-none bg-emerald-600 text-white shadow-xs">
             <Download className="w-4 h-4" />
           </div>
           <div className="text-left">

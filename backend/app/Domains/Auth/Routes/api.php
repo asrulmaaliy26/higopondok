@@ -18,14 +18,17 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::match(['put', 'post'], '/me', [AuthController::class, 'updateProfile']);
     Route::put('/me/working-status', [AuthController::class, 'toggleWorkingStatus']);
     
-    // Admin routes
-    Route::middleware('role:admin')->group(function () {
+    // User management strictly for super_admin
+    Route::middleware('role:super_admin')->group(function () {
         Route::get('/admin/users', [\App\Domains\Auth\Controllers\UserController::class, 'index']);
         Route::post('/admin/users', [\App\Domains\Auth\Controllers\UserController::class, 'store']);
         Route::put('/admin/users/{id}', [\App\Domains\Auth\Controllers\UserController::class, 'update']);
         Route::delete('/admin/users/{id}', [\App\Domains\Auth\Controllers\UserController::class, 'destroy']);
-        Route::put('/admin/users/{id}/set-teacher', [AdminController::class, 'setTeacherStatus']);
+    });
 
+    // Admin & Super Admin operational routes
+    Route::middleware('role:admin|super_admin')->group(function () {
+        Route::put('/admin/users/{id}/set-teacher', [AdminController::class, 'setTeacherStatus']);
         Route::get('/admin/canteens', [AdminController::class, 'allCanteens']);
         Route::get('/admin/canteens/status', [AdminController::class, 'globalStatus']);
         Route::post('/admin/canteens/bulk-close', [AdminController::class, 'bulkClose']);
@@ -68,6 +71,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // Admin Vouchers
         Route::get('/admin/vouchers', [\App\Domains\Canteen\Controllers\VoucherController::class, 'allVouchers']);
+        Route::get('/admin/vouchers/{id}/claimers', [\App\Domains\Canteen\Controllers\VoucherController::class, 'claimers']);
         Route::post('/admin/vouchers', [\App\Domains\Canteen\Controllers\VoucherController::class, 'store']);
         Route::put('/admin/vouchers/{id}/status', [\App\Domains\Canteen\Controllers\VoucherController::class, 'toggleStatus']);
         Route::delete('/admin/vouchers/{id}', [\App\Domains\Canteen\Controllers\VoucherController::class, 'destroy']);

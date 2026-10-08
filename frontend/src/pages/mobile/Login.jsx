@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuthStore } from '../../store/authStore';
 import api from '../../lib/axios';
-import { useNavigate, Link } from '@tanstack/react-router';
+import { useNavigate, Link, Navigate } from '@tanstack/react-router';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,6 +11,7 @@ import { Eye, EyeOff } from 'lucide-react';
 import AuthLayout from '../../components/layout/mobile/AuthLayout';
 
 export default function Login() {
+  const token = useAuthStore((state) => state.token);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -18,6 +19,10 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const setAuth = useAuthStore((state) => state.setAuth);
   const navigate = useNavigate();
+
+  if (token) {
+    return <Navigate to="/dashboard" replace />;
+  }
 
   const handleLogin = async (e) => {
     e.preventDefault();

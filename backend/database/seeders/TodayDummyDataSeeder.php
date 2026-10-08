@@ -333,6 +333,23 @@ class TodayDummyDataSeeder extends Seeder
             'updated_at' => $today,
         ]);
 
+        $vKenyang = Voucher::create([
+            'code' => 'KENYANG40RB',
+            'title' => 'Diskon Spesial Belanja Rp 10.000 (Min. Rp 40.000)',
+            'description' => 'Potongan harga belanja Rp 10.000 untuk pembelian di atas Rp 40.000 atau lebih dari 5 porsi jajan santri.',
+            'discount_type' => 'product_discount',
+            'discount_amount' => 10000,
+            'min_purchase' => 40000,
+            'quota' => 250,
+            'claimed_count' => 0,
+            'valid_until' => $today->copy()->addDays(14),
+            'is_active' => true,
+            'target_type' => 'all',
+            'created_by_user_id' => 2,
+            'created_at' => $today,
+            'updated_at' => $today,
+        ]);
+
         // 5.2 VOUCHER KHUSUS DITUJUKAN KE WALI-WALI TERTENTU (target_type: 'specific')
         // Voucher 4: Khusus untuk Charissa Alfariz & Wali Zidan
         $targetWaliCharissaAndZidan = array_values(array_filter([$charissa?->id, $wali?->id]));

@@ -9,8 +9,8 @@ Route::get('/canteens', [CanteenController::class, 'index']);
 Route::get('/canteens/{id}', [CanteenController::class, 'show']);
 
 Route::middleware(['auth:sanctum', 'impersonate'])->group(function () {
-    // Routes for kantin role
-    Route::middleware('role:kantin')->group(function () {
+    // Routes for kantin, admin & super_admin role
+    Route::middleware('role:kantin|admin|super_admin')->group(function () {
 
         Route::get('/my-canteens', [CanteenController::class, 'myCanteens']);
         Route::get('/my-canteens/analytics', [\App\Domains\Canteen\Controllers\CanteenAnalyticsController::class, 'globalStats']);
@@ -21,10 +21,8 @@ Route::middleware(['auth:sanctum', 'impersonate'])->group(function () {
         Route::match(['put', 'post'], '/my-canteen', [CanteenController::class, 'updateMyCanteen']);
         
         Route::apiResource('my-products', ProductController::class)->except(['show']);
-    });
-    
-    // Routes for kantin & admin role (Banner & Voucher Management)
-    Route::middleware('role:kantin|admin')->group(function () {
+
+        // Banner & Voucher Management
         Route::post('/canteen/banners', [\App\Domains\Canteen\Controllers\CanteenBannerController::class, 'store']);
         Route::put('/canteen/banners/{id}', [\App\Domains\Canteen\Controllers\CanteenBannerController::class, 'update']);
         Route::put('/canteen/banners/{id}/status', [\App\Domains\Canteen\Controllers\CanteenBannerController::class, 'toggleStatus']);
@@ -32,15 +30,13 @@ Route::middleware(['auth:sanctum', 'impersonate'])->group(function () {
 
         // Voucher routes for Canteen & Admin
         Route::get('/canteen/vouchers', [\App\Domains\Canteen\Controllers\VoucherController::class, 'canteenVouchers']);
+        Route::get('/canteen/vouchers/{id}/claimers', [\App\Domains\Canteen\Controllers\VoucherController::class, 'claimers']);
         Route::post('/canteen/vouchers', [\App\Domains\Canteen\Controllers\VoucherController::class, 'store']);
         Route::put('/canteen/vouchers/{id}/status', [\App\Domains\Canteen\Controllers\VoucherController::class, 'toggleStatus']);
         Route::delete('/canteen/vouchers/{id}', [\App\Domains\Canteen\Controllers\VoucherController::class, 'destroy']);
         Route::get('/vouchers/santri-options', [\App\Domains\Canteen\Controllers\VoucherController::class, 'santriOptions']);
-    });
 
-    Route::middleware('role:kantin')->group(function () {
-
-        
+        // Order Management for Canteen & Admin
         Route::get('/canteen/orders', [\App\Domains\Canteen\Controllers\OrderController::class, 'canteenOrders']);
         Route::get('/canteen/orders/recap', [\App\Domains\Canteen\Controllers\OrderController::class, 'recap']);
         Route::put('/canteen/orders/{id}/payment', [\App\Domains\Canteen\Controllers\OrderController::class, 'updatePaymentStatus']);

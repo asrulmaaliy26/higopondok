@@ -18,8 +18,8 @@ class ImpersonateMiddleware
     {
         if ($request->hasHeader('X-Impersonate-User-Id')) {
             $user = $request->user();
-            // Check if user is authenticated and is an admin
-            if ($user && $user->hasRole('admin')) {
+            // Check if user is authenticated and is a super_admin or admin
+            if ($user && ($user->hasRole('super_admin') || $user->hasRole('admin'))) {
                 $impersonateId = $request->header('X-Impersonate-User-Id');
                 $targetUser = \App\Domains\Auth\User::find($impersonateId);
                 if ($targetUser) {
