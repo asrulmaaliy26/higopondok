@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, LayoutDashboard } from 'lucide-react';
 
 import AuthLayout from '../../components/layout/mobile/AuthLayout';
 
@@ -149,16 +149,27 @@ export default function Login() {
             />
           </div>
 
-          <div className="text-center text-sm text-gray-600 mt-6 space-y-2">
+          <div className="text-center text-sm text-gray-600 dark:text-gray-400 mt-6 space-y-3">
              <p>
                Belum punya akun?{' '}
                <Link to="/register" className="font-semibold text-green-600 hover:text-green-500">
                  Daftar sekarang
                </Link>
              </p>
-             <p>
-               <Link to="/buku-panduan" className="font-medium text-gray-500 hover:text-green-600 flex items-center justify-center gap-1">
-                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-book-open"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+
+             <div className="pt-1">
+               <Link 
+                 to="/dashboard"
+                 className="w-full inline-flex items-center justify-center gap-2 py-2 px-4 text-xs font-bold text-gray-700 dark:text-gray-200 hover:text-green-600 dark:hover:text-green-400 bg-gray-50 dark:bg-gray-800/80 hover:bg-green-50 dark:hover:bg-green-950/40 border border-gray-200 dark:border-gray-700 rounded-none shadow-xs transition-colors"
+               >
+                 <LayoutDashboard className="w-4 h-4 text-green-600" />
+                 <span>Kembali ke Dashboard</span>
+               </Link>
+             </div>
+
+             <p className="pt-1">
+               <Link to="/buku-panduan" className="font-medium text-gray-500 hover:text-green-600 flex items-center justify-center gap-1 text-xs">
+                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-book-open"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
                  Baca Dokumentasi Aplikasi
                </Link>
              </p>

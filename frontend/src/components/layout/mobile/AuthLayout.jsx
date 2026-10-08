@@ -1,13 +1,31 @@
 import React from 'react';
 import { Link } from '@tanstack/react-router';
+import { ArrowLeft } from 'lucide-react';
 
 export default function AuthLayout({ children, title, subtitle }) {
   return (
     <div className="flex min-h-screen w-full bg-slate-50 dark:bg-gray-950">
       {/* Left Pane - Form */}
-      <div className="flex w-full flex-col justify-center px-4 py-12 sm:px-6 lg:w-1/2 lg:px-20 xl:px-24">
+      <div className="flex w-full flex-col justify-center px-4 py-8 sm:px-6 lg:w-1/2 lg:px-20 xl:px-24">
         <div className="mx-auto w-full max-w-md animate-fade-in-up">
-          <div className="mb-10 text-center lg:text-left">
+          {/* Tombol Kembali ke Dashboard / Beranda */}
+          <div className="mb-6 flex items-center justify-between">
+            <Link
+              to="/dashboard"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-700 dark:text-gray-300 hover:text-green-600 dark:hover:text-green-400 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-none shadow-xs transition-colors"
+            >
+              <ArrowLeft className="w-3.5 h-3.5 text-green-600" />
+              <span>Kembali ke Dashboard</span>
+            </Link>
+            <Link
+              to="/"
+              className="text-xs font-semibold text-gray-500 hover:text-green-600 dark:hover:text-green-400 transition-colors"
+            >
+              Beranda
+            </Link>
+          </div>
+
+          <div className="mb-8 text-center lg:text-left">
             <Link to="/" className="inline-flex items-center gap-3">
               <img src="/logo-transparent.png" alt="HiGO" className="h-12 w-12 object-contain" />
               <div>

@@ -18,7 +18,8 @@ import {
   Send,
   Package,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  LayoutDashboard
 } from 'lucide-react';
 import { Link, useNavigate, useLocation } from '@tanstack/react-router';
 import toast from 'react-hot-toast';
@@ -266,9 +267,9 @@ export default function Kantin() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => (window.history.length > 1 ? window.history.back() : navigate({ to: '/' }))}
+              onClick={() => (window.history.length > 1 ? window.history.back() : navigate({ to: user ? '/dashboard' : '/' }))}
               className="w-8 h-8 flex items-center justify-center bg-white/10 hover:bg-white/20 active:scale-95 text-white rounded-none border border-white/20 backdrop-blur-xs transition-all shadow-xs cursor-pointer"
-              title="Kembali"
+              title={user ? "Kembali ke Dashboard" : "Kembali"}
             >
               <ChevronLeft className="w-5 h-5" />
             </button>
@@ -282,8 +283,18 @@ export default function Kantin() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 bg-white/10 hover:bg-white/15 backdrop-blur-xs border border-white/20 px-2.5 py-1 text-xs text-white max-w-[180px] shadow-xs">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* Tombol Langsung ke Dashboard */}
+            <Link
+              to={user ? "/dashboard" : "/login"}
+              className="px-2 sm:px-2.5 py-1 bg-white/15 hover:bg-white/25 active:scale-95 border border-white/25 backdrop-blur-xs text-white text-xs font-bold rounded-none transition-all shadow-xs flex items-center gap-1.5 shrink-0"
+              title={user ? "Ke Dashboard" : "Masuk Akun"}
+            >
+              <LayoutDashboard className="w-3.5 h-3.5 text-emerald-300" />
+              <span>Dashboard</span>
+            </Link>
+
+            <div className="hidden md:flex items-center gap-1.5 bg-white/10 hover:bg-white/15 backdrop-blur-xs border border-white/20 px-2.5 py-1 text-xs text-white max-w-[180px] shadow-xs">
               <MapPin size={13} className="text-emerald-300 shrink-0" />
               <span className="truncate text-[11px] font-semibold">
                 {user?.santri_room || 'Asrama Santri'}
