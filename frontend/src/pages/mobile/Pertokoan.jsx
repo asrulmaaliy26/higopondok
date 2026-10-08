@@ -1354,38 +1354,40 @@ export default function Pertokoan() {
                 </div>
               )}
 
-              {/* Form Upload Banner Baru - Sangat Ramping & Tidak Makan Tempat */}
+              {/* Form Upload Banner Baru - Responsif & Tidak Terpotong di Mobile */}
               {(showBannerForm || (!selectedCanteen.banners || selectedCanteen.banners.length === 0)) && (
-                <form onSubmit={handleUploadBannerSubmit} className="pt-1.5 border-t border-gray-100 dark:border-gray-800 space-y-1 text-xs">
-                  <div className="flex items-center gap-1.5">
+                <form onSubmit={handleUploadBannerSubmit} className="pt-1.5 border-t border-gray-100 dark:border-gray-800 space-y-1.5 text-xs">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5">
                     <input
                       type="text"
                       placeholder="Judul banner promo..."
                       value={newBannerTitle}
                       onChange={(e) => setNewBannerTitle(e.target.value)}
-                      className="flex-1 rounded-none border border-gray-300 dark:border-gray-700 dark:bg-gray-800 px-2 py-1 text-xs font-medium text-gray-900 dark:text-white focus:ring-1 focus:ring-green-500 h-[29px]"
+                      className="flex-1 min-w-0 w-full rounded-none border border-gray-300 dark:border-gray-700 dark:bg-gray-800 px-2.5 py-1 text-xs font-medium text-gray-900 dark:text-white focus:ring-1 focus:ring-green-500 h-[30px]"
                       required
                     />
-                    <label className="shrink-0 cursor-pointer">
-                      <input
-                        type="file"
-                        accept="image/png,image/jpeg,image/jpg,image/webp"
-                        onChange={handleBannerFileChange}
-                        className="hidden"
-                      />
-                      <div className="border border-dashed border-gray-300 dark:border-gray-700 hover:border-green-500 px-2 py-1 bg-gray-50 dark:bg-gray-800/40 text-center transition-colors h-[29px] flex items-center justify-center gap-1 text-[10px] text-gray-600 dark:text-gray-300 font-semibold">
-                        <UploadCloud size={12} className="text-gray-400 shrink-0" />
-                        <span className="truncate max-w-[120px]">{newBannerFile ? newBannerFile.name : 'Pilih Gambar'}</span>
-                      </div>
-                    </label>
-                    <button
-                      type="submit"
-                      disabled={uploadBannerMutation.isPending || !newBannerFile || !newBannerTitle.trim()}
-                      className="bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white px-2.5 rounded-none font-bold text-xs transition-all disabled:opacity-50 flex items-center justify-center gap-1 shadow-xs cursor-pointer h-[29px] shrink-0"
-                    >
-                      <Save size={12} />
-                      <span>{uploadBannerMutation.isPending ? '...' : 'Pasang'}</span>
-                    </button>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <label className="flex-1 sm:flex-initial cursor-pointer">
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/jpg,image/webp"
+                          onChange={handleBannerFileChange}
+                          className="hidden"
+                        />
+                        <div className="border border-dashed border-gray-300 dark:border-gray-700 hover:border-green-500 px-2.5 py-1 bg-gray-50 dark:bg-gray-800/40 text-center transition-colors h-[30px] flex items-center justify-center gap-1 text-[10px] text-gray-600 dark:text-gray-300 font-semibold">
+                          <UploadCloud size={12} className="text-gray-400 shrink-0" />
+                          <span className="truncate max-w-[120px] sm:max-w-[140px]">{newBannerFile ? newBannerFile.name : 'Pilih Gambar'}</span>
+                        </div>
+                      </label>
+                      <button
+                        type="submit"
+                        disabled={uploadBannerMutation.isPending || !newBannerFile || !newBannerTitle.trim()}
+                        className="bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white px-3.5 rounded-none font-bold text-xs transition-all disabled:opacity-50 flex items-center justify-center gap-1 shadow-xs cursor-pointer h-[30px] shrink-0"
+                      >
+                        <Save size={12} />
+                        <span>{uploadBannerMutation.isPending ? '...' : 'Pasang'}</span>
+                      </button>
+                    </div>
                   </div>
                   {newBannerPreview && (
                     <div className="flex items-center gap-2 pt-0.5">

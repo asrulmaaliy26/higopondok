@@ -7,6 +7,7 @@ use App\Domains\Canteen\CanteenBanner;
 use App\Domains\Canteen\Canteen;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Cache;
 
 class CanteenBannerController extends Controller
 {
@@ -61,6 +62,8 @@ class CanteenBannerController extends Controller
             'status' => 'active'
         ]);
 
+        Cache::forget('banners_active');
+
         return response()->json(['message' => 'Banner berhasil ditambahkan', 'banner' => $banner]);
     }
 
@@ -81,6 +84,7 @@ class CanteenBannerController extends Controller
         }
 
         $banner->update(['status' => $banner->status === 'active' ? 'inactive' : 'active']);
+        Cache::forget('banners_active');
         
         return response()->json(['message' => 'Status banner berhasil diubah', 'banner' => $banner]);
     }
@@ -102,6 +106,7 @@ class CanteenBannerController extends Controller
         }
 
         $banner->delete(); // File handling is executed in Model boot deleting event
+        Cache::forget('banners_active');
 
         return response()->json(['message' => 'Banner berhasil dihapus']);
     }

@@ -31,6 +31,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useCartStore } from '../../store/cartStore';
 import { usePwaStore } from '../../store/pwaStore';
 import AppImage from '../../components/common/AppImage';
+import PromoBannerCarousel from '../../components/common/PromoBannerCarousel';
 import ThemeToggle from '../../components/ui/ThemeToggle';
 import PublicBottomNav from '../../components/layout/mobile/PublicBottomNav';
 import { ProductOptionModal } from '../../components/modals/ProductOptionModal';
@@ -61,7 +62,6 @@ export default function Home() {
   const [selectedOptionProduct, setSelectedOptionProduct] = useState(null);
   const [selectedOptionCanteen, setSelectedOptionCanteen] = useState(null);
   const [isOptionModalOpen, setIsOptionModalOpen] = useState(false);
-  const scrollContainerRef = useRef(null);
 
   // 1. Fetch Banners (Approved)
   const { data: banners = [], isLoading: loadingBanners } = useQuery({
@@ -80,22 +80,6 @@ export default function Home() {
       return res.data.data || res.data || [];
     }
   });
-
-  // Auto slide banner promo
-  useEffect(() => {
-    if (!banners || banners.length <= 1) return;
-    const interval = setInterval(() => {
-      if (scrollContainerRef.current) {
-        const { scrollLeft, scrollWidth, clientWidth } = scrollContainerRef.current;
-        if (scrollLeft + clientWidth >= scrollWidth - 10) {
-          scrollContainerRef.current.scrollTo({ left: 0, behavior: 'smooth' });
-        } else {
-          scrollContainerRef.current.scrollBy({ left: clientWidth, behavior: 'smooth' });
-        }
-      }
-    }, 4500);
-    return () => clearInterval(interval);
-  }, [banners]);
 
   // Flatten popular products across open canteens
   const allProducts = React.useMemo(() => {
@@ -315,58 +299,20 @@ export default function Home() {
           </div>
         </div>
 
-        {/* 4. PROMO BANNER CAROUSEL */}
-        <div className="relative">
-          {loadingBanners ? (
-            <div className="w-full h-36 sm:h-48 bg-gray-200 dark:bg-gray-800 animate-pulse border border-gray-200 dark:border-gray-800" />
-          ) : (
-            <div
-              ref={scrollContainerRef}
-              className="flex overflow-x-auto snap-x snap-mandatory hide-scrollbar space-x-3 pb-1"
-            >
-              {Array.isArray(banners) && banners.length > 0 ? (
-                banners.map((banner) => (
-                  <div
-                    key={banner.id}
-                    className="snap-center shrink-0 w-full sm:w-[85%] lg:w-[70%] h-36 sm:h-48 relative overflow-hidden border border-gray-200 dark:border-gray-800 bg-gray-900"
-                  >
-                    <AppImage
-                      src={banner.image_path}
-                      alt={banner.title}
-                      type="banner"
-                      className="w-full h-full object-cover"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent flex items-end p-3 sm:p-4">
-                      <div>
-                        <span className="px-1.5 py-0.5 bg-green-600 text-white text-[10px] font-bold uppercase tracking-wider mb-1 inline-block">
-                          Promo Kantin
-                        </span>
-                        <h3 className="text-white font-bold text-sm sm:text-base leading-tight drop-shadow-sm">
-                          {banner.title}
-                        </h3>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="snap-center shrink-0 w-full h-36 sm:h-44 bg-gradient-to-r from-green-800 via-green-700 to-emerald-800 p-4 sm:p-6 text-white flex flex-col justify-center border border-green-900">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <Sparkles className="w-4 h-4 text-green-300" />
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-green-200">
-                      HiGO Pondok Al-Mannan
-                    </span>
-                  </div>
-                  <h3 className="text-base sm:text-xl font-extrabold mb-1">
-                    Jajan & Kebutuhan Santri Jadi Lebih Praktis!
-                  </h3>
-                  <p className="text-xs sm:text-sm text-green-100 max-w-xl">
-                    Pilih menu favoritmu dari berbagai kantin pondok. Kurir santri siap mengantar ke kamar asrama.
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        {/* 4. PROMO BANNER CAROUSEL (Focused in Center with Left & Right Peek, Widescreen) */}
+        <PromoBannerCarousel
+          banners={banners}
+          isLoading={loadingBanners}
+          heightClass="h-40 sm:h-52 md:h-56"
+          mobileRatio={0.92}
+          tabletRatio={0.88}
+          desktopRatio={0.82}
+          onBannerClick={(banner) => {
+            if (banner?.canteen_id) {
+              navigate({ to: '/kantin/$canteenId', params: { canteenId: String(banner.canteen_id) } });
+            }
+          }}
+        />
 
         {/* 5. SHORTCUT LAYANAN 4 KOLOM (ala Gojek di Foto 4 & 5) */}
         <div className="grid grid-cols-4 gap-2 pt-0.5">

@@ -28,6 +28,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useCartStore } from '../../store/cartStore';
 import PublicBottomNav from '../../components/layout/mobile/PublicBottomNav';
 import AppImage from '../../components/common/AppImage';
+import PromoBannerCarousel from '../../components/common/PromoBannerCarousel';
 
 // Helper pengecekan kategori menu produk
 function isProductInCategory(p, category) {
@@ -193,23 +194,6 @@ export default function Kantin() {
     });
   };
 
-  const scrollContainerRef = useRef(null);
-
-  useEffect(() => {
-    if (!banners || banners.length <= 1) return;
-    const interval = setInterval(() => {
-      if (scrollContainerRef.current) {
-        const { scrollLeft, scrollWidth, clientWidth } = scrollContainerRef.current;
-        if (scrollLeft + clientWidth >= scrollWidth - 10) {
-          scrollContainerRef.current.scrollTo({ left: 0, behavior: 'smooth' });
-        } else {
-          scrollContainerRef.current.scrollBy({ left: clientWidth, behavior: 'smooth' });
-        }
-      }
-    }, 4500);
-    return () => clearInterval(interval);
-  }, [banners]);
-
   // Judul dinamis ala Gojek GoFood (Resto yang ada Minuman)
   const getCategoryTitle = () => {
     switch (selectedCategory) {
@@ -233,16 +217,19 @@ export default function Kantin() {
 
     return canteens
       .map((canteen) => {
-        const canteenProducts = Array.isArray(canteen.products) ? canteen.products : [];
+        const canteenProducts = Array.isArray(canteen.products) 
+          ? canteen.products 
+          : (canteen.products && typeof canteen.products === 'object' ? Object.values(canteen.products) : []);
         
         // Produk yang cocok dengan kategori yang sedang aktif
         const matchingProducts = canteenProducts.filter((p) => {
-          if (!p.is_available) return false;
+          if (!p?.is_available) return false;
           return isProductInCategory(p, selectedCategory);
         });
 
         return {
           ...canteen,
+          products: canteenProducts,
           matchingProducts,
           hasMatchingProducts: selectedCategory === 'semua' || selectedCategory === 'buka' 
             ? true 
@@ -250,12 +237,13 @@ export default function Kantin() {
         };
       })
       .filter((c) => {
+        const query = searchQuery ? searchQuery.toLowerCase() : '';
         // Filter pencarian teks
         const matchSearch =
-          !searchQuery ||
-          c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (c.description && c.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
-          (c.products && c.products.some((p) => p.name.toLowerCase().includes(searchQuery.toLowerCase())));
+          !query ||
+          (c.name && c.name.toLowerCase().includes(query)) ||
+          (c.description && c.description.toLowerCase().includes(query)) ||
+          (Array.isArray(c.products) && c.products.some((p) => p?.name && p.name.toLowerCase().includes(query)));
 
         if (!matchSearch) return false;
 
@@ -319,66 +307,25 @@ export default function Kantin() {
       </header>
 
       {/* BANNER PROMO SECTION */}
-      <div className="bg-gradient-to-b from-green-800 via-green-700 to-green-800 dark:from-green-950 dark:via-emerald-950 dark:to-gray-950 pt-3 pb-6 px-3 sm:px-4 border-b border-green-800/80 shadow-inner">
+      <div className="bg-gradient-to-b from-green-800 via-green-700 to-green-800 dark:from-green-950 dark:via-emerald-950 dark:to-gray-950 pt-2 pb-5 px-0 sm:px-2 border-b border-green-800/80 shadow-inner">
         <div className="max-w-5xl mx-auto">
-          {/* Banner Promo Carousel */}
-          {loadingBanners ? (
-            <div className="w-full h-28 sm:h-36 bg-green-900/40 border border-green-800/80 animate-pulse"></div>
-          ) : (
-            <div
-              ref={scrollContainerRef}
-              className="flex overflow-x-auto snap-x snap-mandatory hide-scrollbar space-x-3 pb-1"
-            >
-              {Array.isArray(banners) && banners.length > 0 ? (
-                banners.map((banner) => (
-                  <div
-                    key={banner.id}
-                    className="snap-center shrink-0 w-full sm:w-[85%] h-28 sm:h-36 overflow-hidden relative border border-green-700/60 bg-gray-900 shadow-md"
-                  >
-                    <AppImage
-                      src={banner.image_path}
-                      alt={banner.title}
-                      type="banner"
-                      className="w-full h-full object-cover"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-transparent flex items-end p-3">
-                      <div>
-                        <span className="px-1.5 py-0.5 bg-gradient-to-r from-emerald-600 to-green-600 text-white text-[9px] font-extrabold uppercase tracking-wider mb-1 inline-block border border-emerald-400/40">
-                          Promo Kantin
-                        </span>
-                        <h3 className="text-white font-bold text-xs sm:text-sm drop-shadow-sm leading-tight">
-                          {banner.title}
-                        </h3>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="snap-center shrink-0 w-full h-24 sm:h-28 relative overflow-hidden bg-gradient-to-r from-emerald-900 via-green-800 to-teal-900 border border-emerald-600/40 p-3 sm:p-4 flex items-center justify-between text-white shadow-lg">
-                  <div className="relative z-10 max-w-[80%]">
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <span className="px-1.5 py-0.2 bg-white/20 backdrop-blur-xs text-[9px] font-black uppercase tracking-wider text-emerald-200 border border-white/25">
-                        HiGO Food
-                      </span>
-                      <span className="text-[10px] text-emerald-200 font-medium flex items-center gap-1">
-                        <Sparkles className="w-3 h-3 text-yellow-300" />
-                        Layanan Jastip Santri
-                      </span>
-                    </div>
-                    <h3 className="text-xs sm:text-sm font-extrabold text-white leading-tight drop-shadow-xs mb-0.5">
-                      Pesan Cepat & Antar ke Kamar Santri
-                    </h3>
-                    <p className="text-[10px] text-emerald-100/90 leading-snug line-clamp-1">
-                      Pilihan menu santri dari berbagai kantin mitra Al-Mannan.
-                    </p>
-                  </div>
-                  <div className="relative z-10 shrink-0 w-10 h-10 bg-white/10 backdrop-blur-xs border border-white/25 flex items-center justify-center shadow-inner">
-                    <Store className="w-5 h-5 text-emerald-200" />
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+          {/* Banner Promo Carousel (Focused in Center with Left & Right Peek, Widescreen & Prominent) */}
+          <PromoBannerCarousel
+            banners={banners}
+            isLoading={loadingBanners}
+            heightClass="h-40 sm:h-52 md:h-56"
+            mobileRatio={0.92}
+            tabletRatio={0.88}
+            desktopRatio={0.82}
+            titleSizeClass="text-xs sm:text-sm"
+            badgeSizeClass="text-[9.5px] sm:text-[10px]"
+            cardPaddingClass="p-2.5 sm:p-3.5"
+            onBannerClick={(banner) => {
+              if (banner?.canteen_id) {
+                navigate({ to: '/kantin/$canteenId', params: { canteenId: String(banner.canteen_id) } });
+              }
+            }}
+          />
         </div>
       </div>
 
@@ -478,11 +425,15 @@ export default function Kantin() {
           ) : (
             <div className="space-y-3">
               {filteredCanteens.map((canteen) => {
+                const canteenProducts = Array.isArray(canteen.products)
+                  ? canteen.products
+                  : (canteen.products && typeof canteen.products === 'object' ? Object.values(canteen.products) : []);
+
                 // Tentukan produk preview yang akan ditampilkan di card (maksimal 4 item ala Gojek Gambar 1)
                 const previewProducts = (
-                  canteen.matchingProducts && canteen.matchingProducts.length > 0
+                  Array.isArray(canteen.matchingProducts) && canteen.matchingProducts.length > 0
                     ? canteen.matchingProducts
-                    : (canteen.products || []).filter((p) => p.is_available)
+                    : canteenProducts.filter((p) => p?.is_available)
                 ).slice(0, 4);
 
                 return (
