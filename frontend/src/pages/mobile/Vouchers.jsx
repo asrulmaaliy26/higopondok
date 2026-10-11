@@ -15,6 +15,8 @@ import { useAuthStore } from '../../store/authStore';
 import PublicBottomNav from '../../components/layout/mobile/PublicBottomNav';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 
+import { ROLES, getUserRole } from '../../config/roles';
+
 export default function Vouchers() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -22,6 +24,7 @@ export default function Vouchers() {
   const queryClient = useQueryClient();
   const token = useAuthStore((state) => state.token);
   const user = useAuthStore((state) => state.user);
+  const userRole = getUserRole(user);
   const [activeTab, setActiveTab] = useState('available'); // 'available' | 'claimed'
 
   // 1. Fetch Available Vouchers (bisa diakses publik / guest tanpa token)
@@ -146,6 +149,37 @@ export default function Vouchers() {
             </button>
           )}
         </div>
+
+        {/* ROLE NOTICE: Mitra Kantin / Super Admin shortcut */}
+        {(userRole === ROLES.KANTIN || userRole === ROLES.ADMIN) && (
+          <div className="mb-2 p-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 flex items-center justify-between gap-2 text-xs rounded-none">
+            <span className="text-[11px] text-emerald-900 dark:text-emerald-200">
+              🏪 Ingin mengelola promo atau kupon toko Anda?
+            </span>
+            <button
+              type="button"
+              onClick={() => navigate({ to: '/dashboard/toko-saya/promo' })}
+              className="px-2 py-1 bg-green-600 hover:bg-green-700 text-white font-bold text-[10px] uppercase rounded-none shrink-0 cursor-pointer"
+            >
+              Promo Toko →
+            </button>
+          </div>
+        )}
+
+        {userRole === ROLES.SUPER_ADMIN && (
+          <div className="mb-2 p-2 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 flex items-center justify-between gap-2 text-xs rounded-none">
+            <span className="text-[11px] text-amber-900 dark:text-amber-200">
+              👑 Ingin menerbitkan atau mengelola seluruh voucher pondok?
+            </span>
+            <button
+              type="button"
+              onClick={() => navigate({ to: '/dashboard/admin/vouchers' })}
+              className="px-2 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold text-[10px] uppercase rounded-none shrink-0 cursor-pointer"
+            >
+              Kelola Voucher →
+            </button>
+          </div>
+        )}
 
         {/* TABS (FLAT SHARP) */}
         <div className="grid grid-cols-2 gap-1 pt-1.5 border-t border-gray-100 dark:border-gray-800">

@@ -75,7 +75,7 @@ export default function TokoSaya() {
   const [editingProduct, setEditingProduct] = useState(null);
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState('all'); // 'all' (Semua Menu) | 'popular' (Paling Laris)
+  const [activeTab, setActiveTab] = useState('popular'); // Default: 'popular' (Paling Laris) | 'all' (Semua Menu)
   const [showAllProducts, setShowAllProducts] = useState(false); // Toggle Open All Produk
 
   const handleTabChange = (tabKey) => {
@@ -640,8 +640,8 @@ export default function TokoSaya() {
           <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800">
             <div className="flex overflow-x-auto hide-scrollbar gap-1">
               {[
-                { id: 'all', label: 'Semua Menu' },
-                { id: 'popular', label: 'Paling Laris' }
+                { id: 'popular', label: 'Paling Laris' },
+                { id: 'all', label: 'Semua Menu' }
               ].map(tab => {
                 const isActive = activeTab === tab.id;
                 return (

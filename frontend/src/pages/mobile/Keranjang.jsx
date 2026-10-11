@@ -9,6 +9,7 @@ import { getStorageUrl } from '../../lib/axios';
 import { useCartStore } from '../../store/cartStore';
 import { useAuthStore } from '../../store/authStore';
 import { calculateOrderFees } from '../../config/pricing';
+import { ROLES, getUserRole } from '../../config/roles';
 import AppImage from '../../components/common/AppImage';
 
 export default function Keranjang() {
@@ -59,6 +60,18 @@ export default function Keranjang() {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [selectedVoucher, setSelectedVoucher] = useState(null);
   const [showVoucherDrawer, setShowVoucherDrawer] = useState(false);
+
+  const handleGoToPromoVoucher = () => {
+    setShowVoucherDrawer(false);
+    const role = getUserRole(user);
+    if (role === ROLES.SUPER_ADMIN) {
+      navigate({ to: '/dashboard/admin/vouchers' });
+    } else if (role === ROLES.KANTIN || role === ROLES.ADMIN) {
+      navigate({ to: '/dashboard/toko-saya/promo' });
+    } else {
+      navigate({ to: token ? '/dashboard/vouchers' : '/vouchers' });
+    }
+  };
 
   // Fetch claimed vouchers
   const { data: myVouchers = [] } = useQuery({
@@ -825,13 +838,13 @@ export default function Keranjang() {
                   <p className="text-[11px] text-gray-500 mt-0.5">
                     Silakan klaim kupon promo terlebih dahulu di menu Promo Voucher.
                   </p>
-                  <Link
-                    to="/dashboard/vouchers"
-                    onClick={() => setShowVoucherDrawer(false)}
-                    className="inline-block mt-3 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white font-bold text-xs uppercase tracking-wider"
+                  <button
+                    type="button"
+                    onClick={handleGoToPromoVoucher}
+                    className="inline-block mt-3 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white font-bold text-xs uppercase tracking-wider rounded-none cursor-pointer"
                   >
                     Klaim Voucher Sekarang
-                  </Link>
+                  </button>
                 </div>
               ) : (
                 myVouchers.map((uv) => {
@@ -935,13 +948,13 @@ export default function Keranjang() {
             </div>
 
             <div className="p-3 border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 flex justify-between items-center shrink-0">
-              <Link
-                to="/dashboard/vouchers"
-                onClick={() => setShowVoucherDrawer(false)}
-                className="text-[11px] font-bold text-green-600 hover:underline"
+              <button
+                type="button"
+                onClick={handleGoToPromoVoucher}
+                className="text-[11px] font-bold text-green-600 hover:underline cursor-pointer"
               >
                 + Cari & Klaim Kupon Lain
-              </Link>
+              </button>
               <button
                 type="button"
                 onClick={() => setShowVoucherDrawer(false)}

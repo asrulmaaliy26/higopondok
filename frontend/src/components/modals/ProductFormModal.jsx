@@ -324,6 +324,23 @@ export const ProductFormModal = ({
     }));
   };
 
+  const makeCustomItemDefault = (groupId, itIdx) => {
+    if (itIdx === 0) return;
+    setVariantConfig(prev => ({
+      ...prev,
+      custom: {
+        ...prev.custom,
+        groups: (prev.custom?.groups || []).map(g => {
+          if (g.id !== groupId) return g;
+          const items = [...(g.items || [])];
+          const [target] = items.splice(itIdx, 1);
+          items.unshift(target);
+          return { ...g, items };
+        })
+      }
+    }));
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     const finalPrice = productData.price || (parseInt(productData.hpp || 0, 10) + 1000).toString();
@@ -608,8 +625,8 @@ export const ProductFormModal = ({
                   <div className="pl-5 pt-1 space-y-1.5 border-t border-gray-100 dark:border-gray-700/60">
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-gray-600 dark:text-gray-400 text-[11px]">Tambahan Biaya Porsi Jumbo:</span>
-                      <div className="flex items-center gap-1">
-                        <span className="text-[10px] text-gray-400 font-mono">+Rp</span>
+                      <div className="w-28 shrink-0 flex items-center border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-none focus-within:border-green-600 overflow-hidden">
+                        <span className="px-1.5 text-[9.5px] font-mono text-gray-500 bg-gray-100 dark:bg-gray-600/60 py-1 border-r border-gray-200 dark:border-gray-600 select-none">+Rp</span>
                         <input
                           type="number"
                           min={0}
@@ -620,7 +637,7 @@ export const ProductFormModal = ({
                             ...prev,
                             portion: { ...prev.portion, jumboPrice: parseInt(e.target.value, 10) || 0 }
                           }))}
-                          className="w-24 px-2 py-1 text-xs font-mono font-bold rounded-none border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white"
+                          className="w-full min-w-0 px-1.5 py-1 text-xs font-mono font-bold text-right outline-none bg-transparent text-gray-900 dark:text-white"
                         />
                       </div>
                     </div>
@@ -710,19 +727,19 @@ export const ProductFormModal = ({
                     </p>
 
                     {(variantConfig.custom?.groups || []).map((group, gIdx) => (
-                      <div key={group.id} className="p-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 space-y-2">
-                        <div className="flex items-center justify-between gap-2">
+                      <div key={group.id} className="p-2 sm:p-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 space-y-2 rounded-none overflow-hidden">
+                        <div className="flex items-center justify-between gap-1.5">
                           <input
                             type="text"
                             placeholder="Nama Grup Opsi (Cth: Pilihan Sambal / Bagian Ayam)"
                             value={group.name}
                             onChange={(e) => updateCustomGroup(group.id, 'name', e.target.value)}
-                            className="flex-1 px-2 py-1 text-xs font-bold rounded-none border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden"
+                            className="flex-1 min-w-0 px-2 py-1 text-xs font-bold rounded-none border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-hidden focus:border-green-600"
                           />
                           <button
                             type="button"
                             onClick={() => removeCustomGroup(group.id)}
-                            className="p-1 text-red-500 hover:text-red-700 cursor-pointer"
+                            className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-none cursor-pointer shrink-0 transition-colors"
                             title="Hapus Grup Opsi Ini"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -730,33 +747,33 @@ export const ProductFormModal = ({
                         </div>
 
                         {/* Aturan Pilih: Radio (Wajib 1) / Checkbox (Bisa Banyak) */}
-                        <div className="flex items-center gap-3 text-[11px] text-gray-600 dark:text-gray-300">
-                          <label className="flex items-center gap-1 cursor-pointer">
+                        <div className="flex items-center gap-3 text-[11px] text-gray-600 dark:text-gray-300 py-0.5">
+                          <label className="flex items-center gap-1.5 cursor-pointer select-none">
                             <input
                               type="radio"
                               name={`group_type_${group.id}`}
                               checked={group.type === 'radio'}
                               onChange={() => updateCustomGroup(group.id, 'type', 'radio')}
-                              className="text-green-600"
+                              className="text-green-600 focus:ring-green-500"
                             />
-                            <span>Pilih 1 Saja (Wajib)</span>
+                            <span className="font-semibold">Pilih 1 Saja (Wajib)</span>
                           </label>
-                          <label className="flex items-center gap-1 cursor-pointer">
+                          <label className="flex items-center gap-1.5 cursor-pointer select-none">
                             <input
                               type="radio"
                               name={`group_type_${group.id}`}
                               checked={group.type === 'checkbox'}
                               onChange={() => updateCustomGroup(group.id, 'type', 'checkbox')}
-                              className="text-green-600"
+                              className="text-green-600 focus:ring-green-500"
                             />
-                            <span>Bisa Pilih Banyak (Opsional)</span>
+                            <span className="font-semibold">Bisa Pilih Banyak (Opsional)</span>
                           </label>
                         </div>
 
                         {/* Daftar Pilihan dalam Grup */}
-                        <div className="space-y-1.5 pt-1">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">
+                        <div className="space-y-1.5 pt-1.5 border-t border-gray-200 dark:border-gray-800">
+                          <div className="flex items-center justify-between text-[10px]">
+                            <span className="font-bold text-gray-500 uppercase tracking-wider block">
                               Daftar Pilihan:
                             </span>
                             {group.type === 'radio' && (
@@ -765,53 +782,88 @@ export const ProductFormModal = ({
                               </span>
                             )}
                           </div>
-                          {(group.items || []).map((it, itIdx) => (
-                            <div key={it.id} className="flex items-center gap-1.5">
-                              {group.type === 'radio' && itIdx === 0 && (
-                                <span className="px-1.5 py-1 text-[8.5px] font-black bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 rounded-none shrink-0" title="Pilihan urutan teratas ini otomatis terpilih sebagai default">
-                                  DEFAULT
-                                </span>
-                              )}
-                              <input
-                                type="text"
-                                placeholder={
-                                  group.type === 'radio' && itIdx === 0 
-                                    ? "Opsi 1 (Default Terpilih, Cth: Normal / Paha Atas)" 
-                                    : `Opsi ${itIdx + 1} (Cth: Sambal Matah / Strong)`
-                                }
-                                value={it.name}
-                                onChange={(e) => updateCustomGroupItem(group.id, it.id, 'name', e.target.value)}
-                                className="flex-1 px-2 py-1 text-xs rounded-none border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                              />
-                              <div className="flex items-center gap-0.5">
-                                <span className="text-[9.5px] text-gray-400 font-mono">+Rp</span>
+
+                          <div className="space-y-1">
+                            {(group.items || []).map((it, itIdx) => (
+                              <div key={it.id} className="flex items-center gap-1 sm:gap-1.5 w-full min-w-0">
+                                {/* Kolom 1: Status / Urutan (Lebar Tetap) */}
+                                <div className="w-13 sm:w-14 shrink-0 flex items-center justify-center">
+                                  {group.type === 'radio' && itIdx === 0 ? (
+                                    <span 
+                                      className="w-full text-center py-1 text-[8px] sm:text-[8.5px] font-black bg-emerald-600 text-white rounded-none uppercase tracking-wider shadow-2xs select-none" 
+                                      title="Pilihan urutan teratas ini otomatis terpilih sebagai default"
+                                    >
+                                      DEFAULT
+                                    </span>
+                                  ) : group.type === 'radio' ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => makeCustomItemDefault(group.id, itIdx)}
+                                      className="w-full text-center py-0.5 text-[9px] font-mono font-bold text-gray-500 hover:text-emerald-700 dark:text-gray-400 dark:hover:text-emerald-300 bg-gray-100 dark:bg-gray-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-none border border-gray-200 dark:border-gray-700 hover:border-emerald-400 cursor-pointer transition-colors"
+                                      title="Klik untuk jadikan opsi ini sebagai default teratas"
+                                    >
+                                      #{itIdx + 1}
+                                    </button>
+                                  ) : (
+                                    <span className="w-full text-center py-0.5 text-[9px] font-mono font-bold text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-none border border-gray-200 dark:border-gray-700 select-none">
+                                      #{itIdx + 1}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Kolom 2: Input Nama Opsi */}
                                 <input
-                                  type="number"
-                                  min={0}
-                                  step={500}
-                                  placeholder="0"
-                                  value={it.price === 0 ? '' : it.price}
-                                  onChange={(e) => updateCustomGroupItem(group.id, it.id, 'price', parseInt(e.target.value, 10) || 0)}
-                                  className="w-16 px-1.5 py-1 text-xs font-mono font-bold rounded-none border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                                  title="Tambahan harga (0 jika gratis)"
+                                  type="text"
+                                  placeholder={
+                                    group.type === 'radio' && itIdx === 0 
+                                      ? "Opsi 1 (Default)" 
+                                      : `Opsi ${itIdx + 1}`
+                                  }
+                                  value={it.name}
+                                  onChange={(e) => updateCustomGroupItem(group.id, it.id, 'name', e.target.value)}
+                                  className="flex-1 min-w-0 px-2 py-1 text-xs rounded-none border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:border-green-600 focus:outline-hidden font-medium"
                                 />
+
+                                {/* Kolom 3: Input Tambahan Harga (Unified Input Group) */}
+                                <div className="w-20 sm:w-24 shrink-0 flex items-center border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded-none focus-within:border-green-600 overflow-hidden">
+                                  <span className="px-1 text-[9px] sm:text-[9.5px] font-mono text-gray-500 bg-gray-100 dark:bg-gray-700/60 py-1 border-r border-gray-200 dark:border-gray-700 select-none">
+                                    +Rp
+                                  </span>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    step={500}
+                                    placeholder="0"
+                                    value={it.price === 0 ? '' : it.price}
+                                    onChange={(e) => updateCustomGroupItem(group.id, it.id, 'price', parseInt(e.target.value, 10) || 0)}
+                                    className="w-full min-w-0 px-1 py-1 text-xs font-mono font-bold text-right outline-none bg-transparent text-gray-900 dark:text-white"
+                                    title="Tambahan harga (0 jika gratis)"
+                                  />
+                                </div>
+
+                                {/* Kolom 4: Tombol Hapus Opsi */}
+                                <div className="w-6 shrink-0 flex items-center justify-center">
+                                  {(group.items || []).length > 1 ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => removeCustomGroupItem(group.id, it.id)}
+                                      className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors rounded-none cursor-pointer"
+                                      title="Hapus opsi ini"
+                                    >
+                                      <X className="w-3.5 h-3.5" />
+                                    </button>
+                                  ) : (
+                                    <span className="w-6 h-6" />
+                                  )}
+                                </div>
                               </div>
-                              {(group.items || []).length > 1 && (
-                                <button
-                                  type="button"
-                                  onClick={() => removeCustomGroupItem(group.id, it.id)}
-                                  className="text-gray-400 hover:text-red-500 p-1 cursor-pointer"
-                                >
-                                  <X className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-                            </div>
-                          ))}
+                            ))}
+                          </div>
 
                           <button
                             type="button"
                             onClick={() => addCustomGroupItem(group.id)}
-                            className="mt-1 text-[10.5px] font-bold text-green-600 hover:text-green-700 flex items-center gap-1 cursor-pointer"
+                            className="mt-1 text-[10.5px] font-bold text-green-600 hover:text-green-700 flex items-center gap-1 cursor-pointer py-0.5"
                           >
                             <Plus className="w-3 h-3" /> Tambah Pilihan Opsi
                           </button>

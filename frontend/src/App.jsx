@@ -147,15 +147,6 @@ const publicKeranjangRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/keranjang',
   component: function PublicKeranjangPage() {
-    const user = useAuthStore((state) => state.user);
-    const originalAdmin = useAuthStore((state) => state.originalAdmin);
-    const userRole = getUserRole(user);
-    const isSuperAdmin = userRole === ROLES.SUPER_ADMIN || (originalAdmin && getUserRole(originalAdmin) === ROLES.SUPER_ADMIN);
-
-    // Super Admin memiliki hak bypass penuh. Pengguna lain non-santri dialihkan ke dashboard
-    if (user && !isSuperAdmin && userRole !== ROLES.USER) {
-      return <Navigate to="/dashboard" replace />;
-    }
     return <Keranjang />;
   },
 });
@@ -170,6 +161,18 @@ const publicPromoRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/promo',
   component: function PromoRedirect() {
+    const user = useAuthStore((state) => state.user);
+    const token = useAuthStore((state) => state.token);
+    if (token && user) {
+      const userRole = getUserRole(user);
+      if (userRole === ROLES.SUPER_ADMIN) {
+        return <Navigate to="/dashboard/admin/vouchers" replace />;
+      }
+      if (userRole === ROLES.KANTIN || userRole === ROLES.ADMIN) {
+        return <Navigate to="/dashboard/toko-saya/promo" replace />;
+      }
+      return <Navigate to="/dashboard/vouchers" replace />;
+    }
     return <Navigate to="/vouchers" replace />;
   },
 });
@@ -285,7 +288,7 @@ function TugasKurirPage() {
 }
 
 function KeranjangPage() {
-  return <RoleGuard allowedRoles={[ROLES.USER]}><Keranjang /></RoleGuard>;
+  return <RoleGuard allowedRoles={[ROLES.USER, ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.KANTIN]}><Keranjang /></RoleGuard>;
 }
 
 function AdminVouchersPage() {
@@ -432,7 +435,15 @@ const dashboardPromoRoute = createRoute({
   getParentRoute: () => dashboardRoute,
   path: '/promo',
   component: function DashboardPromoRedirect() {
-    return <Navigate to="/vouchers" replace />;
+    const user = useAuthStore((state) => state.user);
+    const userRole = getUserRole(user);
+    if (userRole === ROLES.SUPER_ADMIN) {
+      return <Navigate to="/dashboard/admin/vouchers" replace />;
+    }
+    if (userRole === ROLES.KANTIN || userRole === ROLES.ADMIN) {
+      return <Navigate to="/dashboard/toko-saya/promo" replace />;
+    }
+    return <Navigate to="/dashboard/vouchers" replace />;
   },
 });
 

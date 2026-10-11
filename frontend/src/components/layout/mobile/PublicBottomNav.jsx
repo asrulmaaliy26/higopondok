@@ -13,7 +13,7 @@ export default function PublicBottomNav() {
   const isHome = path === '/';
   const isKantin = path.startsWith('/kantin');
   const isKeranjang = path === '/keranjang' || path === '/dashboard/keranjang';
-  const isPromo = path.startsWith('/vouchers');
+  const isPromo = path.startsWith('/vouchers') || path.startsWith('/dashboard/vouchers') || path.startsWith('/promo') || path.startsWith('/dashboard/promo');
   const isProfile = path.startsWith('/dashboard/profile') || path === '/profile' || path === '/login';
 
   return (
@@ -67,7 +67,7 @@ export default function PublicBottomNav() {
 
         {/* 4. Promo & Voucher */}
         <Link
-          to="/vouchers"
+          to={token ? "/dashboard/vouchers" : "/vouchers"}
           className={`flex flex-col items-center justify-center w-full h-full space-y-0.5 transition-colors relative ${
             isPromo
               ? 'text-green-600 dark:text-green-400 font-bold'

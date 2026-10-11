@@ -302,7 +302,7 @@ export default function DetailKantin() {
 
         {/* 2.1 PROMO VOUCHER BANNER (Gojek / GoFood Promo Ribbon) */}
         <div 
-          onClick={() => navigate({ to: '/vouchers' })}
+          onClick={() => navigate({ to: token ? '/dashboard/vouchers' : '/vouchers' })}
           className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 p-2 sm:p-2.5 flex items-center justify-between cursor-pointer hover:bg-amber-100/70 transition-colors shadow-2xs"
         >
           <div className="flex items-center gap-2">
