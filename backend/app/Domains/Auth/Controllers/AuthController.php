@@ -25,7 +25,14 @@ class AuthController extends Controller
             ->orWhere('phone', $loginInput)
             ->first();
 
-        if (! $user || ! Hash::check($request->password, $user->password)) {
+        $isPasswordValid = false;
+        try {
+            $isPasswordValid = $user && Hash::check($request->password, $user->password);
+        } catch (\Throwable $e) {
+            $isPasswordValid = false;
+        }
+
+        if (! $user || ! $isPasswordValid) {
             throw ValidationException::withMessages([
                 'email' => ['Kredensial yang diberikan tidak cocok dengan data kami.'],
             ]);

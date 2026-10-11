@@ -415,16 +415,27 @@ export default function DetailKantin() {
                     <div className="flex-1 flex flex-col justify-between overflow-hidden">
                       <div>
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <h3 className={`font-bold text-xs sm:text-sm ${!isAvailable ? 'text-gray-400' : 'text-gray-900 dark:text-white'}`}>
+                          <h3 
+                            onClick={() => isAvailable && handleAddToCart(product)}
+                            className={`font-bold text-xs sm:text-sm ${isAvailable ? 'cursor-pointer hover:text-green-600 transition-colors text-gray-900 dark:text-white' : 'text-gray-400'}`}
+                          >
                             {product.name}
                           </h3>
                           {productHasVariants && (
-                            <span className="text-[9.5px] bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 px-1 py-0.2 font-bold flex items-center gap-0.5">
+                            <button
+                              type="button"
+                              onClick={() => isAvailable && handleAddToCart(product)}
+                              className="text-[9.5px] bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 px-1.5 py-0.5 font-bold flex items-center gap-0.5 rounded-none hover:bg-purple-100 dark:hover:bg-purple-900/60 cursor-pointer transition-colors"
+                              title="Klik untuk melihat & memilih opsi varian"
+                            >
                               <Sparkles className="w-2.5 h-2.5" /> Ada Varian
-                            </span>
+                            </button>
                           )}
                         </div>
-                        <p className="text-[11px] text-gray-500 dark:text-gray-400 line-clamp-2 mt-0.5 leading-snug">
+                        <p 
+                          onClick={() => isAvailable && handleAddToCart(product)}
+                          className={`text-[11px] text-gray-500 dark:text-gray-400 line-clamp-2 mt-0.5 leading-snug ${isAvailable ? 'cursor-pointer' : ''}`}
+                        >
                           {product.description || 'Menu lezat & higienis khas kantin santri Al-Mannan'}
                         </p>
                       </div>

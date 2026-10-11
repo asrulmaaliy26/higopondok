@@ -389,14 +389,422 @@ class AdminController extends Controller
 
     public function activityLogs(Request $request)
     {
-        $logs = \App\Domains\Admin\ActivityLog::with(['user:id,name', 'user.roles'])->orderBy('created_at', 'desc')->paginate(50);
+        $query = \App\Domains\Admin\ActivityLog::with(['user:id,name', 'user.roles'])->orderBy('id', 'desc');
+
+        if ($request->filled('search')) {
+            $search = trim($request->search);
+            $query->where(function ($q) use ($search) {
+                $q->where('description', 'like', "%{$search}%")
+                  ->orWhere('model_type', 'like', "%{$search}%")
+                  ->orWhereHas('user', function ($uq) use ($search) {
+                      $uq->where('name', 'like', "%{$search}%");
+                  });
+            });
+        }
+
+        if ($request->filled('action') && $request->action !== 'all') {
+            $query->where('action', $request->action);
+        }
+
+        if ($request->filled('date_filter')) {
+            $filter = $request->date_filter;
+            if ($filter === 'today') {
+                $query->whereDate('created_at', now()->today());
+            } elseif ($filter === 'yesterday') {
+                $query->whereDate('created_at', now()->subDay()->toDateString());
+            } elseif ($filter === '7_days') {
+                $query->where('created_at', '>=', now()->subDays(7)->startOfDay());
+            } elseif ($filter === '30_days') {
+                $query->where('created_at', '>=', now()->subDays(30)->startOfDay());
+            }
+        } elseif ($request->filled('date')) {
+            $query->whereDate('created_at', $request->date);
+        }
+
+        $perPage = (int) $request->input('per_page', 50);
+        $logs = $query->paginate($perPage);
         return response()->json($logs);
     }
 
     public function paymentLogs(Request $request)
     {
-        $logs = \App\Domains\Admin\PaymentLog::with(['user:id,name', 'user.roles', 'order:id,total_price,status'])->orderBy('created_at', 'desc')->paginate(50);
+        $logs = \App\Domains\Admin\PaymentLog::with(['user:id,name', 'user.roles', 'order:id,total_price,status'])->orderBy('id', 'desc')->paginate(50);
         return response()->json($logs);
+    }
+
+    public function userAchievements(Request $request)
+    {
+        $totalCompleted = \App\Domains\Canteen\Order::where('status', 'completed')->count();
+        $totalOrders = \App\Domains\Canteen\Order::count();
+        $successRate = $totalOrders > 0 ? round(($totalCompleted / $totalOrders) * 100, 1) : 0;
+        $totalTurnover = (float) \App\Domains\Canteen\Order::where('status', 'completed')->sum('total_price');
+
+        // 1. Top Santri / Pelanggan Pesanan Tertinggi
+        $topUsers = \App\Domains\Canteen\Order::where('status', 'completed')
+            ->selectRaw('user_id, count(*) as total_orders, sum(total_price) as total_spent')
+            ->groupBy('user_id')
+            ->orderByDesc('total_orders')
+            ->take(15)
+            ->with('user:id,name,santri_name,santri_room,santri_class,penalty_points')
+            ->get()
+            ->map(function ($row, $index) {
+                $u = $row->user;
+                return [
+                    'rank' => $index + 1,
+                    'user_id' => $row->user_id,
+                    'name' => $u ? ($u->santri_name ?: $u->name) : "User #{$row->user_id}",
+                    'room' => $u->santri_room ?? '-',
+                    'class' => $u->santri_class ?? '-',
+                    'penalty_points' => (int) ($u->penalty_points ?? 0),
+                    'total_orders' => (int) $row->total_orders,
+                    'total_spent' => (float) $row->total_spent,
+                ];
+            });
+
+        // 2. Top Kantin / Toko Terlaris
+        $topCanteens = \App\Domains\Canteen\Order::where('status', 'completed')
+            ->selectRaw('canteen_id, count(*) as total_orders, sum(total_price) as total_revenue')
+            ->groupBy('canteen_id')
+            ->orderByDesc('total_orders')
+            ->take(15)
+            ->with('canteen:id,name,category')
+            ->get()
+            ->map(function ($row, $index) {
+                $c = $row->canteen;
+                return [
+                    'rank' => $index + 1,
+                    'canteen_id' => $row->canteen_id,
+                    'name' => $c->name ?? "Toko #{$row->canteen_id}",
+                    'category' => $c->category ?? '-',
+                    'total_orders' => (int) $row->total_orders,
+                    'total_revenue' => (float) $row->total_revenue,
+                ];
+            });
+
+        // 3. Top Kurir Pengantaran Terbanyak
+        $topCouriers = \App\Domains\Canteen\Order::where('status', 'completed')
+            ->whereNotNull('courier_id')
+            ->selectRaw('courier_id, count(*) as total_delivered, sum(delivery_fee) as total_fee')
+            ->groupBy('courier_id')
+            ->orderByDesc('total_delivered')
+            ->take(15)
+            ->with('courier:id,name')
+            ->get()
+            ->map(function ($row, $index) {
+                $cr = $row->courier;
+                return [
+                    'rank' => $index + 1,
+                    'courier_id' => $row->courier_id,
+                    'name' => $cr->name ?? "Kurir #{$row->courier_id}",
+                    'total_delivered' => (int) $row->total_delivered,
+                    'total_fee' => (float) $row->total_fee,
+                ];
+            });
+
+        return response()->json([
+            'summary' => [
+                'total_completed_orders' => $totalCompleted,
+                'total_orders' => $totalOrders,
+                'success_rate' => $successRate,
+                'total_turnover' => $totalTurnover,
+            ],
+            'top_users' => $topUsers,
+            'top_canteens' => $topCanteens,
+            'top_couriers' => $topCouriers,
+        ]);
+    }
+
+    /**
+     * Helper: Memuat seluruh data master santri unik (1.713 santri) dan memetakan akun-akun pemesan.
+     */
+    protected function getMasterSantriCollection()
+    {
+        $jsonPath = base_path('../data_santri/seluruh_data_santri.json');
+        if (!file_exists($jsonPath)) {
+            $jsonPath = base_path('../frontend/src/data/santri.json');
+        }
+
+        $rows = [];
+        if (file_exists($jsonPath)) {
+            $json = json_decode(file_get_contents($jsonPath), true);
+            $rows = $json['data'] ?? [];
+        }
+
+        // Ambil seluruh user terdaftar yang memiliki santri_name
+        $usersWithSantri = User::whereNotNull('santri_name')
+            ->where('santri_name', '!=', '')
+            ->withCount(['orders as completed_orders_count' => fn($q) => $q->where('status', 'completed')])
+            ->withCount('orders as total_orders_count')
+            ->withSum(['orders as total_spent' => fn($q) => $q->where('status', 'completed')], 'total_price')
+            ->get(['id', 'name', 'email', 'phone', 'santri_name', 'santri_room', 'santri_class', 'santri_level', 'balance', 'penalty_points']);
+
+        $accountsBySantri = [];
+        foreach ($usersWithSantri as $u) {
+            $clean = trim(preg_replace('/\s+/', ' ', mb_strtoupper($u->santri_name)));
+            $clean = trim(preg_replace('/\s+(LAKI-LAKI|PEREMPUAN)$/i', '', $clean));
+            if (!isset($accountsBySantri[$clean])) {
+                $accountsBySantri[$clean] = [];
+            }
+            $accountsBySantri[$clean][] = $u;
+        }
+
+        $allSantri = [];
+        $processedKeys = [];
+
+        foreach ($rows as $index => $r) {
+            $rawName = $r[1] ?? '';
+            $cleanName = trim(preg_replace('/\s+(Laki-laki|Perempuan)$/i', '', $rawName));
+            $key = trim(preg_replace('/\s+/', ' ', mb_strtoupper($cleanName)));
+            $processedKeys[$key] = true;
+
+            $gender = '';
+            if (preg_match('/Perempuan$/i', $rawName)) $gender = 'Perempuan';
+            elseif (preg_match('/Laki-laki$/i', $rawName)) $gender = 'Laki-laki';
+
+            $nis = trim($r[2] ?? '');
+            $nisn = trim($r[3] ?? '');
+            $level = trim($r[4] ?? '');
+            $class = trim($r[5] ?? '');
+            $room = trim($r[10] ?? '') ?: (trim($r[6] ?? '') ?: '-');
+            $program = trim($r[7] ?? '');
+            $phone = trim($r[8] ?? '');
+
+            $matched = $accountsBySantri[$key] ?? [];
+
+            $totOrders = 0;
+            $totSpent = 0;
+            $maxPenalty = 0;
+            $totBalance = 0;
+
+            foreach ($matched as $acc) {
+                $totOrders += (int) $acc->completed_orders_count;
+                $totSpent += (float) $acc->total_spent;
+                if ($acc->penalty_points > $maxPenalty) $maxPenalty = (int) $acc->penalty_points;
+                $totBalance += (float) $acc->balance;
+            }
+
+            $allSantri[] = [
+                'id' => $nis ?: ('s_' . ($index + 1)),
+                'nis' => $nis,
+                'nisn' => $nisn,
+                'santri_name' => $cleanName,
+                'gender' => $gender,
+                'santri_level' => $level,
+                'santri_class' => $class,
+                'santri_room' => $room,
+                'program' => $program,
+                'phone' => $phone,
+                'accounts_count' => count($matched),
+                'linked_accounts' => $matched,
+                'completed_orders_count' => $totOrders,
+                'total_spent' => $totSpent,
+                'penalty_points' => $maxPenalty,
+                'total_balance' => $totBalance,
+            ];
+        }
+
+        // Masukkan juga santri dari tabel users yang mungkin namanya belum ada di master json
+        foreach ($accountsBySantri as $key => $accs) {
+            if (!isset($processedKeys[$key])) {
+                $firstAcc = $accs[0];
+                $totOrders = 0;
+                $totSpent = 0;
+                $maxPenalty = 0;
+                $totBalance = 0;
+                foreach ($accs as $acc) {
+                    $totOrders += (int) $acc->completed_orders_count;
+                    $totSpent += (float) $acc->total_spent;
+                    if ($acc->penalty_points > $maxPenalty) $maxPenalty = (int) $acc->penalty_points;
+                    $totBalance += (float) $acc->balance;
+                }
+
+                $allSantri[] = [
+                    'id' => 'u_' . $firstAcc->id,
+                    'nis' => '-',
+                    'nisn' => '-',
+                    'santri_name' => $firstAcc->santri_name,
+                    'gender' => '',
+                    'santri_level' => $firstAcc->santri_level ?: '-',
+                    'santri_class' => $firstAcc->santri_class ?: '-',
+                    'santri_room' => $firstAcc->santri_room ?: '-',
+                    'program' => '-',
+                    'phone' => $firstAcc->phone ?: '-',
+                    'accounts_count' => count($accs),
+                    'linked_accounts' => $accs,
+                    'completed_orders_count' => $totOrders,
+                    'total_spent' => $totSpent,
+                    'penalty_points' => $maxPenalty,
+                    'total_balance' => $totBalance,
+                ];
+            }
+        }
+
+        return collect($allSantri);
+    }
+
+    /**
+     * Mengambil daftar master seluruh santri unik (1 santri = 1 baris) beserta statistik pesanan & filter.
+     */
+    public function santriList(Request $request)
+    {
+        $santriCollection = $this->getMasterSantriCollection();
+
+        // Opsi Filter Unik
+        $levels = $santriCollection->pluck('santri_level')->filter(fn($l) => $l && $l !== '-')->unique()->values()->sort()->values();
+        
+        $levelClassesMap = [];
+        foreach ($santriCollection->groupBy('santri_level') as $lvl => $group) {
+            if ($lvl && $lvl !== '-') {
+                $levelClassesMap[$lvl] = $group->pluck('santri_class')->filter(fn($c) => $c && $c !== '-')->unique()->values()->sort()->values();
+            }
+        }
+
+        $allRooms = $santriCollection->pluck('santri_room')->filter(fn($r) => $r && $r !== '-')->unique()->values()->sort()->values();
+
+        // Filter Pencarian Teks
+        if ($request->filled('search')) {
+            $search = mb_strtolower(trim($request->search));
+            $santriCollection = $santriCollection->filter(function ($item) use ($search) {
+                if (str_contains(mb_strtolower($item['santri_name']), $search)) return true;
+                if (str_contains(mb_strtolower($item['nis']), $search)) return true;
+                if (str_contains(mb_strtolower($item['nisn']), $search)) return true;
+                if (str_contains(mb_strtolower($item['santri_room']), $search)) return true;
+                if (str_contains(mb_strtolower($item['santri_class']), $search)) return true;
+                if (str_contains(mb_strtolower($item['phone']), $search)) return true;
+
+                // Cari juga di nama wali atau email akun yang terhubung
+                foreach ($item['linked_accounts'] as $acc) {
+                    if (str_contains(mb_strtolower($acc->name ?? ''), $search)) return true;
+                    if (str_contains(mb_strtolower($acc->email ?? ''), $search)) return true;
+                    if (str_contains(mb_strtolower($acc->phone ?? ''), $search)) return true;
+                }
+
+                return false;
+            });
+        }
+
+        // Filter Jenjang
+        if ($request->filled('level') && $request->level !== 'all') {
+            $santriCollection = $santriCollection->filter(fn($i) => $i['santri_level'] === $request->level);
+        }
+
+        // Filter Kelas
+        if ($request->filled('class') && $request->class !== 'all') {
+            $santriCollection = $santriCollection->filter(fn($i) => str_contains($i['santri_class'], $request->class));
+        }
+
+        // Filter Kamar
+        if ($request->filled('room') && $request->room !== 'all') {
+            $santriCollection = $santriCollection->filter(fn($i) => str_contains($i['santri_room'], $request->room));
+        }
+
+        // Filter Status Akun
+        if ($request->input('account_status') === 'has_account') {
+            $santriCollection = $santriCollection->filter(fn($i) => $i['accounts_count'] > 0);
+        } elseif ($request->input('account_status') === 'no_account') {
+            $santriCollection = $santriCollection->filter(fn($i) => $i['accounts_count'] === 0);
+        } elseif ($request->input('account_status') === 'multi_account') {
+            $santriCollection = $santriCollection->filter(fn($i) => $i['accounts_count'] > 1);
+        }
+
+        // Pengurutan
+        $sortBy = $request->input('sort_by', 'name_asc');
+        if ($sortBy === 'orders_desc') {
+            $santriCollection = $santriCollection->sortByDesc('completed_orders_count');
+        } elseif ($sortBy === 'spent_desc') {
+            $santriCollection = $santriCollection->sortByDesc('total_spent');
+        } elseif ($sortBy === 'penalty_desc') {
+            $santriCollection = $santriCollection->sortByDesc('penalty_points');
+        } elseif ($sortBy === 'accounts_desc') {
+            $santriCollection = $santriCollection->sortByDesc('accounts_count');
+        } elseif ($sortBy === 'balance_desc') {
+            $santriCollection = $santriCollection->sortByDesc('total_balance');
+        } else {
+            $santriCollection = $santriCollection->sortBy('santri_name', SORT_NATURAL | SORT_FLAG_CASE);
+        }
+
+        // Paginasi
+        $perPage = max(5, min(100, (int) $request->input('per_page', 25)));
+        $currentPage = max(1, (int) $request->input('page', 1));
+        $totalItems = $santriCollection->count();
+
+        $pagedItems = $santriCollection->slice(($currentPage - 1) * $perPage, $perPage)->values();
+
+        $classesForSelectedLevel = ($request->filled('level') && $request->level !== 'all' && isset($levelClassesMap[$request->level]))
+            ? $levelClassesMap[$request->level]
+            : $santriCollection->pluck('santri_class')->filter(fn($c) => $c && $c !== '-')->unique()->values()->sort()->values();
+
+        return response()->json([
+            'santri' => [
+                'current_page' => $currentPage,
+                'data' => $pagedItems,
+                'first_page_url' => null,
+                'from' => ($currentPage - 1) * $perPage + 1,
+                'last_page' => (int) ceil($totalItems / $perPage),
+                'next_page_url' => null,
+                'path' => $request->url(),
+                'per_page' => $perPage,
+                'prev_page_url' => null,
+                'to' => min($currentPage * $perPage, $totalItems),
+                'total' => $totalItems,
+            ],
+            'filter_options' => [
+                'levels' => $levels,
+                'classes' => $classesForSelectedLevel,
+                'rooms' => $allRooms,
+                'level_classes_map' => $levelClassesMap,
+            ],
+            'meta_counts' => [
+                'total_santri' => $totalItems,
+                'total_master' => 1713,
+            ]
+        ]);
+    }
+
+    /**
+     * Mengambil detail lengkap 1 santri dari master data beserta seluruh akun terhubung dan 5 riwayat pesanan terakhir.
+     */
+    public function santriDetail($id)
+    {
+        $santriCollection = $this->getMasterSantriCollection();
+
+        $santri = $santriCollection->first(function ($item) use ($id) {
+            return (string) $item['id'] === (string) $id
+                || (string) $item['nis'] === (string) $id
+                || mb_strtolower($item['santri_name']) === mb_strtolower($id);
+        });
+
+        if (!$santri) {
+            // Fallback cari di User jika ada id numeric
+            $fallbackUser = User::find($id);
+            if ($fallbackUser && $fallbackUser->santri_name) {
+                $santri = $santriCollection->first(function ($item) use ($fallbackUser) {
+                    return mb_strtolower($item['santri_name']) === mb_strtolower($fallbackUser->santri_name);
+                });
+            }
+        }
+
+        if (!$santri) {
+            return response()->json(['message' => 'Santri tidak ditemukan.'], 404);
+        }
+
+        $accountIds = collect($santri['linked_accounts'])->pluck('id')->filter()->toArray();
+
+        // 5 pesanan terakhir dari seluruh akun yang terhubung ke santri ini
+        $recentOrders = [];
+        if (!empty($accountIds)) {
+            $recentOrders = \App\Domains\Canteen\Order::whereIn('user_id', $accountIds)
+                ->with(['canteen:id,name', 'user:id,name', 'items:id,order_id,product_id,quantity,price,subtotal', 'items.product:id,name'])
+                ->orderByDesc('id')
+                ->take(5)
+                ->get();
+        }
+
+        return response()->json([
+            'santri' => $santri,
+            'linked_accounts' => $santri['linked_accounts'],
+            'recent_orders' => $recentOrders,
+        ]);
     }
 
     /**

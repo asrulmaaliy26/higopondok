@@ -66,9 +66,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/admin/orders/{id}/force', [\App\Domains\Admin\Controllers\AdminOrderController::class, 'forceDelete']);
         Route::post('/admin/orders/trash/empty', [\App\Domains\Admin\Controllers\AdminOrderController::class, 'emptyTrash']);
 
-        // Logs
+        // Logs & Database Santri
         Route::get('/admin/logs/activity', [AdminController::class, 'activityLogs']);
         Route::get('/admin/logs/payment', [AdminController::class, 'paymentLogs']);
+        Route::get('/admin/logs/achievements', [AdminController::class, 'userAchievements']);
+        Route::get('/admin/logs/santri', [AdminController::class, 'santriList']);
+        Route::get('/admin/logs/santri/{id}', [AdminController::class, 'santriDetail']);
 
         // Admin Vouchers
         Route::get('/admin/vouchers', [\App\Domains\Canteen\Controllers\VoucherController::class, 'allVouchers']);

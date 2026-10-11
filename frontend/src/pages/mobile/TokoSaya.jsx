@@ -1,6 +1,18 @@
 import React, { useState } from 'react';
-import { Store, Save, Plus, Edit2, Trash2, X, ChevronLeft, ChevronRight, Star, Clock, CheckCircle2, ChevronDown, Search, User, Flame, Layers } from 'lucide-react';
+import { Store, Save, Plus, Edit2, Trash2, X, ChevronLeft, ChevronRight, Star, Clock, CheckCircle2, ChevronDown, Search, User, Flame, Layers, Sparkles } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+
+const hasVariants = (product) => {
+  const cfg = product?.variant_config;
+  if (!cfg) return false;
+  return !!(
+    cfg.spicy?.enabled ||
+    cfg.temperature?.enabled ||
+    cfg.portion?.enabled ||
+    cfg.sugar?.enabled ||
+    (cfg.custom?.enabled && Array.isArray(cfg.custom?.groups) && cfg.custom?.groups?.length > 0)
+  );
+};
 import { useNavigate } from '@tanstack/react-router';
 import toast from 'react-hot-toast';
 import api, { getStorageUrl } from '../../lib/axios';
@@ -73,6 +85,7 @@ export default function TokoSaya() {
   // Product Form State (handled mostly in modal now, keeping simple state for toggling)
   const [showProductModal, setShowProductModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
+  const [selectedVariantProduct, setSelectedVariantProduct] = useState(null);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState('popular'); // Default: 'popular' (Paling Laris) | 'all' (Semua Menu)
@@ -782,9 +795,29 @@ export default function TokoSaya() {
                       </div>
                     )}
 
-                    <h3 className={`text-sm sm:text-base font-bold truncate ${!product.is_available ? 'text-gray-400' : 'text-gray-900 dark:text-white'}`}>
-                      {product.name}
-                    </h3>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <h3 className={`text-sm sm:text-base font-bold truncate ${!product.is_available ? 'text-gray-400' : 'text-gray-900 dark:text-white'}`}>
+                        {product.name}
+                      </h3>
+                      {hasVariants(product) && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedVariantProduct(product)}
+                          className="text-[9.5px] bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 px-1.5 py-0.5 font-bold flex items-center gap-1 rounded-none hover:bg-purple-100 dark:hover:bg-purple-900/60 cursor-pointer transition-colors shrink-0"
+                          title="Klik untuk melihat rincian opsi & varian menu"
+                        >
+                          <Sparkles className="w-2.5 h-2.5 text-purple-600 dark:text-purple-400" />
+                          <span>Ada Varian</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Catatan / Deskripsi Produk */}
+                    {product.description && (
+                      <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1 line-clamp-2 leading-snug">
+                        {product.description}
+                      </p>
+                    )}
                     
                     {/* Stock & Availability */}
                     <div className="flex items-center gap-2 mt-1">
@@ -924,6 +957,156 @@ export default function TokoSaya() {
         onSave={handleSaveProduct}
         isPending={saveProductMutation.isPending}
       />
+
+      {/* Modal Detail Opsi & Varian Menu (Pengelola Toko) */}
+      {selectedVariantProduct && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs p-0 sm:p-4">
+          <div className="bg-white dark:bg-gray-900 w-full sm:max-w-lg rounded-none border border-gray-200 dark:border-gray-800 shadow-2xl flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50">
+              <div className="flex items-center gap-2 min-w-0">
+                <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0" />
+                <h3 className="font-bold text-sm text-gray-900 dark:text-white truncate">
+                  Rincian Varian: {selectedVariantProduct.name}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedVariantProduct(null)}
+                className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 cursor-pointer rounded-none"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Content Body */}
+            <div className="p-4 overflow-y-auto space-y-3.5 text-xs text-gray-700 dark:text-gray-300">
+              {/* Info Produk & Catatan */}
+              <div className="p-2.5 bg-gray-50 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700/60 space-y-1">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="font-semibold text-gray-500 dark:text-gray-400">Kategori: {selectedVariantProduct.category || '-'}</span>
+                  <span className="font-mono font-bold text-green-600 dark:text-green-400">
+                    Rp {parseFloat(selectedVariantProduct.price || selectedVariantProduct.hpj || 0).toLocaleString('id-ID')}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold uppercase text-gray-400 block tracking-wider">Catatan / Deskripsi:</span>
+                  <p className="text-xs text-gray-800 dark:text-gray-200 mt-0.5 leading-relaxed font-medium">
+                    {selectedVariantProduct.description || '(Tidak ada catatan/deskripsi khusus)'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Rincian Opsi Varian yang Dikonfigurasi */}
+              <div className="space-y-2">
+                <span className="text-[11px] font-bold text-gray-900 dark:text-white uppercase tracking-wider block">
+                  Daftar Opsi Varian Aktif
+                </span>
+
+                {(() => {
+                  const cfg = selectedVariantProduct.variant_config || {};
+                  const groups = [];
+
+                  if (cfg.spicy?.enabled) {
+                    groups.push({
+                      title: 'Level Pedas',
+                      desc: `Pilihan level pedas aktif (Maksimal Level ${cfg.spicy.maxLevel || 3})`,
+                      badge: 'Pedas'
+                    });
+                  }
+                  if (cfg.temperature?.enabled) {
+                    const opts = [];
+                    if (cfg.temperature.allowIce) opts.push('Es / Dingin');
+                    if (cfg.temperature.allowHot) opts.push('Hangat / Panas');
+                    groups.push({
+                      title: 'Suhu / Penyajian',
+                      desc: opts.join(', ') || 'Suhu Khusus',
+                      badge: 'Suhu'
+                    });
+                  }
+                  if (cfg.portion?.enabled) {
+                    groups.push({
+                      title: 'Pilihan Porsi',
+                      desc: `Reguler & Jumbo (+Rp ${parseFloat(cfg.portion.jumboPrice || 0).toLocaleString('id-ID')})`,
+                      badge: 'Porsi'
+                    });
+                  }
+                  if (cfg.sugar?.enabled) {
+                    groups.push({
+                      title: 'Kadar Manis / Gula',
+                      desc: 'Normal (100%), Sedikit Gula, Tanpa Gula',
+                      badge: 'Gula'
+                    });
+                  }
+                  if (cfg.custom?.enabled && Array.isArray(cfg.custom?.groups)) {
+                    cfg.custom.groups.forEach((cg, idx) => {
+                      const itemsStr = (cg.items || cg.options || []).map(it => {
+                        const name = typeof it === 'string' ? it : it.name;
+                        const price = typeof it === 'object' && it.price ? ` (+Rp ${parseFloat(it.price).toLocaleString('id-ID')})` : '';
+                        return `${name}${price}`;
+                      }).join(', ');
+                      groups.push({
+                        title: cg.name || `Pilihan Tambahan #${idx + 1}`,
+                        desc: itemsStr || '(Belum ada opsi ditambahkan)',
+                        badge: cg.type === 'checkbox' ? 'Multi Pilihan' : 'Pilihan Tunggal'
+                      });
+                    });
+                  }
+
+                  if (groups.length === 0) {
+                    return (
+                      <p className="text-gray-400 italic text-center py-4">
+                        Tidak ada konfigurasi varian aktif pada menu ini.
+                      </p>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-2">
+                      {groups.map((grp, gIdx) => (
+                        <div key={gIdx} className="p-2.5 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col gap-1">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-gray-900 dark:text-white text-xs">{grp.title}</span>
+                            <span className="text-[9.5px] font-semibold px-1.5 py-0.2 bg-purple-50 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300 border border-purple-200 dark:border-purple-800 rounded-none">
+                              {grp.badge}
+                            </span>
+                          </div>
+                          <p className="text-[11.5px] text-gray-600 dark:text-gray-400">
+                            {grp.desc}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* Footer Buttons */}
+            <div className="p-3 border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40 flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const prod = selectedVariantProduct;
+                  setSelectedVariantProduct(null);
+                  openEditProduct(prod);
+                }}
+                className="flex-1 py-2 px-3 bg-green-600 hover:bg-green-700 text-white font-bold text-xs uppercase tracking-wider rounded-none transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Edit2 className="w-3.5 h-3.5" />
+                <span>Ubah Menu & Varian</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedVariantProduct(null)}
+                className="py-2 px-4 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-bold text-xs rounded-none transition-colors cursor-pointer"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

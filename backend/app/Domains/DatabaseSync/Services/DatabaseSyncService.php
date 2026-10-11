@@ -205,6 +205,11 @@ class DatabaseSyncService
             throw new Exception('Data dump SQL dari VPS kosong.');
         }
 
+        // Sanitasi kompatibilitas MySQL / MariaDB:
+        // Hapus penamaan eksplisit check constraint bawaan MariaDB/MySQL (misal: CONSTRAINT `orders_chk_1` CHECK)
+        // agar MySQL tidak melempar error duplicate check constraint name (Error 3822)
+        $sql = preg_replace('/CONSTRAINT\s+[`"]?[a-zA-Z0-9_]+_chk_\d+[`"]?\s+CHECK/i', 'CHECK', $sql);
+
         // Pertahankan personal_access_tokens lokal agar admin lokal tidak ter-logout
         $localTokens = [];
         try {
