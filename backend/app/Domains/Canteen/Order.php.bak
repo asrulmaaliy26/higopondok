@@ -15,13 +15,15 @@ class Order extends Model
 {
     use HasFactory, LogsActivity, SoftDeletes;
 
-    // Konstanta Bisnis Finansial & Tarif Higo Pondok (Opsi B)
+    // Konstanta Bisnis Finansial & Tarif Higo Pondok
     public const BASE_DELIVERY_FEE = 3000.0;
     public const BASE_ADMIN_FEE = 2000.0;
     public const EXTRA_DELIVERY_PER_5_ITEMS = 2000.0;
     public const EXTRA_ADMIN_PER_5_ITEMS = 3000.0;
-    public const USER_THRESHOLD_COURIER_CUT = 2000.0; // Potongan ongkir dialihkan ke admin mulai user ke-2 dst
-    public const USER_THRESHOLD_LIMIT = 1;            // Hanya user ke-1 yang tidak dipotong (mulai user ke-2 langsung dipotong)
+    public const USER_RANK_2_COURIER_CUT = 1000.0;     // Santri ke-2 dialihkan Rp 1.000 ke admin
+    public const USER_RANK_3_PLUS_COURIER_CUT = 2000.0; // Santri ke-3 dst dialihkan Rp 2.000 ke admin
+    public const USER_THRESHOLD_COURIER_CUT = 2000.0;   // Fallback backward compatibility
+    public const USER_THRESHOLD_LIMIT = 1;              // Santri ke-1 utuh
 
     /**
      * Dapatkan konfigurasi tarif terpusat (membaca dari config/pricing.php dengan fallback ke konstanta kelas)
@@ -29,12 +31,14 @@ class Order extends Model
     public static function getPricingConfig(): array
     {
         return [
-            'base_delivery_fee'          => (float) config('pricing.base_delivery_fee', self::BASE_DELIVERY_FEE),
-            'base_admin_fee'             => (float) config('pricing.base_admin_fee', self::BASE_ADMIN_FEE),
-            'extra_delivery_per_5_items' => (float) config('pricing.extra_delivery_per_5_items', self::EXTRA_DELIVERY_PER_5_ITEMS),
-            'extra_admin_per_5_items'    => (float) config('pricing.extra_admin_per_5_items', self::EXTRA_ADMIN_PER_5_ITEMS),
-            'user_threshold_limit'       => (int) config('pricing.user_threshold_limit', self::USER_THRESHOLD_LIMIT),
-            'user_threshold_courier_cut' => (float) config('pricing.user_threshold_courier_cut', self::USER_THRESHOLD_COURIER_CUT),
+            'base_delivery_fee'            => (float) config('pricing.base_delivery_fee', self::BASE_DELIVERY_FEE),
+            'base_admin_fee'               => (float) config('pricing.base_admin_fee', self::BASE_ADMIN_FEE),
+            'extra_delivery_per_5_items'   => (float) config('pricing.extra_delivery_per_5_items', self::EXTRA_DELIVERY_PER_5_ITEMS),
+            'extra_admin_per_5_items'      => (float) config('pricing.extra_admin_per_5_items', self::EXTRA_ADMIN_PER_5_ITEMS),
+            'user_rank_2_courier_cut'      => (float) config('pricing.user_rank_2_courier_cut', self::USER_RANK_2_COURIER_CUT),
+            'user_rank_3_plus_courier_cut' => (float) config('pricing.user_rank_3_plus_courier_cut', self::USER_RANK_3_PLUS_COURIER_CUT),
+            'user_threshold_limit'         => (int) config('pricing.user_threshold_limit', self::USER_THRESHOLD_LIMIT),
+            'user_threshold_courier_cut'   => (float) config('pricing.user_threshold_courier_cut', self::USER_THRESHOLD_COURIER_CUT),
         ];
     }
 
@@ -56,11 +60,11 @@ class Order extends Model
         'proof_courier_paid',
         'custom_notes',
         'is_custom',
-        'created_at',
-        'order_for',
-        'is_priority',
         'voucher_id',
         'voucher_discount',
+        'order_for',
+        'is_priority',
+        'created_at',
     ];
 
     protected $casts = [
@@ -70,21 +74,16 @@ class Order extends Model
         'total_price' => 'float',
         'admin_fee' => 'float',
         'delivery_fee' => 'float',
+        'voucher_discount' => 'float',
         'is_courier_paid_by_canteen' => 'boolean',
         'is_custom' => 'boolean',
         'is_priority' => 'boolean',
-        'voucher_discount' => 'float',
     ];
 
     protected $appends = [
         'hpp',
         'canteen_profit',
     ];
-
-    public function voucher()
-    {
-        return $this->belongsTo(Voucher::class);
-    }
 
     public function user()
     {
@@ -94,6 +93,11 @@ class Order extends Model
     public function canteen()
     {
         return $this->belongsTo(Canteen::class);
+    }
+
+    public function voucher()
+    {
+        return $this->belongsTo(Voucher::class);
     }
 
     public function items()
@@ -116,7 +120,7 @@ class Order extends Model
     public function scopeForRecap($query)
     {
         return $query->whereIn('status', ['processing', 'completed'])
-                     ->with(['user', 'items.product', 'canteen', 'courier', 'voucher']);
+                     ->with(['user', 'items.product', 'canteen', 'courier']);
     }
 
     /**
@@ -189,8 +193,9 @@ class Order extends Model
      * pada toko yang sama dalam 1 hari kalender.
      *
      * Aturan:
-     *   - User ke-1, 2, 3 : delivery_fee utuh, admin_fee normal.
-     *   - User ke-4+       : delivery_fee dipotong (dialihkan ke admin).
+     *   - User ke-1 : ongkir kurir 100% utuh (cut Rp 0).
+     *   - User ke-2 : potongan Rp 1.000 dialihkan ke kas admin.
+     *   - User ke-3+: potongan Rp 2.000 dialihkan ke kas admin.
      *
      * Grand Total yang dibayar user TETAP SAMA; hanya distribusi internal bergeser.
      *
@@ -202,8 +207,8 @@ class Order extends Model
         $cfg = self::getPricingConfig();
         $base = self::calculateOrderFees($totalQuantity);
 
-        $courierCut = ($userDailyIndex > $cfg['user_threshold_limit'])
-            ? min($base['delivery_fee'], (float) $cfg['user_threshold_courier_cut'])
+        $courierCut = ($userDailyIndex > ($cfg['user_threshold_limit'] ?? 3))
+            ? min($base['delivery_fee'], (float) ($cfg['user_threshold_courier_cut'] ?? 2000.0))
             : 0.0;
 
         return array_merge($base, [
@@ -223,20 +228,23 @@ class Order extends Model
      * @param int    $canteenId ID kantin yang dituju.
      * @param string $date      Tanggal dalam format 'Y-m-d'.
      */
-    public static function getUserDailyIndex(int $userId, int $canteenId, string $date, ?int $orderId = null): int
+    public static function getUserDailyIndex(int $userId, int $canteenId, string $date): int
     {
-        $query = self::whereDate('created_at', $date)
+        $existingUserIds = self::whereDate('created_at', $date)
             ->where('canteen_id', $canteenId)
             ->whereIn('status', ['pending', 'processing', 'completed'])
-            ->orderBy('id', 'asc');
+            ->orderBy('id', 'asc')
+            ->pluck('user_id')
+            ->unique()
+            ->values();
 
-        if ($orderId) {
-            $ids = $query->pluck('id')->values();
-            $pos = $ids->search($orderId);
-            return $pos === false ? ($ids->count() + 1) : ($pos + 1);
+        $pos = $existingUserIds->search($userId);
+
+        if ($pos === false) {
+            return $existingUserIds->count() + 1;
         }
 
-        return $query->count() + 1;
+        return $pos + 1;
     }
 
     /**
@@ -248,10 +256,15 @@ class Order extends Model
             return (float) $this->items->sum(fn($i) => $i->subtotal_amount);
         }
 
-        $cfg = self::getPricingConfig();
-        $rawDelivery = (float) ($this->delivery_fee > 0 ? $this->delivery_fee : $cfg['base_delivery_fee']);
-        $rawAdmin = (float) ($this->admin_fee > 0 ? $this->admin_fee : $cfg['base_admin_fee']);
-        return max(0, (float) $this->total_price - $rawDelivery - $rawAdmin);
+        if ($this->items()->exists()) {
+            return (float) $this->items()->sum(\Illuminate\Support\Facades\DB::raw('price * quantity'));
+        }
+
+        $rawDelivery = !is_null($this->delivery_fee) ? (float) $this->delivery_fee : 3000.0;
+        $rawAdmin = !is_null($this->admin_fee) ? (float) $this->admin_fee : 2000.0;
+        $productDiscount = ($this->voucher && $this->voucher->discount_type === 'product_discount') ? (float) ($this->voucher_discount ?? 0) : 0.0;
+
+        return max(0.0, (float) $this->total_price - $rawDelivery - $rawAdmin + $productDiscount);
     }
 
     /**
@@ -295,14 +308,16 @@ class Order extends Model
     public function getFinancialMetrics(int $userDailyIndex = 1): array
     {
         $cfg = self::getPricingConfig();
-        $baseAdminStandard = $cfg['base_admin_fee'];
-        $baseDeliveryStandard = $cfg['base_delivery_fee'];
+        $baseAdminStandard = (float) $cfg['base_admin_fee'];
+        $baseDeliveryStandard = (float) $cfg['base_delivery_fee'];
 
         // 3 user pertama tidak terkena potongan (0), user ke-4 dst terkena potongan ke admin
-        $discountRate = ($userDailyIndex > $cfg['user_threshold_limit']) ? $cfg['user_threshold_courier_cut'] : 0.0;
+        $discountRate = ($userDailyIndex > ($cfg['user_threshold_limit'] ?? 3)) 
+            ? (float) ($cfg['user_threshold_courier_cut'] ?? 2000.0) 
+            : 0.0;
 
-        $dbDeliveryFee = (float) ($this->delivery_fee > 0 ? $this->delivery_fee : $baseDeliveryStandard);
-        $dbAdminFee = (float) ($this->admin_fee > 0 ? $this->admin_fee : $baseAdminStandard);
+        $dbDeliveryFee = (float) (!is_null($this->delivery_fee) ? $this->delivery_fee : $baseDeliveryStandard);
+        $dbAdminFee = (float) (!is_null($this->admin_fee) ? $this->admin_fee : $baseAdminStandard);
 
         if ($dbAdminFee > $baseAdminStandard) {
             // Sudah tersimpan potongan sebelumnya di database (misal saat checkout user ke-4+)
@@ -323,7 +338,10 @@ class Order extends Model
         }
 
         $voucherDiscount = (float) ($this->voucher_discount ?? 0);
-        $netAdminFee = max(0, $adminFee - $voucherDiscount);
+        $voucherType = $this->voucher ? $this->voucher->discount_type : null;
+        $deliveryDiscount = ($voucherType === 'delivery_fee') ? $voucherDiscount : 0.0;
+        $adminDiscount = ($voucherType === 'admin_fee') ? $voucherDiscount : 0.0;
+        $productDiscount = ($voucherType === 'product_discount') ? $voucherDiscount : 0.0;
 
         $totalPrice = (float) $this->total_price;
         $productsSubtotal = $this->products_subtotal;
@@ -333,16 +351,21 @@ class Order extends Model
         return [
             'total_price' => $totalPrice,
             'products_subtotal' => $productsSubtotal,
+            'net_products_subtotal' => max(0, $productsSubtotal - $productDiscount),
             'hpp' => $orderHpp,
             'canteen_profit' => $canteenProfit,
             'raw_delivery_fee' => $rawDeliveryFee,
             'raw_admin_fee' => $dbAdminFee,
             'delivery_fee' => $deliveryFee,
+            'courier_net_delivery_fee' => $deliveryFee,
             'admin_fee' => $adminFee,
             'base_admin_fee' => $baseAdminFee,
             'courier_cut_to_admin' => $courierCutToAdmin,
             'voucher_discount' => $voucherDiscount,
-            'net_admin_fee' => $netAdminFee,
+            'voucher_type' => $voucherType,
+            'delivery_discount' => $deliveryDiscount,
+            'admin_discount' => $adminDiscount,
+            'product_discount' => $productDiscount,
             'user_daily_index' => $userDailyIndex,
         ];
     }
@@ -354,56 +377,72 @@ class Order extends Model
     public static function calculateRecap($orders, string $period = 'day'): array
     {
         $totalProducts = 0;
+        $totalNetProducts = 0;
         $totalHpp = 0;
         $totalDeliveryFee = 0;
+        $totalCourierNetDeliveryFee = 0;
         $totalAdminFee = 0;
         $totalBaseAdminFee = 0;
         $totalCourierCutToAdmin = 0;
         $totalVoucherDiscount = 0;
+        $totalDeliveryDiscount = 0;
+        $totalAdminDiscount = 0;
+        $totalProductDiscount = 0;
         $grandTotal = 0;
 
         $canteenRecap = [];
         $userRecap = [];
         $courierRecap = [];
         $productBreakdown = [];
-        $voucherBreakdown = [];
 
-        // Lacak nomor urut pesanan per toko/kantin per tanggal (dalam 1 hari)
-        // Aturan: Pesanan ke-1 di toko tersebut: Ongkir Kurir 3.000, Admin 2.000.
-        // Pesanan ke-2 dan seterusnya di toko tersebut: Langsung dipotong 2.000 ke admin (Ongkir 1.000, Admin 4.000).
-        $canteenDailyOrderCounts = [];
+        // Lacak urutan user unik per toko/kantin per tanggal (dalam 1 hari)
+        // Aturan: User ke-1 utuh, User ke-2 dialihkan 1.000 ke admin, User ke-3+ dialihkan 2.000 ke admin.
+        $seenUsersPerDayCanteen = [];
 
         foreach ($orders as $order) {
+            $order->loadMissing(['voucher', 'items.product', 'user', 'courier', 'canteen']);
+
             $cId = $order->canteen_id;
-            $userId = $order->user_id;
             $orderDate = $order->created_at ? $order->created_at->format('Y-m-d') : date('Y-m-d');
             $dayKey = $orderDate . '_' . $cId;
 
-            if (!isset($canteenDailyOrderCounts[$dayKey])) {
-                $canteenDailyOrderCounts[$dayKey] = 0;
+            if (!isset($seenUsersPerDayCanteen[$dayKey])) {
+                $seenUsersPerDayCanteen[$dayKey] = [];
             }
 
-            $canteenDailyOrderCounts[$dayKey]++;
-            $orderIndex = $canteenDailyOrderCounts[$dayKey];
+            $userId = $order->user_id;
+            if (!isset($seenUsersPerDayCanteen[$dayKey][$userId])) {
+                $userIndex = count($seenUsersPerDayCanteen[$dayKey]) + 1;
+                $seenUsersPerDayCanteen[$dayKey][$userId] = $userIndex;
+            } else {
+                $userIndex = $seenUsersPerDayCanteen[$dayKey][$userId];
+            }
 
-            $metrics = $order->getFinancialMetrics($orderIndex);
+            $metrics = $order->getFinancialMetrics($userIndex);
 
             $productsSubtotal = $metrics['products_subtotal'];
+            $netProductsSubtotal = $metrics['net_products_subtotal'];
             $orderHpp = $metrics['hpp'];
-            $deliveryFee = $metrics['delivery_fee'];
-            $adminFee = $metrics['admin_fee'];
+            $deliveryFee = $metrics['delivery_fee']; // Riil bayar santri
+            $courierNetDeliveryFee = $metrics['courier_net_delivery_fee']; // Hak kurir
+            $adminFee = $metrics['admin_fee']; // Riil bayar santri
             $baseAdminFee = $metrics['base_admin_fee'];
             $courierCutToAdmin = $metrics['courier_cut_to_admin'];
-            $voucherDiscount = $metrics['voucher_discount'];
             $totalPrice = $metrics['total_price'];
+            $voucherDiscount = $metrics['voucher_discount'];
 
             $totalProducts += $productsSubtotal;
+            $totalNetProducts += $netProductsSubtotal;
             $totalHpp += $orderHpp;
             $totalDeliveryFee += $deliveryFee;
+            $totalCourierNetDeliveryFee += $courierNetDeliveryFee;
             $totalAdminFee += $adminFee;
             $totalBaseAdminFee += $baseAdminFee;
             $totalCourierCutToAdmin += $courierCutToAdmin;
             $totalVoucherDiscount += $voucherDiscount;
+            $totalDeliveryDiscount += $metrics['delivery_discount'];
+            $totalAdminDiscount += $metrics['admin_discount'];
+            $totalProductDiscount += $metrics['product_discount'];
             $grandTotal += $totalPrice;
 
             // 1. Group by Canteen / Toko
@@ -414,27 +453,27 @@ class Order extends Model
                     'canteen_name' => $cName,
                     'category' => $order->canteen->category ?? 'kauman',
                     'total_products' => 0,
+                    'total_net_products' => 0,
                     'total_hpp' => 0,
                     'total_profit' => 0,
                     'total_delivery_fee' => 0,
                     'total_admin_fee' => 0,
+                    'total_voucher_discount' => 0,
                     'total_base_admin_fee' => 0,
                     'total_courier_cut_to_admin' => 0,
-                    'total_voucher_discount' => 0,
-                    'net_admin_fee' => 0,
                     'grand_total' => 0,
                     'order_count' => 0,
                 ];
             }
             $canteenRecap[$cId]['total_products'] += $productsSubtotal;
+            $canteenRecap[$cId]['total_net_products'] += $netProductsSubtotal;
             $canteenRecap[$cId]['total_hpp'] += $orderHpp;
-            $canteenRecap[$cId]['total_profit'] += ($productsSubtotal - $orderHpp);
+            $canteenRecap[$cId]['total_profit'] += $metrics['canteen_profit'];
             $canteenRecap[$cId]['total_delivery_fee'] += $deliveryFee;
             $canteenRecap[$cId]['total_admin_fee'] += $adminFee;
+            $canteenRecap[$cId]['total_voucher_discount'] += $voucherDiscount;
             $canteenRecap[$cId]['total_base_admin_fee'] += $baseAdminFee;
             $canteenRecap[$cId]['total_courier_cut_to_admin'] += $courierCutToAdmin;
-            $canteenRecap[$cId]['total_voucher_discount'] += $voucherDiscount;
-            $canteenRecap[$cId]['net_admin_fee'] += max(0, $adminFee - $voucherDiscount);
             $canteenRecap[$cId]['grand_total'] += $totalPrice;
             $canteenRecap[$cId]['order_count'] += 1;
 
@@ -449,23 +488,23 @@ class Order extends Model
                     'wali_name' => $waliName,
                     'santri_room' => $order->user->santri_room ?? '',
                     'total_products' => 0,
+                    'total_net_products' => 0,
                     'total_delivery_fee' => 0,
                     'total_admin_fee' => 0,
+                    'total_voucher_discount' => 0,
                     'total_base_admin_fee' => 0,
                     'total_courier_cut_to_admin' => 0,
-                    'total_voucher_discount' => 0,
-                    'net_admin_fee' => 0,
                     'grand_total' => 0,
                     'order_count' => 0,
                 ];
             }
             $userRecap[$userId]['total_products'] += $productsSubtotal;
+            $userRecap[$userId]['total_net_products'] += $netProductsSubtotal;
             $userRecap[$userId]['total_delivery_fee'] += $deliveryFee;
             $userRecap[$userId]['total_admin_fee'] += $adminFee;
+            $userRecap[$userId]['total_voucher_discount'] += $voucherDiscount;
             $userRecap[$userId]['total_base_admin_fee'] += $baseAdminFee;
             $userRecap[$userId]['total_courier_cut_to_admin'] += $courierCutToAdmin;
-            $userRecap[$userId]['total_voucher_discount'] += $voucherDiscount;
-            $userRecap[$userId]['net_admin_fee'] += max(0, $adminFee - $voucherDiscount);
             $userRecap[$userId]['grand_total'] += $totalPrice;
             $userRecap[$userId]['order_count'] += 1;
 
@@ -481,37 +520,21 @@ class Order extends Model
                     'total_delivery_fee' => 0,
                     'total_courier_cut_to_admin' => 0,
                     'net_delivery_fee' => 0,
+                    'paid_delivery_fee' => 0,
+                    'subsidized_delivery_discount' => 0,
                     'grand_total' => 0,
                     'order_count' => 0,
                 ];
             }
             $courierRecap[$courierId]['total_delivery_fee'] += $metrics['raw_delivery_fee'];
             $courierRecap[$courierId]['total_courier_cut_to_admin'] += $courierCutToAdmin;
-            $courierRecap[$courierId]['net_delivery_fee'] += $deliveryFee;
+            $courierRecap[$courierId]['net_delivery_fee'] += $courierNetDeliveryFee;
+            $courierRecap[$courierId]['paid_delivery_fee'] += $deliveryFee;
+            $courierRecap[$courierId]['subsidized_delivery_discount'] += $metrics['delivery_discount'];
             $courierRecap[$courierId]['grand_total'] += $totalPrice;
             $courierRecap[$courierId]['order_count'] += 1;
 
-            // 4. Audit Log Voucher Terpakai (Beban Subsidi Kas Admin)
-            if ($voucherDiscount > 0 || $order->voucher_id) {
-                $v = $order->voucher;
-                $voucherBreakdown[] = [
-                    'order_id' => $order->id,
-                    'order_date' => $order->created_at ? $order->created_at->format('Y-m-d H:i') : null,
-                    'user_id' => $userId,
-                    'santri_name' => $santriName,
-                    'santri_room' => $order->user->santri_room ?? '',
-                    'canteen_id' => $cId,
-                    'canteen_name' => $cName,
-                    'voucher_id' => $order->voucher_id,
-                    'voucher_code' => $v ? $v->code : 'PROMO',
-                    'voucher_title' => $v ? $v->title : 'Voucher Diskon',
-                    'discount_type' => $v ? $v->discount_type : 'delivery_fee',
-                    'discount_amount' => $voucherDiscount,
-                    'order_total' => $totalPrice,
-                ];
-            }
-
-            // 5. Product Breakdown
+            // 4. Product Breakdown
             if ($order->items && $order->items->isNotEmpty()) {
                 foreach ($order->items as $item) {
                     $prodId = $item->product_id ?: ('item_' . $item->id);
@@ -580,14 +603,18 @@ class Order extends Model
             'period' => $period,
             'summary' => [
                 'total_products' => $totalProducts,
+                'total_net_products' => $totalNetProducts,
                 'total_hpp' => $totalHpp,
                 'total_profit' => ($totalProducts - $totalHpp),
                 'total_delivery_fee' => $totalDeliveryFee,
+                'total_courier_net_delivery_fee' => $totalCourierNetDeliveryFee,
                 'total_admin_fee' => $totalAdminFee,
                 'total_base_admin_fee' => $totalBaseAdminFee,
                 'total_courier_cut_to_admin' => $totalCourierCutToAdmin,
                 'total_voucher_discount' => $totalVoucherDiscount,
-                'net_admin_fee' => max(0, $totalAdminFee - $totalVoucherDiscount),
+                'total_delivery_discount' => $totalDeliveryDiscount,
+                'total_admin_discount' => $totalAdminDiscount,
+                'total_product_discount' => $totalProductDiscount,
                 'grand_total' => $grandTotal,
                 'total_orders' => count($orders),
             ],
@@ -595,7 +622,6 @@ class Order extends Model
             'user_recap' => array_values($userRecap),
             'courier_recap' => array_values($courierRecap),
             'product_breakdown' => array_values($productBreakdown),
-            'voucher_breakdown' => array_values($voucherBreakdown),
         ];
     }
 }

@@ -9,20 +9,23 @@ export const ROLES = {
 export const getUserRole = (user) => {
   if (!user) return null;
 
-  // 1. Direct role property as string
-  if (typeof user.role === 'string' && user.role.trim() !== '') {
-    return user.role.trim().toLowerCase();
+  // 1. Roles array (handle both string array ['kurir'] and object array [{ name: 'kurir' }])
+  // Prioritaskan role dengan hierarki tertinggi
+  if (Array.isArray(user.roles) && user.roles.length > 0) {
+    const roleNames = user.roles
+      .map((r) => (typeof r === 'string' ? r.trim().toLowerCase() : r?.name?.trim().toLowerCase()))
+      .filter(Boolean);
+
+    if (roleNames.includes(ROLES.SUPER_ADMIN)) return ROLES.SUPER_ADMIN;
+    if (roleNames.includes(ROLES.ADMIN)) return ROLES.ADMIN;
+    if (roleNames.includes(ROLES.KANTIN)) return ROLES.KANTIN;
+    if (roleNames.includes(ROLES.KURIR)) return ROLES.KURIR;
+    if (roleNames.length > 0) return roleNames[0];
   }
 
-  // 2. Roles array (handle both string array ['kurir'] and object array [{ name: 'kurir' }])
-  if (Array.isArray(user.roles) && user.roles.length > 0) {
-    const firstRole = user.roles[0];
-    if (typeof firstRole === 'string' && firstRole.trim() !== '') {
-      return firstRole.trim().toLowerCase();
-    }
-    if (firstRole && typeof firstRole.name === 'string' && firstRole.name.trim() !== '') {
-      return firstRole.name.trim().toLowerCase();
-    }
+  // 2. Direct role property as string
+  if (typeof user.role === 'string' && user.role.trim() !== '') {
+    return user.role.trim().toLowerCase();
   }
 
   // 3. Fallback based on specific user associations

@@ -25,11 +25,27 @@ class User extends Authenticatable
     protected $appends = ['role'];
 
     /**
-     * Aksesor eksplisit atribut role
+     * Aksesor eksplisit atribut role dengan prioritas hierarki
      */
     public function getRoleAttribute(): string
     {
-        return $this->roles->first()?->name ?? 'user';
+        $roleNames = $this->relationLoaded('roles')
+            ? $this->roles->pluck('name')->toArray()
+            : $this->roles()->pluck('name')->toArray();
+
+        if (in_array('super_admin', $roleNames)) {
+            return 'super_admin';
+        }
+        if (in_array('admin', $roleNames)) {
+            return 'admin';
+        }
+        if (in_array('kantin', $roleNames)) {
+            return 'kantin';
+        }
+        if (in_array('kurir', $roleNames)) {
+            return 'kurir';
+        }
+        return $roleNames[0] ?? 'user';
     }
 
     /**

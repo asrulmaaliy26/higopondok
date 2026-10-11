@@ -31,7 +31,8 @@ import {
   UploadCloud,
   Plus,
   FileUp,
-  Camera
+  Camera,
+  Ticket
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api, { getStorageUrl } from '../../lib/axios';
@@ -1476,8 +1477,20 @@ export default function AdminPesanan() {
                       Rp {(recapData?.summary?.total_admin_fee || 0).toLocaleString('id-ID')}
                     </span>
                   </div>
-                  <div className="mt-0.5 text-gray-500 text-[8.5px] truncate">
-                    Pokok: Rp {(recapData?.summary?.total_base_admin_fee || 0).toLocaleString('id-ID')}
+                  <div className="mt-0.5 space-y-0.5 text-[8.5px]">
+                    <div className="text-gray-500 truncate">
+                      Pokok: Rp {(recapData?.summary?.total_base_admin_fee || 0).toLocaleString('id-ID')}
+                    </div>
+                    {(recapData?.summary?.total_voucher_discount || 0) > 0 && (
+                      <div className="text-rose-600 dark:text-rose-400 font-bold truncate">
+                        Subsidi: -Rp {(recapData.summary.total_voucher_discount).toLocaleString('id-ID')}
+                      </div>
+                    )}
+                    {(recapData?.summary?.total_voucher_discount || 0) > 0 && (
+                      <div className="text-emerald-700 dark:text-emerald-400 font-bold truncate">
+                        Bersih: Rp {(recapData.summary.net_admin_fee || 0).toLocaleString('id-ID')}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="bg-green-50 dark:bg-green-950/40 p-1.5 sm:p-2 rounded-none border border-green-200 dark:border-green-800/50 shadow-xs flex flex-col justify-between">
@@ -1901,6 +1914,56 @@ export default function AdminPesanan() {
                           </span>
                           <span className="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 px-1.5 py-0.5 rounded-none text-[11px] font-bold">
                             Laba: +Rp {(p.total_profit || 0).toLocaleString('id-ID')}
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Rekapitulasi Audit Voucher & Promo (Beban Subsidi Kas Admin) */}
+              <div className="bg-white dark:bg-gray-900 rounded-none shadow-xs border border-gray-200 dark:border-gray-800 overflow-hidden">
+                <div className="p-1.5 sm:p-2 border-b border-gray-200 dark:border-gray-800 bg-rose-50/50 dark:bg-rose-950/20 flex items-center justify-between">
+                  <h3 className="font-bold text-gray-900 dark:text-white text-xs sm:text-sm flex items-center gap-1.5">
+                    <Ticket className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+                    Audit Beban Subsidi Voucher (Kas Admin)
+                  </h3>
+                  <span className="text-[9.5px] sm:text-[10px] text-rose-700 dark:text-rose-300 font-bold font-mono">
+                    Total: -Rp {(recapData?.summary?.total_voucher_discount || 0).toLocaleString('id-ID')}
+                  </span>
+                </div>
+                <div className="divide-y divide-gray-200 dark:divide-gray-800 max-h-80 overflow-y-auto">
+                  {!recapData?.voucher_breakdown || recapData.voucher_breakdown.length === 0 ? (
+                    <div className="p-4 text-center text-gray-500 text-xs">
+                      Tidak ada voucher yang digunakan pada periode <strong>{getFilterLabel()}</strong>.
+                    </div>
+                  ) : (
+                    recapData.voucher_breakdown.map((vb, idx) => (
+                      <div key={idx} className="p-1.5 sm:p-2 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs hover:bg-gray-50/50 dark:hover:bg-gray-800/40 transition-colors">
+                        <div>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-mono font-bold text-gray-900 dark:text-white text-xs">
+                              Order #{vb.order_id}
+                            </span>
+                            <span className="bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 px-1.5 py-0.2 rounded-none font-bold font-mono text-[10px]">
+                              🏷️ {vb.voucher_code}
+                            </span>
+                            <span className="text-[10.5px] text-gray-700 dark:text-gray-300 font-medium">
+                              {vb.santri_name} {vb.santri_room ? `(${vb.santri_room})` : ''}
+                            </span>
+                            <span className="text-[10px] text-gray-400">
+                              • 🏪 {vb.canteen_name}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">
+                            Jenis Subsidi: <span className="capitalize font-semibold text-gray-700 dark:text-gray-300">{vb.discount_type === 'delivery_fee' ? 'Gratis / Diskon Ongkir' : vb.discount_type}</span>
+                            {vb.order_date && ` • ${vb.order_date}`}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="bg-rose-100 dark:bg-rose-950/80 text-rose-800 dark:text-rose-200 border border-rose-300 dark:border-rose-800 px-2 py-0.5 rounded-none font-mono font-bold text-xs">
+                            -Rp {(vb.discount_amount || 0).toLocaleString('id-ID')}
                           </span>
                         </div>
                       </div>
