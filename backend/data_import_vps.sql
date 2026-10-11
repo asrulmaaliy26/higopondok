@@ -1,18 +1,17 @@
 -- =====================================================
 -- DATA EXPORT MANDIRI UNTUK VPS (STANDALONE SQL DUMP)
 -- Database Target: staialmannan_higopondok (atau nama DB di VPS)
--- Generated: 2026-10-11 02:54:04
+-- Generated: 2026-10-11 03:12:43
 -- =====================================================
 
 SET FOREIGN_KEY_CHECKS = 0;
 SET SQL_MODE = 'NO_AUTO_VALUE_ON_ZERO';
 SET time_zone = '+07:00';
 
-
 -- -----------------------------------------------------
 -- Table: users (917 rows)
 -- -----------------------------------------------------
-INSERT INTO `users` (`id`, `name`, `email`, `google_id`, `phone`, `is_working`, `is_teacher`, `niy`, `teacher_unit`, `avatar`, `email_verified_at`, `password`, `santri_name`, `santri_room`, `santri_class`, `santri_level`, `remember_token`, `created_at`, `updated_at`, `balance`, `penalty_points`) VALUES
+REPLACE INTO `users` (`id`, `name`, `email`, `google_id`, `phone`, `is_working`, `is_teacher`, `niy`, `teacher_unit`, `avatar`, `email_verified_at`, `password`, `santri_name`, `santri_room`, `santri_class`, `santri_level`, `remember_token`, `created_at`, `updated_at`, `balance`, `penalty_points`) VALUES
 ('2', 'Super Administrator', 'superadmin@higopondok.id', NULL, NULL, '0', '0', NULL, NULL, NULL, NULL, '$2y$12$bCP5coesYEOE3aT/TYZha.6Rrh2/rgVb7zEz6ouY0D2Xx591/1aZi', NULL, NULL, NULL, NULL, NULL, '2026-06-28 17:04:24', '2026-09-14 21:12:20', '0.00', '0'),
 ('10', 'Admin Pengelola Kantin', 'admin@higopondok.id', NULL, NULL, '0', '0', NULL, NULL, NULL, NULL, '$2y$12$bCP5coesYEOE3aT/TYZha.6Rrh2/rgVb7zEz6ouY0D2Xx591/1aZi', NULL, NULL, NULL, NULL, NULL, '2026-08-09 17:42:41', '2026-08-09 17:42:41', '0.00', '0'),
 ('11', 'Wali', 'wali@email.com', NULL, '628787878787', '0', '0', NULL, NULL, NULL, NULL, '$2y$12$AjR7txe9zxp6cDjdAtcVh.Rrxe1IBQ91Ymqp7j0tz7S8aqnLsjnQO', 'ZIDAN ABDILLAH KAFABIHI', 'Al Majid 1', '10 / X', 'MA', NULL, '2026-08-09 17:42:58', '2026-08-09 22:45:33', '0.00', '0'),
@@ -213,7 +212,7 @@ INSERT INTO `users` (`id`, `name`, `email`, `google_id`, `phone`, `is_working`, 
 ('209', 'Siti Maftuhah', 'maftuhahsrengat@gmail.com', '105658527297911917479', '6285704310431', '0', '0', NULL, NULL, 'https://lh3.googleusercontent.com/a/ACg8ocIhY6GrJFWL1sHxZuUf4bCovi2r9VOsVIDQ3wdmDRVZEGZEHw=s96-c', NULL, '$2y$12$GkqGUDUMd6bU6IGB9vJ9EO.g3uzxkwoKygs1uwBAQJNQyaQjKRbY2', 'ULFA KHABIBATUZ ZAHRO', 'Asmah G-21', '11 / XI', 'MA', NULL, '2026-08-21 21:34:51', '2026-08-21 21:40:40', '0.00', '0'),
 ('210', 'Fanesa Amel', 'amelfanesa7@gmail.com', '108791560563147524986', NULL, '0', '0', NULL, NULL, 'https://lh3.googleusercontent.com/a/ACg8ocKocUAZp74AopSYKFhyizMji96vntrrQLV6CcdHwU4z4seC_g=s96-c', NULL, '$2y$12$4YGlnCnYs3paPtPUjQbwgOAd5AMByfSVGG0/EFhNdlDseuf2vDBgi', NULL, NULL, NULL, NULL, NULL, '2026-08-21 21:35:52', '2026-08-21 21:35:52', '0.00', '0'),
 ('211', 'Estuning Oktaviana', 'estuningoktwviana@gmail.com', '109662141100155122365', '6285336443112', '0', '0', NULL, NULL, 'https://lh3.googleusercontent.com/a/ACg8ocKgJTAuViXCJfGCNW6MNyHPJg8UWsjmDUZNd3dNdDiFYMHTXcbe=s96-c', NULL, '$2y$12$XXUHKgWC8Jlg9F2/aytuw.s6aHso.kdf9aFFsohTAgYqoUbqGethi', 'HURIN KHIZANATUL MAZAYA', 'ASMAH', '9 / IX', 'SMP', NULL, '2026-08-21 21:47:00', '2026-08-21 21:48:17', '0.00', '0');
-INSERT INTO `users` (`id`, `name`, `email`, `google_id`, `phone`, `is_working`, `is_teacher`, `niy`, `teacher_unit`, `avatar`, `email_verified_at`, `password`, `santri_name`, `santri_room`, `santri_class`, `santri_level`, `remember_token`, `created_at`, `updated_at`, `balance`, `penalty_points`) VALUES
+REPLACE INTO `users` (`id`, `name`, `email`, `google_id`, `phone`, `is_working`, `is_teacher`, `niy`, `teacher_unit`, `avatar`, `email_verified_at`, `password`, `santri_name`, `santri_room`, `santri_class`, `santri_level`, `remember_token`, `created_at`, `updated_at`, `balance`, `penalty_points`) VALUES
 ('212', 'Fatma Zanida', 'fatmazanida65@gmail.com', '116862507654582734017', '6285730707649', '0', '0', NULL, NULL, 'https://lh3.googleusercontent.com/a/ACg8ocIXcaAXUe1HV16gP32uyB7SLSgn0WuAbt_4cfeVTYcPlRgHLb1U=s96-c', NULL, '$2y$12$eyBENXnNHVOzyJ73pjRequ6cSmPYi96Y8xTtPgQQg70lHa/5k1U2G', 'FATMA ZANIDA', 'Asmah', '10 / X', 'MA', NULL, '2026-08-21 21:53:29', '2026-08-21 21:54:31', '0.00', '0'),
 ('213', 'Lily Feliciane', 'lilyfeliciane45@gmail.com', '103916758993135119491', '6282142119531', '0', '0', NULL, NULL, 'https://lh3.googleusercontent.com/a/ACg8ocJfyTcIzJq0qi1jNCnbajUFxiiD8OUqoCfp5aD_DBG6dcAErgA=s96-c', NULL, '$2y$12$EDrcWxjIr8TRZ/o05I53Ru.p2QhvJloN.07YCdz8GK1OjKxuQKOrG', 'DHIEZA KHOIRUL UMMAH', 'Asrama Asmah G.11', '8 / VIII', 'SMP', NULL, '2026-08-21 21:54:25', '2026-08-29 04:27:08', '0.00', '0'),
 ('214', 'dewi ulfa', 'dewimasniaulfa88@gmail.com', '112662114229073305227', '6285648999592', '0', '0', NULL, NULL, 'https://lh3.googleusercontent.com/a/ACg8ocLARaHtvqRZR6y_tF1KF1BJRtXa3p9ntBwl5wIDJ6m3afWr3g=s96-c', NULL, '$2y$12$BmisCEBrk/2irk8Ru14Q3.xfCwPYo.8Yq29.TKAdoExBxjrtoh1ZK', 'NAILA SYIFANA SALSABILA', 'ASMAH / G 6', '9 / IX', 'SMP', NULL, '2026-08-21 21:58:48', '2026-08-31 01:24:08', '0.00', '0'),
@@ -414,7 +413,7 @@ INSERT INTO `users` (`id`, `name`, `email`, `google_id`, `phone`, `is_working`, 
 ('409', 'Isti Tejo', 'tejoisti@gmail.com', '118224477468518447780', NULL, '0', '0', NULL, NULL, 'https://lh3.googleusercontent.com/a/ACg8ocIvsbdXaX_og46ZnWzNYjZdRhlmk898Pm7V3e5aTmFt5NRN4Q=s96-c', NULL, '$2y$12$bTYBZ2zyjNjIst1L8EUGAukMhsB8afP.551AvijrritQR7tSiFyUm', NULL, NULL, NULL, NULL, NULL, '2026-08-27 15:45:45', '2026-08-27 15:45:45', '0.00', '0'),
 ('410', 'Fitri Nuryanti', 'fitrinuryanti389@gmail.com', '115068706163725290652', '6285649623153', '0', '0', NULL, NULL, 'https://lh3.googleusercontent.com/a/ACg8ocJPuC9m7gzMRQ2ckwbQfnfvM6CeWVGz-MsNeHjfyFy-NW4JpQ=s96-c', NULL, '$2y$12$EHQj.iK1JxQWJAD/ELvDte7SaDFV3b87IvxO6YWyHLw96.kmXZWrW', 'FAREL AZKA ZAHEEN', 'Al Majid2/C8', '8 / VIII', 'SMP', NULL, '2026-08-27 15:47:21', '2026-08-28 02:47:33', '0.00', '0'),
 ('411', 'lumutwatu1999', 'lumutwatu1999@gmail.com', '115667176257410901147', NULL, '0', '0', NULL, NULL, 'https://lh3.googleusercontent.com/a/ACg8ocJraIpTUE6i11wTMmNuTokbxsdLRMe9VVadnr_ziejcA4nbLw=s96-c', NULL, '$2y$12$F5L9rcJW2BNrToDGWGzcN.F9ykG/.1ZdoW6dpS7/nJPFBEgE3fBai', NULL, NULL, NULL, NULL, NULL, '2026-08-27 15:47:27', '2026-08-27 15:47:27', '0.00', '0');
-INSERT INTO `users` (`id`, `name`, `email`, `google_id`, `phone`, `is_working`, `is_teacher`, `niy`, `teacher_unit`, `avatar`, `email_verified_at`, `password`, `santri_name`, `santri_room`, `santri_class`, `santri_level`, `remember_token`, `created_at`, `updated_at`, `balance`, `penalty_points`) VALUES
+REPLACE INTO `users` (`id`, `name`, `email`, `google_id`, `phone`, `is_working`, `is_teacher`, `niy`, `teacher_unit`, `avatar`, `email_verified_at`, `password`, `santri_name`, `santri_room`, `santri_class`, `santri_level`, `remember_token`, `created_at`, `updated_at`, `balance`, `penalty_points`) VALUES
 ('412', 'Roisatul Badriyah', 'badriyahroisatul@gmail.com', '109248999085058216076', '6285755481921', '0', '0', NULL, NULL, 'https://lh3.googleusercontent.com/a/ACg8ocLPsVcdHQ23PaGa1Dvpy_YIqTviltG5MfQeEWFjcl-NMlw46w=s96-c', NULL, '$2y$12$58mYSEZ9tz3iS0OEZaRQWeq7jq53KlxJWx.A6LpavsmCBRnhYyrme', 'MUHAMAD FATIHUL HABIBULLAH', 'Al Majid 2', '7 / VII', 'SMP', NULL, '2026-08-27 15:49:00', '2026-09-09 05:48:03', '0.00', '0'),
 ('413', 'Sigit Pramono', 'sigit0883@gmail.com', NULL, '6285655797178', '0', '0', NULL, NULL, NULL, NULL, '$2y$12$Rydp/yVaHjId/UGYd8RjFeqZ/ZJ0Z28jLG3KDrg2GslcrOAuUS1t6', 'DANISH SHABIR AHMAD', NULL, '8 / VIII', 'SMP', NULL, '2026-08-27 15:58:07', '2026-08-27 16:01:54', '0.00', '0'),
 ('414', 'Lisna sholihah', 'hanaficell24@gmail.com', NULL, '6285735133200', '0', '0', NULL, NULL, NULL, NULL, '$2y$12$FYeA7IRxED44aKQEjJH7seXLrMcLtcVYCc/HUzaeuVlfBCdzDvCTi', 'MUHAMMAD ARJA AZKA ‘ALAIK', 'Al majid 2 kamar 7', '8 / VIII', 'SMP', NULL, '2026-08-27 16:00:23', '2026-09-05 04:19:42', '0.00', '0'),
@@ -615,7 +614,7 @@ INSERT INTO `users` (`id`, `name`, `email`, `google_id`, `phone`, `is_working`, 
 ('609', 'Arba Anam', 'arbaa4592@gmail.com', '117346879536286502974', '6285853919691', '0', '0', NULL, NULL, 'https://lh3.googleusercontent.com/a/ACg8ocIfrha07ZZfENxcnNxnooHcC_0JARN_MRGzn1Lqdk5ttZhTdg=s96-c', NULL, '$2y$12$aVWipBpbIvJf5/uL.YHX9uRigsgRLn53orAZI/xCa9BmvXI5IKc2m', 'ADINDA KHOIRUL \'IZZA', 'ASMAH', '12 / XII', 'MA', NULL, '2026-09-02 15:59:03', '2026-09-02 16:04:22', '0.00', '0'),
 ('610', 'ardan maulana', 'yanasetiana15@gmail.com', '107832580323051218501', '6281233452434', '0', '0', NULL, NULL, 'https://lh3.googleusercontent.com/a/ACg8ocI4Qb8S1RkKylmW2DmSmj4wiee7ErQCnRin68D-kkCrUL3EsDCElQ=s96-c', NULL, '$2y$12$JHyhY5Gvm2jGQvG.VqXQm.jhEwzI8pxmvG40Fv4XVmfBqJW8flWqS', 'ARDAN MAULANA ARSYADIL AZAM', 'Al Majid 1', '10 / X', 'MA', NULL, '2026-09-02 16:07:56', '2026-09-02 16:14:21', '0.00', '0'),
 ('611', 'Zahra Dina', 'zahradina032011@gmail.com', '110286330926794518107', NULL, '0', '0', NULL, NULL, 'https://lh3.googleusercontent.com/a/ACg8ocLubp_W-KbXRfzkbqud3YQc1nQ2aX6ftEeG1py2656rlcQsIg=s96-c', NULL, '$2y$12$IgIGXKWidggP97XOXxfxTuhXiWgQSRU6Mwzc4mFhB0eDguLxIqkfS', NULL, NULL, NULL, NULL, NULL, '2026-09-02 16:28:47', '2026-09-02 16:28:47', '0.00', '0');
-INSERT INTO `users` (`id`, `name`, `email`, `google_id`, `phone`, `is_working`, `is_teacher`, `niy`, `teacher_unit`, `avatar`, `email_verified_at`, `password`, `santri_name`, `santri_room`, `santri_class`, `santri_level`, `remember_token`, `created_at`, `updated_at`, `balance`, `penalty_points`) VALUES
+REPLACE INTO `users` (`id`, `name`, `email`, `google_id`, `phone`, `is_working`, `is_teacher`, `niy`, `teacher_unit`, `avatar`, `email_verified_at`, `password`, `santri_name`, `santri_room`, `santri_class`, `santri_level`, `remember_token`, `created_at`, `updated_at`, `balance`, `penalty_points`) VALUES
 ('612', 'Jessica Jess', 'jess61462@gmail.com', '114933712690275109287', '6285806215464', '0', '0', NULL, NULL, 'https://lh3.googleusercontent.com/a/ACg8ocLmanU8ln5O_BRIZ5T0Ysx_QSioI0hO4Rh0FlrT2rb1qH3hPw=s96-c', NULL, '$2y$12$Low3I2DmJiU7OIfzPiQZkewZkYvrjeLEO4W0/9I/YbNws3H2Vhd5m', 'JESSICA DIAMANTHA NEYSA FILMA', 'Asmah', '7 / VII', 'SMP', NULL, '2026-09-02 17:20:04', '2026-09-02 17:24:52', '0.00', '0'),
 ('613', 'Kantor Almajid2', 'kantoralmajid@gmail.com', '103970269025405214421', NULL, '0', '0', NULL, NULL, 'https://lh3.googleusercontent.com/a/ACg8ocJzgmP2nxZPkl0bGN4txfhxG6ktCzBalFihiI6iFv22ZROhCec=s96-c', NULL, '$2y$12$Tv7ip3Fwv7ldkckvuFTUKe.fm4q9RKO4h4GyNByMkeLIG2eDqbnse', NULL, NULL, NULL, NULL, NULL, '2026-09-02 18:51:06', '2026-09-02 18:51:06', '0.00', '0'),
 ('614', 'siti masitoh', 'masitohsiti051970@gmail.com', '108283075680336711795', '6281234496559', '0', '0', NULL, NULL, 'https://lh3.googleusercontent.com/a/ACg8ocKFlNhmePo0scv6g-bVtyb-YLKLBEgg6HXDRBGtXdlmnpZxRw=s96-c', NULL, '$2y$12$4MPJfTYw1mTrfDVVVVSTOeFSRw3/f85vpsNgCp2L4HpJHcFQlX/k.', 'FLOWRINA NAVARA TARANUM', 'Asmah G20', '10 / X', 'MA', NULL, '2026-09-02 19:03:46', '2026-09-02 19:07:08', '0.00', '0'),
@@ -816,7 +815,7 @@ INSERT INTO `users` (`id`, `name`, `email`, `google_id`, `phone`, `is_working`, 
 ('809', 'MUHAMMAD IQBAL HATIFUDDIN', 'iqbalhatif@gmail.com', NULL, '6289603073385', '0', '0', NULL, NULL, 'https://lh3.googleusercontent.com/a/ACg8ocIM0JmZgkSYKZmQLUR-sImnz9YTHb2Gr97ozKsT3DTxTxCp2Q=s96-c', NULL, '$2y$12$i7xZn2zH4Aoc/8tKofwLm.0BDvN/fgawGTQhhAemBFc5Qpalthp/6', 'MUHAMMAD SYUKRON HALWAANI', 'Kamar C-5', '7 / VII', 'SMP', NULL, '2026-09-16 02:35:02', '2026-10-07 22:19:01', '0.00', '0'),
 ('810', 'Danish', 'ilman.muhammad@gmail.com', NULL, '6285645252590', '0', '0', NULL, NULL, NULL, NULL, '$2y$12$KmjbzL5ybhvojsr21jqwzu8luGAhTd0wdr5Bp5tiGLO.OzpOBwuQ6', 'AHMAD DANISH AS SHIDDIQIE', 'Al Majid 2', '7 / VII', 'SMP', NULL, '2026-09-16 04:51:15', '2026-09-16 23:31:20', '0.00', '0'),
 ('811', '1027 Fauzan Anfat', 'fauzananfat@gmail.com', '110350618946172513348', '6285136730584', '0', '0', NULL, NULL, 'https://lh3.googleusercontent.com/a/ACg8ocLzpTnfruFBsdVRyW37NvGBZGo3Lw9QnSSKGOoRmx03F5dJeA=s96-c', NULL, '$2y$12$Qb9qdI/DOhuV58Kjm.mZL.cJHHCBJbF46C07VZ5N/7c0NbfqHW4I2', 'NABILA TSANIA ANFATUR RAHIMA', 'ASMAH', '12 / XII', 'MA', NULL, '2026-09-16 13:25:01', '2026-09-16 13:30:20', '0.00', '0');
-INSERT INTO `users` (`id`, `name`, `email`, `google_id`, `phone`, `is_working`, `is_teacher`, `niy`, `teacher_unit`, `avatar`, `email_verified_at`, `password`, `santri_name`, `santri_room`, `santri_class`, `santri_level`, `remember_token`, `created_at`, `updated_at`, `balance`, `penalty_points`) VALUES
+REPLACE INTO `users` (`id`, `name`, `email`, `google_id`, `phone`, `is_working`, `is_teacher`, `niy`, `teacher_unit`, `avatar`, `email_verified_at`, `password`, `santri_name`, `santri_room`, `santri_class`, `santri_level`, `remember_token`, `created_at`, `updated_at`, `balance`, `penalty_points`) VALUES
 ('812', 'Asyfiyatul MA', 'asyfiyatulmarsyaali09@gmail.com', '107203582322118856460', '6283848481774', '0', '0', NULL, NULL, 'https://lh3.googleusercontent.com/a/ACg8ocJHTo8V87yPqfrjgoZBVDAJ1KN8n9HHbP-M6NjoLtpsoWHNtw=s96-c', NULL, '$2y$12$6/aTdv8lm2eVxAcUIlD7gOUshizL25zIpaX1xDdOQo5ZjP2eb6ljC', 'ASYFIYATUL MARSYA ALI', 'G23', '11 / XI', 'MA', NULL, '2026-09-16 17:15:56', '2026-09-16 17:22:27', '0.00', '0'),
 ('813', 'hawina hawina', 'hawinahawina91@gmail.com', '101647348029325274814', NULL, '0', '0', NULL, NULL, 'https://lh3.googleusercontent.com/a/ACg8ocKIXumEsg96FKT720j4bgdFeCtFF4KKPvhkJ8sNe0gHsW9Ghg=s96-c', NULL, '$2y$12$g.3JM0v6oALAiDqAYtnEe.UtzOsdpjNhBIo6clBmPheZSK7Ha8XOK', NULL, NULL, NULL, NULL, NULL, '2026-09-16 22:42:48', '2026-09-16 22:42:48', '0.00', '0'),
 ('814', 'Asmaul humaidah', 'tyotyo435@gmail.com', NULL, '6285798475477', '0', '0', NULL, NULL, NULL, NULL, '$2y$12$djL6ROkt5OYg6PP/u1rjQugqT/IzcbwryLNIMC41oQDU0542Z6Knu', 'ACHMAD MUBAROK ENDRA', 'Al Majid 1', '10 / X', 'MA', NULL, '2026-09-17 00:36:51', '2026-09-17 00:41:12', '0.00', '0'),
@@ -938,7 +937,7 @@ INSERT INTO `users` (`id`, `name`, `email`, `google_id`, `phone`, `is_working`, 
 -- -----------------------------------------------------
 -- Table: model_has_roles (918 rows)
 -- -----------------------------------------------------
-INSERT INTO `model_has_roles` (`role_id`, `model_type`, `model_id`) VALUES
+REPLACE INTO `model_has_roles` (`role_id`, `model_type`, `model_id`) VALUES
 ('5', 'App\\Domains\\Auth\\User', '2'),
 ('1', 'App\\Domains\\Auth\\User', '10'),
 ('3', 'App\\Domains\\Auth\\User', '10'),
@@ -1139,7 +1138,7 @@ INSERT INTO `model_has_roles` (`role_id`, `model_type`, `model_id`) VALUES
 ('2', 'App\\Domains\\Auth\\User', '208'),
 ('2', 'App\\Domains\\Auth\\User', '209'),
 ('2', 'App\\Domains\\Auth\\User', '210');
-INSERT INTO `model_has_roles` (`role_id`, `model_type`, `model_id`) VALUES
+REPLACE INTO `model_has_roles` (`role_id`, `model_type`, `model_id`) VALUES
 ('2', 'App\\Domains\\Auth\\User', '211'),
 ('2', 'App\\Domains\\Auth\\User', '212'),
 ('2', 'App\\Domains\\Auth\\User', '213'),
@@ -1340,7 +1339,7 @@ INSERT INTO `model_has_roles` (`role_id`, `model_type`, `model_id`) VALUES
 ('2', 'App\\Domains\\Auth\\User', '408'),
 ('2', 'App\\Domains\\Auth\\User', '409'),
 ('2', 'App\\Domains\\Auth\\User', '410');
-INSERT INTO `model_has_roles` (`role_id`, `model_type`, `model_id`) VALUES
+REPLACE INTO `model_has_roles` (`role_id`, `model_type`, `model_id`) VALUES
 ('2', 'App\\Domains\\Auth\\User', '411'),
 ('2', 'App\\Domains\\Auth\\User', '412'),
 ('2', 'App\\Domains\\Auth\\User', '413'),
@@ -1541,7 +1540,7 @@ INSERT INTO `model_has_roles` (`role_id`, `model_type`, `model_id`) VALUES
 ('2', 'App\\Domains\\Auth\\User', '608'),
 ('2', 'App\\Domains\\Auth\\User', '609'),
 ('2', 'App\\Domains\\Auth\\User', '610');
-INSERT INTO `model_has_roles` (`role_id`, `model_type`, `model_id`) VALUES
+REPLACE INTO `model_has_roles` (`role_id`, `model_type`, `model_id`) VALUES
 ('2', 'App\\Domains\\Auth\\User', '611'),
 ('2', 'App\\Domains\\Auth\\User', '612'),
 ('2', 'App\\Domains\\Auth\\User', '613'),
@@ -1742,7 +1741,7 @@ INSERT INTO `model_has_roles` (`role_id`, `model_type`, `model_id`) VALUES
 ('2', 'App\\Domains\\Auth\\User', '808'),
 ('2', 'App\\Domains\\Auth\\User', '809'),
 ('2', 'App\\Domains\\Auth\\User', '810');
-INSERT INTO `model_has_roles` (`role_id`, `model_type`, `model_id`) VALUES
+REPLACE INTO `model_has_roles` (`role_id`, `model_type`, `model_id`) VALUES
 ('2', 'App\\Domains\\Auth\\User', '811'),
 ('2', 'App\\Domains\\Auth\\User', '812'),
 ('2', 'App\\Domains\\Auth\\User', '813'),
@@ -1865,7 +1864,7 @@ INSERT INTO `model_has_roles` (`role_id`, `model_type`, `model_id`) VALUES
 -- -----------------------------------------------------
 -- Table: canteens (20 rows)
 -- -----------------------------------------------------
-INSERT INTO `canteens` (`id`, `user_id`, `name`, `category`, `description`, `image`, `status`, `delivery_fee`, `admin_fee`, `admin_debt`, `delivery_rates`, `sold_count`, `latitude`, `longitude`, `whatsapp_number`, `rating`, `rating_count`, `deleted_at`, `created_at`, `updated_at`, `balance`, `open_time`, `close_time`) VALUES
+REPLACE INTO `canteens` (`id`, `user_id`, `name`, `category`, `description`, `image`, `status`, `delivery_fee`, `admin_fee`, `admin_debt`, `delivery_rates`, `sold_count`, `latitude`, `longitude`, `whatsapp_number`, `rating`, `rating_count`, `deleted_at`, `created_at`, `updated_at`, `balance`, `open_time`, `close_time`) VALUES
 ('4', '10', 'Mie Gacoan', 'kota', 'Mie', 'kantin_kantin/canteens/LR7yPqQwpeHzH2EbDTZOG9VnEyDJzx6lfTZySsb2.jpg', 'approved', '3500.00', '1500.00', '0.00', NULL, '376', NULL, NULL, '6285777799988', '0.00', '0', NULL, '2026-08-09 17:43:38', '2026-10-05 06:45:07', '621700.00', '06:00:00', '23:00:00'),
 ('5', '10', 'BAKSO KUY', 'kota', 'Bakso Kuy Kauman', 'kantin_kantin/canteens/URIzjMT5uEQIxEGOmHKYMnPZvTtiOdphO0M5EIJp.png', 'approved', '3000.00', '0.00', '0.00', NULL, '59', NULL, NULL, NULL, '0.00', '0', NULL, '2026-08-18 03:12:02', '2026-10-05 06:26:36', '100000.00', '06:00:00', '23:00:00'),
 ('6', '10', 'DIMSUM', 'kota', 'DIMSUM', 'kantin_kantin/canteens/1YBhLfNKHgIsTz3x7nkPB1fEuqG28FYRSTWkBKqA.png', 'approved', '3500.00', '0.00', '0.00', NULL, '130', NULL, NULL, NULL, '0.00', '0', NULL, '2026-08-18 22:16:58', '2026-10-05 06:45:07', '74000.00', '06:00:00', '23:00:00'),
@@ -1890,7 +1889,7 @@ INSERT INTO `canteens` (`id`, `user_id`, `name`, `category`, `description`, `ima
 -- -----------------------------------------------------
 -- Table: products (136 rows)
 -- -----------------------------------------------------
-INSERT INTO `products` (`id`, `canteen_id`, `name`, `description`, `category`, `variant_config`, `price`, `hpp`, `stock`, `image`, `is_available`, `discount_price`, `sold_count`, `rating`, `rating_count`, `deleted_at`, `created_at`, `updated_at`) VALUES
+REPLACE INTO `products` (`id`, `canteen_id`, `name`, `description`, `category`, `variant_config`, `price`, `hpp`, `stock`, `image`, `is_available`, `discount_price`, `sold_count`, `rating`, `rating_count`, `deleted_at`, `created_at`, `updated_at`) VALUES
 ('5', '4', 'Mie', NULL, 'Mknn', NULL, '10000.00', '9000.00', '4', NULL, '1', NULL, '4', '0.00', '0', '2026-08-18 22:42:04', '2026-08-09 17:45:54', '2026-08-18 22:42:04'),
 ('6', '4', 'dimsum', NULL, 'snack', NULL, '10000.00', '9000.00', '0', 'kantin_kantin/products/gcASNOfHT5NhYs9o33rVInbrXqcWNzMMvBqowhjv.png', '1', NULL, '0', '0.00', '0', '2026-08-18 22:38:52', '2026-08-18 03:11:13', '2026-08-18 22:38:52'),
 ('7', '6', 'DIMSUM ORIGINAL', NULL, 'Makanan (isi 6)', '{\"spicy\": {\"enabled\": true, \"maxLevel\": 5}, \"sugar\": {\"enabled\": false}, \"custom\": {\"groups\": [{\"id\": 1791154645124, \"name\": \"Pilihan Saus\", \"type\": \"radio\", \"items\": [{\"id\": 1, \"name\": \"Saus Mentai Bakar\", \"price\": 0}, {\"id\": 2, \"name\": \"Chili Oil Pedas Gurih\", \"price\": 0}, {\"id\": 3, \"name\": \"Saus Asam Manis\", \"price\": 0}], \"options\": [{\"id\": 1, \"name\": \"Saus Mentai Bakar\", \"price\": 0}, {\"id\": 2, \"name\": \"Chili Oil Pedas Gurih\", \"price\": 0}, {\"id\": 3, \"name\": \"Saus Asam Manis\", \"price\": 0}], \"required\": true}], \"enabled\": true}, \"portion\": {\"label\": \"Isi\", \"enabled\": true, \"options\": [\"Isi 4 Pcs\", \"Isi 6 Pcs (+Rp 8.000)\"], \"jumboPrice\": 3000}, \"temperature\": {\"label\": \"Sajian\", \"enabled\": true, \"options\": [\"Hangat / Kukus\", \"Goreng Crispy\"], \"allowHot\": true, \"allowIce\": true}}', '20000.00', '19000.00', '15', 'kantin_kantin/products/21EeZgz9RhiY5Y8otheQmACnibIM3vLSTedZujnV.png', '1', NULL, '28', '0.00', '0', NULL, '2026-08-18 22:26:29', '2026-10-05 05:57:59'),
@@ -2031,7 +2030,7 @@ INSERT INTO `products` (`id`, `canteen_id`, `name`, `description`, `category`, `
 -- -----------------------------------------------------
 -- Table: orders (2353 rows)
 -- -----------------------------------------------------
-INSERT INTO `orders` (`id`, `user_id`, `checkout_id`, `canteen_id`, `is_custom`, `custom_notes`, `total_price`, `admin_fee`, `delivery_fee`, `status`, `payment_status`, `courier_id`, `delivery_location`, `order_for`, `is_priority`, `proof_of_delivery`, `proof_of_payment`, `proof_of_purchase`, `created_at`, `updated_at`, `deleted_at`, `is_courier_paid_by_canteen`, `proof_courier_paid`, `voucher_id`, `voucher_discount`) VALUES
+REPLACE INTO `orders` (`id`, `user_id`, `checkout_id`, `canteen_id`, `is_custom`, `custom_notes`, `total_price`, `admin_fee`, `delivery_fee`, `status`, `payment_status`, `courier_id`, `delivery_location`, `order_for`, `is_priority`, `proof_of_delivery`, `proof_of_payment`, `proof_of_purchase`, `created_at`, `updated_at`, `deleted_at`, `is_courier_paid_by_canteen`, `proof_courier_paid`, `voucher_id`, `voucher_discount`) VALUES
 ('3', '11', NULL, '4', '0', NULL, '13000.00', '1000.00', '2000.00', 'completed', 'unpaid', '12', 'Al Majid 1', 'santri', '0', '[\"kurir_kurir/proofs/nEozZ3zmlQfnsbf5UeYr0mdGAbfGofYunC5oAVoV.jpg\"]', NULL, '[\"kurir_kurir\\/proofs\\/YZDQ8MQM2AhFdizUl8v3pNtw1Hpqo8u0H0OEbtCx.jpg\"]', '2026-08-09 17:46:25', '2026-08-09 17:48:47', NULL, '0', NULL, NULL, '0.00'),
 ('4', '11', NULL, '4', '0', NULL, '13000.00', '1000.00', '2000.00', 'completed', 'unpaid', '12', 'Al Majid 1', 'santri', '0', NULL, NULL, NULL, '2026-08-09 22:43:55', '2026-08-09 22:51:38', NULL, '0', NULL, NULL, '0.00'),
 ('5', '11', NULL, '4', '0', NULL, '13000.00', '1000.00', '2000.00', 'completed', 'paid', '12', 'Al Majid 1', 'santri', '0', NULL, NULL, NULL, '2026-08-10 17:52:19', '2026-09-04 03:54:30', NULL, '0', NULL, NULL, '0.00'),
@@ -2232,7 +2231,7 @@ INSERT INTO `orders` (`id`, `user_id`, `checkout_id`, `canteen_id`, `is_custom`,
 ('207', '329', NULL, '4', '0', NULL, '28000.00', '1500.00', '3500.00', 'completed', 'paid', '12', 'Asmah / G22', 'santri', '0', '[\"kurir_kurir/proofs/wvnOWxz5z38IinBThoaeh8yQgvf205vZT1H2l7jy.webp\"]', '[\"user_ulil_a\'yunin\\/proofs\\/jYsfvAitN1gPytr5SuhjNSeYOt9NpwOQGY5C13EI.png\"]', NULL, '2026-08-28 21:46:57', '2026-08-30 05:40:59', NULL, '0', NULL, NULL, '0.00'),
 ('208', '329', NULL, '19', '0', NULL, '16000.00', '1500.00', '3500.00', 'completed', 'paid', '12', 'Asmah / G22', 'santri', '0', '[\"kurir_kurir/proofs/tA60asrU3vdPljqFSgZ5QIrmKrDsEMkerNgrmqKJ.webp\"]', '[\"user_ulil_a\'yunin\\/proofs\\/RRh1zPNx7cu6G3gHfEABfBF0njCHh8v4zUWob3Pk.jpg\"]', NULL, '2026-08-28 21:46:57', '2026-08-30 06:04:10', NULL, '0', NULL, NULL, '0.00'),
 ('209', '251', NULL, '4', '0', NULL, '31000.00', '1500.00', '3500.00', 'completed', 'paid', '12', 'Asmah G2', 'santri', '0', '[\"kurir_kurir/proofs/Rb4Zjd0xJqzi7W0oXAJvtfNGMPHo1UIF6VYrzyXh.webp\"]', NULL, NULL, '2026-08-28 21:51:43', '2026-08-30 05:40:15', NULL, '0', NULL, NULL, '0.00');
-INSERT INTO `orders` (`id`, `user_id`, `checkout_id`, `canteen_id`, `is_custom`, `custom_notes`, `total_price`, `admin_fee`, `delivery_fee`, `status`, `payment_status`, `courier_id`, `delivery_location`, `order_for`, `is_priority`, `proof_of_delivery`, `proof_of_payment`, `proof_of_purchase`, `created_at`, `updated_at`, `deleted_at`, `is_courier_paid_by_canteen`, `proof_courier_paid`, `voucher_id`, `voucher_discount`) VALUES
+REPLACE INTO `orders` (`id`, `user_id`, `checkout_id`, `canteen_id`, `is_custom`, `custom_notes`, `total_price`, `admin_fee`, `delivery_fee`, `status`, `payment_status`, `courier_id`, `delivery_location`, `order_for`, `is_priority`, `proof_of_delivery`, `proof_of_payment`, `proof_of_purchase`, `created_at`, `updated_at`, `deleted_at`, `is_courier_paid_by_canteen`, `proof_courier_paid`, `voucher_id`, `voucher_discount`) VALUES
 ('210', '251', NULL, '4', '0', NULL, '18000.00', '1500.00', '3500.00', 'cancelled', 'unpaid', '12', 'Asmah G2', 'santri', '0', NULL, NULL, NULL, '2026-08-28 21:52:19', '2026-08-29 02:28:38', NULL, '0', NULL, NULL, '0.00'),
 ('211', '435', NULL, '8', '0', NULL, '21000.00', '1500.00', '3500.00', 'cancelled', 'unpaid', '12', 'ASMAH', 'santri', '0', NULL, NULL, NULL, '2026-08-28 21:53:08', '2026-08-28 21:54:48', NULL, '0', NULL, NULL, '0.00'),
 ('212', '251', NULL, '4', '0', NULL, '18000.00', '1500.00', '3500.00', 'completed', 'paid', '12', 'Al majid 1, muhammad faza ainurrozaqi', 'santri', '0', '[\"kurir_kurir/proofs/QdmCOosKTQJ5TauoX3bOu2vGZiJOLD4z3XLh9NAI.webp\"]', NULL, NULL, '2026-08-28 21:53:10', '2026-08-30 06:03:41', NULL, '0', NULL, NULL, '0.00'),
@@ -2433,7 +2432,7 @@ INSERT INTO `orders` (`id`, `user_id`, `checkout_id`, `canteen_id`, `is_custom`,
 ('407', '207', NULL, '5', '0', NULL, '21000.00', '1500.00', '3500.00', 'completed', 'paid', '12', 'ASMAH', 'santri', '0', '[\"kurir_kurir/proofs/1PUYRJ4khGuE4CIIGYaYuhr9XLcRh3gex6NbWPCy.jpg\"]', '[\"user_awfa_naili_fahrina\\/proofs\\/BjRC8RMUyyjDkhAhLgVNW2VXcmOXEeuxC028Eq5M.jpg\",\"user_awfa_naili_fahrina\\/proofs\\/hFfufq42gRQDKtCIg211q9VyRMKGGEQwSP0p3Dy3.jpg\"]', NULL, '2026-08-31 23:12:00', '2026-09-01 04:09:17', NULL, '0', NULL, NULL, '0.00'),
 ('408', '207', NULL, '17', '0', NULL, '22500.00', '1500.00', '3500.00', 'completed', 'paid', '12', 'ASMAH', 'santri', '0', '[\"kurir_kurir/proofs/h7MmhxlNMYfuaAKrVAgaVgzQ090iiu2JlMIZH0T6.jpg\"]', '[\"user_awfa_naili_fahrina\\/proofs\\/pqRr6lCSMtuHgxSUDYR35FUXtHS32Vgg7Y1WQzYw.jpg\",\"user_awfa_naili_fahrina\\/proofs\\/RvSyGhnnqcdb9qoZJT3WukisO5ilWQQ2CwyU9iKW.jpg\"]', NULL, '2026-08-31 23:23:01', '2026-09-01 03:58:20', NULL, '0', NULL, NULL, '0.00'),
 ('409', '512', NULL, '8', '1', 'nasi goreng TDK pedas 1 \nuntuk mursyidul Ibad kamar c2', '0.00', '1500.00', '3500.00', 'cancelled', 'unpaid', '12', 'Al Majid 2', 'santri', '0', NULL, NULL, NULL, '2026-08-31 23:24:10', '2026-08-31 23:28:35', NULL, '0', NULL, NULL, '0.00');
-INSERT INTO `orders` (`id`, `user_id`, `checkout_id`, `canteen_id`, `is_custom`, `custom_notes`, `total_price`, `admin_fee`, `delivery_fee`, `status`, `payment_status`, `courier_id`, `delivery_location`, `order_for`, `is_priority`, `proof_of_delivery`, `proof_of_payment`, `proof_of_purchase`, `created_at`, `updated_at`, `deleted_at`, `is_courier_paid_by_canteen`, `proof_courier_paid`, `voucher_id`, `voucher_discount`) VALUES
+REPLACE INTO `orders` (`id`, `user_id`, `checkout_id`, `canteen_id`, `is_custom`, `custom_notes`, `total_price`, `admin_fee`, `delivery_fee`, `status`, `payment_status`, `courier_id`, `delivery_location`, `order_for`, `is_priority`, `proof_of_delivery`, `proof_of_payment`, `proof_of_purchase`, `created_at`, `updated_at`, `deleted_at`, `is_courier_paid_by_canteen`, `proof_courier_paid`, `voucher_id`, `voucher_discount`) VALUES
 ('410', '109', NULL, '4', '0', NULL, '18000.00', '1500.00', '3500.00', 'cancelled', 'unpaid', '12', 'Al Majid 2', 'santri', '0', NULL, NULL, NULL, '2026-08-31 23:39:58', '2026-08-31 23:40:14', NULL, '0', NULL, NULL, '0.00'),
 ('411', '109', NULL, '4', '0', NULL, '29000.00', '1500.00', '3500.00', 'completed', 'paid', '12', 'Al Majid 2', 'santri', '0', '[\"kurir_kurir/proofs/6XFMOglSh71d49S7xPw6W2cJbkn5aTiiCl5xRn8D.jpg\"]', '[\"user_m_fairuz_albahrie_izdihar\\/proofs\\/nsIIsUISseB2Nj1fZBVWu4GwnBTqnxa2N4VYFGFp.jpg\"]', NULL, '2026-08-31 23:42:56', '2026-09-02 19:56:09', NULL, '0', NULL, NULL, '0.00'),
 ('412', '180', NULL, '18', '0', NULL, '40000.00', '1500.00', '3500.00', 'completed', 'paid', '12', 'ASMAH/G.20', 'santri', '0', '[\"kurir_kurir/proofs/KzCmKZZK6ujqWkhz5wdTbt3CKkn1hpyLYoEjse3s.jpg\"]', '[\"user_maulida_putri_tristian\\/proofs\\/3o11gVXNPAdREhFT4FnjPGgRKRPTJVr9i2Can6I6.jpg\"]', NULL, '2026-08-31 23:43:10', '2026-09-02 03:18:47', NULL, '0', NULL, NULL, '0.00'),
@@ -2634,7 +2633,7 @@ INSERT INTO `orders` (`id`, `user_id`, `checkout_id`, `canteen_id`, `is_custom`,
 ('607', '353', NULL, '18', '1', 'Tolong belikan es krim sunday oreo', '0.00', '1500.00', '3500.00', 'cancelled', 'unpaid', '12', 'Asyah /G 21', 'santri', '0', NULL, NULL, NULL, '2026-09-03 21:27:34', '2026-09-03 21:32:19', NULL, '0', NULL, NULL, '0.00'),
 ('608', '373', NULL, '7', '0', NULL, '18000.00', '1500.00', '3500.00', 'completed', 'paid', '12', 'Al Majid 1', 'santri', '0', '[\"kurir_kurir/proofs/UwmbTWCILrAovVmJ9teCnbaMHB28wnsNS3UD2SjH.jpg\"]', '[\"user_agasta_aryasatya_ramadani\\/proofs\\/Bw8D7UBahWU81FKpssV6GrrmLjWZ4fDshJnPyOBE.jpg\"]', NULL, '2026-09-03 21:42:34', '2026-09-04 03:40:42', NULL, '0', NULL, NULL, '0.00'),
 ('609', '358', NULL, '18', '0', NULL, '25000.00', '1500.00', '3500.00', 'completed', 'paid', '12', 'Asmah G4', 'santri', '0', '[\"kurir_kurir/proofs/0B5RVKmexi3IdOESrV6rdQf8UxKiM0uX7OblwfOR.jpg\", \"kurir_kurir/proofs/OWSJqbznffJnJFX5mU5ZvahnZ96iC5kWf20Mew2g.jpg\"]', '[\"user_apriliana_fauziah\\/proofs\\/EgDqrhdhq0npUHW3Ab1xvh05BBml5Qj6g24rAtD5.jpg\"]', NULL, '2026-09-03 22:03:39', '2026-09-04 03:47:02', NULL, '0', NULL, NULL, '0.00');
-INSERT INTO `orders` (`id`, `user_id`, `checkout_id`, `canteen_id`, `is_custom`, `custom_notes`, `total_price`, `admin_fee`, `delivery_fee`, `status`, `payment_status`, `courier_id`, `delivery_location`, `order_for`, `is_priority`, `proof_of_delivery`, `proof_of_payment`, `proof_of_purchase`, `created_at`, `updated_at`, `deleted_at`, `is_courier_paid_by_canteen`, `proof_courier_paid`, `voucher_id`, `voucher_discount`) VALUES
+REPLACE INTO `orders` (`id`, `user_id`, `checkout_id`, `canteen_id`, `is_custom`, `custom_notes`, `total_price`, `admin_fee`, `delivery_fee`, `status`, `payment_status`, `courier_id`, `delivery_location`, `order_for`, `is_priority`, `proof_of_delivery`, `proof_of_payment`, `proof_of_purchase`, `created_at`, `updated_at`, `deleted_at`, `is_courier_paid_by_canteen`, `proof_courier_paid`, `voucher_id`, `voucher_discount`) VALUES
 ('610', '353', NULL, '4', '0', NULL, '18000.00', '1500.00', '3500.00', 'completed', 'paid', '12', 'Asyah /G 21', 'santri', '0', '[\"kurir_kurir/proofs/gs47tgu6BN3IQRSGfbAJDS4uWtrqSAN57mkdrkLJ.jpg\"]', '[\"user_nila_darojatul_ngula\\/proofs\\/oL3umFYktVFjsRpdmsJ1EnjhV9XaZMGDT7wqXBmf.jpg\"]', NULL, '2026-09-03 22:09:21', '2026-09-04 03:35:02', NULL, '0', NULL, NULL, '0.00'),
 ('611', '353', NULL, '18', '0', NULL, '25000.00', '1500.00', '3500.00', 'cancelled', 'unpaid', '12', 'Asyah /G 21', 'santri', '0', NULL, NULL, NULL, '2026-09-03 22:09:21', '2026-09-03 22:09:52', NULL, '0', NULL, NULL, '0.00'),
 ('612', '353', NULL, '18', '0', NULL, '25000.00', '1500.00', '3500.00', 'completed', 'paid', '12', 'Asyah /G 21', 'santri', '0', '[\"kurir_kurir/proofs/FUjfldZ1VzsxlAoRVBPyTyTP5GBtJiOm5vih8HkG.jpg\"]', '[\"user_nila_darojatul_ngula\\/proofs\\/sRZChe2IsBnUtV6zi1MYWrPIcrykRJ8JkbMBTjpp.jpg\"]', NULL, '2026-09-03 22:11:16', '2026-09-04 03:46:56', NULL, '0', NULL, NULL, '0.00'),
@@ -2835,7 +2834,7 @@ INSERT INTO `orders` (`id`, `user_id`, `checkout_id`, `canteen_id`, `is_custom`,
 ('807', '471', NULL, '14', '0', NULL, '17000.00', '1500.00', '3500.00', 'completed', 'paid', '12', 'C7', 'santri', '0', '[\"kurir_kurir/proofs/xzIUSHa6QwtyXUyvCjRbUEtvAq8YlXVUWzbgKntK.jpg\", \"kurir_kurir/proofs/jZ0geG4SciBdvTkweUIypTeSQkrLN4SgLWmb92zB.jpg\"]', '[\"user_akbar_fadlhur_rohman\\/proofs\\/qesq29GnGitaNNotBHcVfqcnGD4ykGq9na5pNIbI.jpg\"]', NULL, '2026-09-07 18:12:14', '2026-09-08 03:27:13', NULL, '0', NULL, NULL, '0.00'),
 ('808', '241', NULL, '12', '0', NULL, '32000.00', '1500.00', '3500.00', 'completed', 'paid', '12', 'Asmah/G 5', 'santri', '0', '[\"kurir_kurir/proofs/imPwFI6OmQzD7vFEEye0aWwK02TprzMIAyALqSVe.jpg\"]', '[\"user_najwa_maulidda_azzahra_setyani\\/proofs\\/qYaVEnf57r4KZjtyA4ydDmegW6rKEkKmM4wOZhot.jpg\"]', NULL, '2026-09-07 18:22:51', '2026-09-08 03:27:48', NULL, '0', NULL, NULL, '0.00'),
 ('809', '241', NULL, '18', '0', NULL, '21000.00', '1500.00', '3500.00', 'completed', 'paid', '12', 'Asmah/G 5', 'santri', '0', '[\"kurir_kurir/proofs/LA19iNtnKdHbwtYFfPJFE5LIfLGB9hFAsQnCua4z.jpg\"]', '[\"user_najwa_maulidda_azzahra_setyani\\/proofs\\/B3LPILmdeFRJ9MDKKRcMVq6dVATTfM9lWUTUxjyW.jpg\"]', NULL, '2026-09-07 18:27:48', '2026-09-08 03:26:22', NULL, '0', NULL, NULL, '0.00');
-INSERT INTO `orders` (`id`, `user_id`, `checkout_id`, `canteen_id`, `is_custom`, `custom_notes`, `total_price`, `admin_fee`, `delivery_fee`, `status`, `payment_status`, `courier_id`, `delivery_location`, `order_for`, `is_priority`, `proof_of_delivery`, `proof_of_payment`, `proof_of_purchase`, `created_at`, `updated_at`, `deleted_at`, `is_courier_paid_by_canteen`, `proof_courier_paid`, `voucher_id`, `voucher_discount`) VALUES
+REPLACE INTO `orders` (`id`, `user_id`, `checkout_id`, `canteen_id`, `is_custom`, `custom_notes`, `total_price`, `admin_fee`, `delivery_fee`, `status`, `payment_status`, `courier_id`, `delivery_location`, `order_for`, `is_priority`, `proof_of_delivery`, `proof_of_payment`, `proof_of_purchase`, `created_at`, `updated_at`, `deleted_at`, `is_courier_paid_by_canteen`, `proof_courier_paid`, `voucher_id`, `voucher_discount`) VALUES
 ('810', '681', NULL, '12', '0', NULL, '42000.00', '1500.00', '3500.00', 'completed', 'paid', '12', 'Asmah/G18', 'santri', '0', '[\"kurir_kurir/proofs/xbAUNcQgmO8TsAz2ArcrJW2g8DkMQBlICQ1JVLvI.jpg\"]', '[\"user_ghaisa_darin_aliya\\/proofs\\/BdGFoFLU4QV7q37hbBBWPxLArrrTdNFJAdvyMQIR.jpg\"]', NULL, '2026-09-07 18:28:57', '2026-09-08 03:27:46', NULL, '0', NULL, NULL, '0.00'),
 ('811', '111', NULL, '8', '0', NULL, '21000.00', '1500.00', '3500.00', 'completed', 'paid', '12', 'Asmah', 'santri', '0', '[\"kurir_kurir/proofs/T5KrIcoZu6cVBVcmKudSaYsx1RTO5sp95ktbaJSV.jpg\"]', '[\"user_siti_wardatuzzahro\\/proofs\\/2qQRueWUyQxVhgTxrH1RDc0YnIyy2zXij9XQ1NJh.jpg\"]', NULL, '2026-09-07 19:02:34', '2026-09-08 03:28:13', NULL, '0', NULL, NULL, '0.00'),
 ('812', '642', NULL, '18', '0', NULL, '43000.00', '1500.00', '3500.00', 'completed', 'paid', '12', 'asrama putri G 21', 'santri', '0', '[\"kurir_kurir/proofs/fNhkuxgT5wvh3GefKtcwRulH8CARvS7p7PNB5tRr.jpg\"]', '[\"user_zadin_faiz_zulfa\\/proofs\\/0IEkO9N1aiZSP4Tw2POVNO2yt7R4K9Iy4DN1SuWn.jpg\"]', NULL, '2026-09-07 19:02:42', '2026-09-08 03:26:21', NULL, '0', NULL, NULL, '0.00'),
@@ -3036,7 +3035,7 @@ INSERT INTO `orders` (`id`, `user_id`, `checkout_id`, `canteen_id`, `is_custom`,
 ('1007', '152', NULL, '16', '0', NULL, '68000.00', '1500.00', '3500.00', 'completed', 'paid', '12', 'Asrama asmah / g12', 'santri', '0', '[\"kurir_kurir/proofs/Zga07Q0DiSYjVryb8ertj9EbfWQE2yKBlXRKIj6R.jpg\", \"kurir_kurir/proofs/SsHwdZN2tvYQbsKwBPomcRGGKsyHBHKS6kTWMxdZ.jpg\"]', '[\"user_frestaliya_dea_anggun_pratiwi\\/proofs\\/2sRa1LU9qEMIUALRzD7JKYt3MhhjPkfGYqfW1CCT.jpg\"]', NULL, '2026-09-10 18:15:51', '2026-09-11 04:29:22', NULL, '0', NULL, NULL, '0.00'),
 ('1008', '508', NULL, '8', '0', NULL, '21000.00', '1500.00', '3500.00', 'cancelled', 'unpaid', '12', 'Asmah', 'santri', '0', NULL, NULL, NULL, '2026-09-10 18:51:28', '2026-09-10 18:51:38', NULL, '0', NULL, NULL, '0.00'),
 ('1009', '135', NULL, '18', '0', NULL, '22000.00', '1500.00', '3500.00', 'cancelled', 'unpaid', '12', 'Al Majid 2', 'santri', '0', NULL, NULL, NULL, '2026-09-10 18:57:15', '2026-09-10 18:58:59', NULL, '0', NULL, NULL, '0.00');
-INSERT INTO `orders` (`id`, `user_id`, `checkout_id`, `canteen_id`, `is_custom`, `custom_notes`, `total_price`, `admin_fee`, `delivery_fee`, `status`, `payment_status`, `courier_id`, `delivery_location`, `order_for`, `is_priority`, `proof_of_delivery`, `proof_of_payment`, `proof_of_purchase`, `created_at`, `updated_at`, `deleted_at`, `is_courier_paid_by_canteen`, `proof_courier_paid`, `voucher_id`, `voucher_discount`) VALUES
+REPLACE INTO `orders` (`id`, `user_id`, `checkout_id`, `canteen_id`, `is_custom`, `custom_notes`, `total_price`, `admin_fee`, `delivery_fee`, `status`, `payment_status`, `courier_id`, `delivery_location`, `order_for`, `is_priority`, `proof_of_delivery`, `proof_of_payment`, `proof_of_purchase`, `created_at`, `updated_at`, `deleted_at`, `is_courier_paid_by_canteen`, `proof_courier_paid`, `voucher_id`, `voucher_discount`) VALUES
 ('1010', '135', NULL, '18', '0', NULL, '39000.00', '1500.00', '3500.00', 'completed', 'paid', '12', 'Al Majid 2', 'santri', '0', '[\"kurir_kurir/proofs/Lq86YIr8JZbbNHtzqn6B4DpXpVNaeNjcCiguevc2.jpg\", \"kurir_kurir/proofs/znX6xhUGC0g94NwtYPOsvPpHloSUag77Cg3iu2Q2.jpg\"]', '[\"user_muhammad_satria_ulinnuha\\/proofs\\/9xd02pdcHL76ouJSgRGVOLQ84NqMMQ50zqZEy6H4.jpg\"]', NULL, '2026-09-10 18:59:14', '2026-09-11 04:29:05', NULL, '0', NULL, NULL, '0.00'),
 ('1011', '414', NULL, '11', '0', NULL, '19000.00', '1500.00', '3500.00', 'completed', 'paid', '12', 'Al majid 2 kamar 7', 'santri', '0', '[\"kurir_kurir/proofs/5OgW2fbtwBj44GvqlTdcVgGUrjDb35aAPxibBrT3.jpg\", \"kurir_kurir/proofs/u8hh9gLTTzoffS9gRXKrqLfDllhHoHFqBslQDkne.jpg\"]', '[\"user_muhammad_arja_azka_alaik\\/proofs\\/bB1A4V8LiRy9qhSRMqYdYTcKB9rCwNQxghyZqmbf.jpg\"]', NULL, '2026-09-10 19:05:22', '2026-09-11 03:21:45', NULL, '0', NULL, NULL, '0.00'),
 ('1012', '414', NULL, '19', '0', NULL, '17000.00', '1500.00', '3500.00', 'completed', 'paid', '12', 'Al majid 2 kamar 7', 'santri', '0', '[\"kurir_kurir/proofs/B9YU5oFjQDQQ2wiFCBzGaAxUVL9sF3xs72INv25y.jpg\", \"kurir_kurir/proofs/k3Qg8WsxYLXoKgcB7yRxyoleLnEzpNCjtZ48agdR.jpg\"]', '[\"user_muhammad_arja_azka_alaik\\/proofs\\/dgbaYe2uspeb7dcMMT1JYqhqgpnMLC8FORxHBwfz.jpg\"]', NULL, '2026-09-10 19:05:22', '2026-09-11 04:28:47', NULL, '0', NULL, NULL, '0.00'),
@@ -3237,7 +3236,7 @@ INSERT INTO `orders` (`id`, `user_id`, `checkout_id`, `canteen_id`, `is_custom`,
 ('1207', '439', 'CHK-20260913-276N7D', '11', '0', NULL, '19000.00', '2000.00', '3000.00', 'completed', 'paid', '794', 'C8', 'santri', '0', '[\"minggu13September2026/parisa_ramadhani_putra/proff_delivery/zKypEEJVdpNuNh4NRjZJoUXGfGv5YZmdLpv2SIw4.jpg\", \"minggu13September2026/parisa_ramadhani_putra/proff_delivery/nM1D14fsnB0PXSDvb7gbbobW2l8zISuoMDXL4IO3.jpg\"]', '[\"minggu13September2026\\/parisa_ramadhani_putra\\/proof\\/osYc0sZFzXZqsiaLdPJVEvxAKiBIBERnMY83mEBm.jpg\"]', NULL, '2026-09-13 18:49:19', '2026-09-14 02:51:03', NULL, '0', NULL, NULL, '0.00'),
 ('1208', '241', 'CHK-20260913-KBOU8C', '4', '0', NULL, '18000.00', '2000.00', '3000.00', 'completed', 'paid', '12', 'Asmah/G 5', 'santri', '0', '[\"minggu13September2026/najwa_maulidda_azzahra_setyani/proff_delivery/Gm4yvV0LbLsjMAVv5uLznt2o3CZyU7jKRkEFUZMq.jpg\"]', '[\"minggu13September2026\\/najwa_maulidda_azzahra_setyani\\/proof\\/IDljNkP8WhV29mmQeNyWbGCKMnouWJDSUzLEuunt.jpg\"]', NULL, '2026-09-13 19:23:54', '2026-09-14 03:55:26', NULL, '0', NULL, NULL, '0.00'),
 ('1209', '241', 'CHK-20260913-LKGVEY', '4', '0', NULL, '16000.00', '2000.00', '3000.00', 'completed', 'paid', '12', 'Asmah/G 5', 'santri', '0', '[\"minggu13September2026/najwa_maulidda_azzahra_setyani/proff_delivery/v6dub00TyTm43EKVPzwHdVp2VkyuC8WtnPqZ7qIP.jpg\"]', '[\"minggu13September2026\\/najwa_maulidda_azzahra_setyani\\/proof\\/0a2glW5H9aPw0g9x3URzTiF57p21gxJSuKlpvCi0.jpg\"]', NULL, '2026-09-13 19:26:43', '2026-09-14 03:55:19', NULL, '0', NULL, NULL, '0.00');
-INSERT INTO `orders` (`id`, `user_id`, `checkout_id`, `canteen_id`, `is_custom`, `custom_notes`, `total_price`, `admin_fee`, `delivery_fee`, `status`, `payment_status`, `courier_id`, `delivery_location`, `order_for`, `is_priority`, `proof_of_delivery`, `proof_of_payment`, `proof_of_purchase`, `created_at`, `updated_at`, `deleted_at`, `is_courier_paid_by_canteen`, `proof_courier_paid`, `voucher_id`, `voucher_discount`) VALUES
+REPLACE INTO `orders` (`id`, `user_id`, `checkout_id`, `canteen_id`, `is_custom`, `custom_notes`, `total_price`, `admin_fee`, `delivery_fee`, `status`, `payment_status`, `courier_id`, `delivery_location`, `order_for`, `is_priority`, `proof_of_delivery`, `proof_of_payment`, `proof_of_purchase`, `created_at`, `updated_at`, `deleted_at`, `is_courier_paid_by_canteen`, `proof_courier_paid`, `voucher_id`, `voucher_discount`) VALUES
 ('1210', '101', 'CHK-20260913-XRNRSC', '12', '0', NULL, '42000.00', '2000.00', '3000.00', 'completed', 'paid', '794', 'G12', 'santri', '0', '[\"minggu13September2026/iftitah_azmi_athifa/proff_delivery/MAhmDcvRVXVQSv0qERqUqQT7ynkk7AGBbfJ3nNN7.jpg\", \"minggu13September2026/iftitah_azmi_athifa/proff_delivery/6gv6wFeKAJ9T87BgZ0slpKTF3VLFlngVkvaYMuO6.jpg\"]', '[\"minggu13September2026\\/iftitah_azmi_athifa\\/proof\\/hxIJDzt7nBlSY5XwYNvKJN9MCEtzD87THEfGeUXP.jpg\"]', NULL, '2026-09-13 19:30:28', '2026-09-14 02:50:53', NULL, '0', NULL, NULL, '0.00'),
 ('1211', '631', 'CHK-20260913-MS3VYQ', '4', '0', NULL, '24000.00', '2000.00', '3000.00', 'completed', 'paid', '12', 'ASMAH', 'santri', '0', '[\"minggu13September2026/marcella_aprillia/proff_delivery/gic0xgBCbsQnRhjWXaaLWotujEj9QBPwoMxASyq6.jpg\"]', '[\"minggu13September2026\\/marcella_aprillia\\/proof\\/Wlj1mBBR6uS4bsDiSMxbQtaqJGo0X0mC20wTnaW4.jpg\",\"minggu13September2026\\/marcella_aprillia\\/proof\\/EAefJ2DIzNP7ZO2htj8x440XFPtnSl8S503EyW6q.jpg\"]', NULL, '2026-09-13 19:54:41', '2026-09-14 03:55:13', NULL, '0', NULL, NULL, '0.00'),
 ('1212', '101', 'CHK-20260913-KYEWI4', '18', '0', NULL, '21000.00', '2000.00', '3000.00', 'completed', 'paid', '12', 'G12', 'santri', '0', '[\"minggu13September2026/iftitah_azmi_athifa/proff_delivery/SLicvHVZ8ttiE7cAPzSG43qcPJh70cBeIPHPqicR.jpg\"]', '[\"minggu13September2026\\/iftitah_azmi_athifa\\/proof\\/FvhBnIBcE0zJe5GTikDAk2SXX2aB2BzxdLJkRTNT.jpg\"]', NULL, '2026-09-13 20:01:06', '2026-09-14 03:55:07', NULL, '0', NULL, NULL, '0.00'),
@@ -3438,7 +3437,7 @@ INSERT INTO `orders` (`id`, `user_id`, `checkout_id`, `canteen_id`, `is_custom`,
 ('1410', '154', 'CHK-20260917-SYYI9W', '5', '0', NULL, '20500.00', '4000.00', '1000.00', 'cancelled', 'unpaid', '12', 'ASMAH', 'santri', '0', NULL, NULL, NULL, '2026-09-17 20:44:21', '2026-09-17 20:49:48', NULL, '0', NULL, NULL, '0.00'),
 ('1411', '386', 'CHK-20260917-QAH9NO', '4', '0', NULL, '30000.00', '4000.00', '1000.00', 'completed', 'paid', '12', 'ASMAH', 'santri', '0', '[\"kamis17September2026/jessika_debiana_salsa_bella/proff_delivery/0DZmxVK120LoUo9Rl75Xrh6JgCc0foBRcCl9N7HQ.jpg\", \"kamis17September2026/jessika_debiana_salsa_bella/proff_delivery/OSUv3MBEdTKb2iUOxmrcJl311pQFHiOxAe02fQnP.jpg\"]', '[\"kamis17September2026\\/jessika_debiana_salsa_bella\\/proof\\/OlclWTMUsFlGPPNYvAG98j85v88NKs3EPLcTNV92.jpg\",\"user_jessika_debiana_salsa_bella\\/proofs\\/aZvlLTLahAyyY4i9i84h9wn7cfK1HSywnvKXciet.jpg\"]', NULL, '2026-09-17 20:55:48', '2026-09-18 04:45:08', NULL, '0', NULL, NULL, '0.00'),
 ('1412', '386', 'CHK-20260917-QAH9NO', '19', '0', NULL, '17000.00', '2000.00', '3000.00', 'completed', 'paid', '12', 'ASMAH', 'santri', '0', '[\"kamis17September2026/jessika_debiana_salsa_bella/proff_delivery/kH6tTmGn77xef6o6SyN3wiw5urm79jV0ZZU4Ryt3.jpg\", \"kamis17September2026/jessika_debiana_salsa_bella/proff_delivery/FtWOs53cu5msmvgQMhmLZEao1Ns8IcuChZIO1LEg.jpg\"]', '[\"kamis17September2026\\/jessika_debiana_salsa_bella\\/proof\\/OlclWTMUsFlGPPNYvAG98j85v88NKs3EPLcTNV92.jpg\",\"user_jessika_debiana_salsa_bella\\/proofs\\/aZvlLTLahAyyY4i9i84h9wn7cfK1HSywnvKXciet.jpg\"]', NULL, '2026-09-17 20:55:48', '2026-09-18 04:44:45', NULL, '0', NULL, NULL, '0.00');
-INSERT INTO `orders` (`id`, `user_id`, `checkout_id`, `canteen_id`, `is_custom`, `custom_notes`, `total_price`, `admin_fee`, `delivery_fee`, `status`, `payment_status`, `courier_id`, `delivery_location`, `order_for`, `is_priority`, `proof_of_delivery`, `proof_of_payment`, `proof_of_purchase`, `created_at`, `updated_at`, `deleted_at`, `is_courier_paid_by_canteen`, `proof_courier_paid`, `voucher_id`, `voucher_discount`) VALUES
+REPLACE INTO `orders` (`id`, `user_id`, `checkout_id`, `canteen_id`, `is_custom`, `custom_notes`, `total_price`, `admin_fee`, `delivery_fee`, `status`, `payment_status`, `courier_id`, `delivery_location`, `order_for`, `is_priority`, `proof_of_delivery`, `proof_of_payment`, `proof_of_purchase`, `created_at`, `updated_at`, `deleted_at`, `is_courier_paid_by_canteen`, `proof_courier_paid`, `voucher_id`, `voucher_discount`) VALUES
 ('1413', '273', 'CHK-20260917-P8BLAR', '21', '0', NULL, '22500.00', '2000.00', '3000.00', 'completed', 'paid', '12', 'Asmah/G 17/ X IPA', 'santri', '0', '[\"kamis17September2026/najwa_fauzia/proff_delivery/H79a2FoJl8sdEZ3HkIiKZWN2oPpgODjJSLYoqPbX.jpg\", \"kamis17September2026/najwa_fauzia/proff_delivery/29MYWTD7rLzqvhSMMIjO8ZHIyWRgxVy0px79Ja1E.jpg\"]', '[\"kamis17September2026\\/najwa_fauzia\\/proof\\/InVhV5x7Phyvqt3vAbCI2wLtCmfLXDZeQnM7Xmlx.jpg\"]', NULL, '2026-09-17 20:58:26', '2026-09-18 04:44:04', NULL, '0', NULL, NULL, '0.00'),
 ('1414', '538', 'CHK-20260917-TRBV2I', '11', '0', NULL, '19500.00', '4000.00', '1000.00', 'cancelled', 'unpaid', '794', 'G17', 'santri', '0', NULL, NULL, NULL, '2026-09-17 21:06:03', '2026-09-17 21:07:39', NULL, '0', NULL, NULL, '0.00'),
 ('1415', '538', 'CHK-20260917-TRBV2I', '17', '0', NULL, '16000.00', '4000.00', '1000.00', 'cancelled', 'unpaid', '12', 'G17', 'santri', '0', NULL, NULL, NULL, '2026-09-17 21:06:03', '2026-09-17 21:07:39', NULL, '0', NULL, NULL, '0.00'),
@@ -3639,7 +3638,7 @@ INSERT INTO `orders` (`id`, `user_id`, `checkout_id`, `canteen_id`, `is_custom`,
 ('1610', '421', 'CHK-20260922-H7CEFX', '8', '0', NULL, '47000.00', '4000.00', '1000.00', 'cancelled', 'unpaid', '794', 'Al Majid 2/c7', 'santri', '0', NULL, NULL, NULL, '2026-09-22 21:27:46', '2026-09-22 21:28:25', NULL, '0', NULL, NULL, '0.00'),
 ('1611', '421', 'CHK-20260922-H7CEFX', '11', '0', NULL, '34000.00', '2000.00', '3000.00', 'cancelled', 'unpaid', '794', 'Al Majid 2/c7', 'santri', '0', NULL, NULL, NULL, '2026-09-22 21:27:46', '2026-09-22 21:28:25', NULL, '0', NULL, NULL, '0.00'),
 ('1612', '421', 'CHK-20260922-H7CEFX', '13', '0', NULL, '58000.00', '2000.00', '3000.00', 'cancelled', 'unpaid', '794', 'Al Majid 2/c7', 'santri', '0', NULL, NULL, NULL, '2026-09-22 21:27:46', '2026-09-22 21:28:25', NULL, '0', NULL, NULL, '0.00');
-INSERT INTO `orders` (`id`, `user_id`, `checkout_id`, `canteen_id`, `is_custom`, `custom_notes`, `total_price`, `admin_fee`, `delivery_fee`, `status`, `payment_status`, `courier_id`, `delivery_location`, `order_for`, `is_priority`, `proof_of_delivery`, `proof_of_payment`, `proof_of_purchase`, `created_at`, `updated_at`, `deleted_at`, `is_courier_paid_by_canteen`, `proof_courier_paid`, `voucher_id`, `voucher_discount`) VALUES
+REPLACE INTO `orders` (`id`, `user_id`, `checkout_id`, `canteen_id`, `is_custom`, `custom_notes`, `total_price`, `admin_fee`, `delivery_fee`, `status`, `payment_status`, `courier_id`, `delivery_location`, `order_for`, `is_priority`, `proof_of_delivery`, `proof_of_payment`, `proof_of_purchase`, `created_at`, `updated_at`, `deleted_at`, `is_courier_paid_by_canteen`, `proof_courier_paid`, `voucher_id`, `voucher_discount`) VALUES
 ('1613', '421', 'CHK-20260922-H7CEFX', '14', '0', NULL, '17000.00', '2000.00', '3000.00', 'cancelled', 'unpaid', '794', 'Al Majid 2/c7', 'santri', '0', NULL, NULL, NULL, '2026-09-22 21:27:46', '2026-09-22 21:28:25', NULL, '0', NULL, NULL, '0.00'),
 ('1614', '421', 'CHK-20260922-H7CEFX', '17', '0', NULL, '30000.00', '2000.00', '3000.00', 'cancelled', 'unpaid', '12', 'Al Majid 2/c7', 'santri', '0', NULL, NULL, NULL, '2026-09-22 21:27:46', '2026-09-22 21:28:25', NULL, '0', NULL, NULL, '0.00'),
 ('1615', '421', 'CHK-20260922-H7CEFX', '18', '0', NULL, '23000.00', '4000.00', '1000.00', 'cancelled', 'unpaid', '12', 'Al Majid 2/c7', 'santri', '0', NULL, NULL, NULL, '2026-09-22 21:27:46', '2026-09-22 21:28:25', NULL, '0', NULL, NULL, '0.00'),
@@ -3840,7 +3839,7 @@ INSERT INTO `orders` (`id`, `user_id`, `checkout_id`, `canteen_id`, `is_custom`,
 ('1810', '63', 'CHK-20260926-JOILWR', '4', '0', NULL, '43000.00', '4000.00', '1000.00', 'cancelled', 'unpaid', '12', 'Al Majid 2', 'santri', '0', NULL, NULL, NULL, '2026-09-26 19:58:42', '2026-09-26 19:59:44', NULL, '0', NULL, NULL, '0.00'),
 ('1811', '63', 'CHK-20260926-NHKYWA', '4', '0', NULL, '43000.00', '4000.00', '1000.00', 'completed', 'paid', '12', 'Al Majid 2', 'santri', '0', '[\"sabtu26September2026/muhammad_bahrul_hikam/proff_delivery/lXqjr4uBIRprtxeA77TCWXTw9WafgAc3h2u7LWFk.jpg\", \"sabtu26September2026/muhammad_bahrul_hikam/proff_delivery/9c0gvsJSAEn5eg9orxH0RFGQ85LD2pKCk2jn58NN.jpg\"]', '[\"sabtu26September2026\\/muhammad_bahrul_hikam\\/proof\\/K105d5tqGTm2dUx17fyaKPNXlqdAgRCHfBmGBpeD.jpg\"]', NULL, '2026-09-26 20:00:46', '2026-09-27 03:28:17', NULL, '0', NULL, NULL, '0.00'),
 ('1812', '63', 'CHK-20260926-Y9WGRT', '19', '0', NULL, '15000.00', '2000.00', '3000.00', 'completed', 'paid', '12', 'Al Majid 2', 'santri', '0', '[\"sabtu26September2026/muhammad_bahrul_hikam/proff_delivery/bosq1XcEXQUsI2SeL8s1Syx8iSkXl6MGfcWE4swl.jpg\", \"sabtu26September2026/muhammad_bahrul_hikam/proff_delivery/MTzPALjkRvQjyBxYCkRG68HHapzavSK5paNHN15C.jpg\"]', '[\"sabtu26September2026\\/muhammad_bahrul_hikam\\/proof\\/YrYwRyP7auOpDunX1w1fnmBi4ZPxfs3HuwQ2CZID.jpg\"]', NULL, '2026-09-26 20:04:43', '2026-09-27 03:28:03', NULL, '0', NULL, NULL, '0.00');
-INSERT INTO `orders` (`id`, `user_id`, `checkout_id`, `canteen_id`, `is_custom`, `custom_notes`, `total_price`, `admin_fee`, `delivery_fee`, `status`, `payment_status`, `courier_id`, `delivery_location`, `order_for`, `is_priority`, `proof_of_delivery`, `proof_of_payment`, `proof_of_purchase`, `created_at`, `updated_at`, `deleted_at`, `is_courier_paid_by_canteen`, `proof_courier_paid`, `voucher_id`, `voucher_discount`) VALUES
+REPLACE INTO `orders` (`id`, `user_id`, `checkout_id`, `canteen_id`, `is_custom`, `custom_notes`, `total_price`, `admin_fee`, `delivery_fee`, `status`, `payment_status`, `courier_id`, `delivery_location`, `order_for`, `is_priority`, `proof_of_delivery`, `proof_of_payment`, `proof_of_purchase`, `created_at`, `updated_at`, `deleted_at`, `is_courier_paid_by_canteen`, `proof_courier_paid`, `voucher_id`, `voucher_discount`) VALUES
 ('1813', '139', 'CHK-20260926-TMTR3F', '12', '0', NULL, '37000.00', '2000.00', '3000.00', 'completed', 'paid', '794', 'ASMAH/G11', 'santri', '0', '[\"sabtu26September2026/miladaneysha_fariha_annahra/proff_delivery/jHNUtZLBJkuekzKl3BI0GQlNpGbPkl8T6lwGF81r.jpg\", \"sabtu26September2026/miladaneysha_fariha_annahra/proff_delivery/TxMmw7LixRHOm61nkbsF7ScJF69YOA9Dm9s514cK.jpg\"]', '[\"sabtu26September2026\\/miladaneysha_fariha_annahra\\/proof\\/Psp3Tg8DJlO8pqX1Ymu9v5pEZAnLLng9DKh5GOMS.jpg\"]', NULL, '2026-09-26 20:09:04', '2026-09-27 03:09:01', NULL, '0', NULL, NULL, '0.00'),
 ('1814', '444', 'CHK-20260926-RJDRTJ', '12', '0', NULL, '59000.00', '2000.00', '3000.00', 'completed', 'paid', '794', 'Kamar MA G.20', 'santri', '0', '[\"sabtu26September2026/mayzura_nur_widya_alwi/proff_delivery/KsPspFyB5HgFFQ9mY881drSCMRvR7nQxzDVCLg7N.jpg\", \"sabtu26September2026/mayzura_nur_widya_alwi/proff_delivery/e0BMijwZAKKAGQ3LViClTSpkzC7ucDNKBMKlv6Wz.jpg\"]', '[\"sabtu26September2026\\/mayzura_nur_widya_alwi\\/proof\\/f70BX4kXCxbE4XAlaIrjO7AyzjOCZteosqHkYb3F.jpg\"]', NULL, '2026-09-26 20:25:58', '2026-09-27 03:08:55', NULL, '0', NULL, NULL, '0.00'),
 ('1815', '213', 'CHK-20260926-NWHGDE', '8', '0', NULL, '38500.00', '2000.00', '3000.00', 'cancelled', 'unpaid', '794', 'Asrama Asmah G.11', 'santri', '0', NULL, NULL, NULL, '2026-09-26 20:38:24', '2026-09-26 20:39:20', NULL, '0', NULL, NULL, '0.00'),
@@ -4041,7 +4040,7 @@ INSERT INTO `orders` (`id`, `user_id`, `checkout_id`, `canteen_id`, `is_custom`,
 ('2130', '890', 'CHK-20261003-TWE8JO', '8', '0', NULL, '30000.00', '2000.00', '3000.00', 'completed', 'paid', '794', 'Al Majid 2 / Kamar 6A', 'santri', '0', '[\"sabtu3Oktober2026/muhammad_afzam_alfachrizzi/proff_delivery/SGlcpnVQ4DvRjidpRQCvTB3Z9MHN7pPToljsvnKQ.jpg\", \"sabtu3Oktober2026/muhammad_afzam_alfachrizzi/proff_delivery/oigWF7l0sa6x7iVJeDNtfXMDzSsLsjXGlzAKh0nj.jpg\"]', '[\"sabtu3Oktober2026\\/muhammad_afzam_alfachrizzi\\/proof\\/ORyjNkn5ozNnbqHSVWS8ytUb35KlOnWfdjhbr9rd.jpg\"]', NULL, '2026-10-03 20:51:11', '2026-10-04 02:34:37', NULL, '0', NULL, NULL, '0.00'),
 ('2131', '241', 'CHK-20261003-PSBYTY', '22', '0', NULL, '22000.00', '4000.00', '1000.00', 'completed', 'paid', '794', 'Asmah/G 5', 'santri', '0', '[\"sabtu3Oktober2026/najwa_maulidda_azzahra_setyani/proff_delivery/zOE6AjqgMJn9UxpZhtDhbZGaLpvAEAvYr6fgar0a.jpg\", \"sabtu3Oktober2026/najwa_maulidda_azzahra_setyani/proff_delivery/48pah9OvkFfNk7T3QwXoVk55FJEDN7WmbgxSHKs2.jpg\"]', '[\"sabtu3Oktober2026\\/najwa_maulidda_azzahra_setyani\\/proof\\/AxJvBTdSN6Mc5TUSZ1yr0eJmDdYTpXDhqXTOgGHu.jpg\"]', NULL, '2026-10-03 21:01:02', '2026-10-11 08:41:31', NULL, '0', NULL, NULL, '0.00'),
 ('2132', '892', 'CHK-20261003-25WQNJ', '4', '0', NULL, '54000.00', '4000.00', '1000.00', 'completed', 'paid', '12', 'G21', 'santri', '0', '[\"sabtu3Oktober2026/queensa_jihan_amira/proff_delivery/H9qpSnkiA53w8CMJ6of8tmdpOfualMAYcYhWuX3G.jpg\", \"sabtu3Oktober2026/queensa_jihan_amira/proff_delivery/9k16BaVZQKDFfHYsfZeaT1yBTBZuFwZM25oSOxya.jpg\"]', '[\"sabtu3Oktober2026\\/queensa_jihan_amira\\/proof\\/rfmlKO5QNvKwMtBAW24lerRp41OaNiLlM00NGnoo.jpg\"]', NULL, '2026-10-03 21:21:30', '2026-10-11 08:41:31', NULL, '0', NULL, NULL, '0.00');
-INSERT INTO `orders` (`id`, `user_id`, `checkout_id`, `canteen_id`, `is_custom`, `custom_notes`, `total_price`, `admin_fee`, `delivery_fee`, `status`, `payment_status`, `courier_id`, `delivery_location`, `order_for`, `is_priority`, `proof_of_delivery`, `proof_of_payment`, `proof_of_purchase`, `created_at`, `updated_at`, `deleted_at`, `is_courier_paid_by_canteen`, `proof_courier_paid`, `voucher_id`, `voucher_discount`) VALUES
+REPLACE INTO `orders` (`id`, `user_id`, `checkout_id`, `canteen_id`, `is_custom`, `custom_notes`, `total_price`, `admin_fee`, `delivery_fee`, `status`, `payment_status`, `courier_id`, `delivery_location`, `order_for`, `is_priority`, `proof_of_delivery`, `proof_of_payment`, `proof_of_purchase`, `created_at`, `updated_at`, `deleted_at`, `is_courier_paid_by_canteen`, `proof_courier_paid`, `voucher_id`, `voucher_discount`) VALUES
 ('2133', '453', 'CHK-20261003-Y7TQKX', '4', '0', NULL, '24000.00', '4000.00', '1000.00', 'completed', 'paid', '12', 'G 17', 'santri', '0', '[\"sabtu3Oktober2026/naswa_aulia_al_zahra/proff_delivery/n19d0tCMFaT3UFyoGyLb26dpifCLOVQoyyA0kRTk.jpg\", \"sabtu3Oktober2026/naswa_aulia_al_zahra/proff_delivery/ue1IbYjhlovllNWkqf8q6LJQJxcG3oUm6IJ8iuLh.jpg\"]', '[\"sabtu3Oktober2026\\/naswa_aulia_al_zahra\\/proof\\/Y9ObMGaZizY266rJBgSvjIPnqhlTTpNymYtbI3hO.jpg\"]', NULL, '2026-10-03 21:39:46', '2026-10-04 03:33:05', NULL, '0', NULL, NULL, '0.00'),
 ('2134', '442', 'CHK-20261003-VEWXZE', '7', '0', NULL, '18000.00', '2000.00', '3000.00', 'completed', 'paid', '12', 'G3', 'santri', '0', '[\"sabtu3Oktober2026/najwa_zakiyyata_jannati/proff_delivery/6DcHWvp4Ce88iTktWiJGHXPjWxNbsFXIHNPEdKWk.jpg\", \"sabtu3Oktober2026/najwa_zakiyyata_jannati/proff_delivery/DePSfgu0QcU2yfp3SIxWZYIlQneoAVdQWmid97bb.jpg\"]', '[\"sabtu3Oktober2026\\/najwa_zakiyyata_jannati\\/proof\\/GqbnbZDjxqnG4iFzXfE5OMLuIBURztSc8oxMNZtG.jpg\"]', NULL, '2026-10-03 21:50:26', '2026-10-04 03:32:37', NULL, '0', NULL, NULL, '0.00'),
 ('2135', '442', 'CHK-20261003-VEWXZE', '18', '0', NULL, '22000.00', '4000.00', '1000.00', 'completed', 'paid', '12', 'G3', 'santri', '0', '[\"sabtu3Oktober2026/najwa_zakiyyata_jannati/proff_delivery/TQXfJZJ0EPJzRFOkH4p8hih8whXxEGNXP4BmWxtr.jpg\", \"sabtu3Oktober2026/najwa_zakiyyata_jannati/proff_delivery/Tli0gTIsJ0xne4dMFScyluSUiQtfS4fgNCxxVJcT.jpg\"]', '[\"sabtu3Oktober2026\\/najwa_zakiyyata_jannati\\/proof\\/GqbnbZDjxqnG4iFzXfE5OMLuIBURztSc8oxMNZtG.jpg\"]', NULL, '2026-10-03 21:50:26', '2026-10-11 08:41:31', NULL, '0', NULL, NULL, '0.00'),
@@ -4242,7 +4241,7 @@ INSERT INTO `orders` (`id`, `user_id`, `checkout_id`, `canteen_id`, `is_custom`,
 ('2330', '448', 'CHK-20261008-XYQFZR', '15', '0', NULL, '30000.00', '2000.00', '3000.00', 'completed', 'paid', '794', 'Asmah', 'santri', '0', '[\"kamis8Oktober2026/safira_lailia_fadila/proff_delivery/aHTTbEl4VDvD7kCIgLzLpOXqMikRLBqIilLeClDS.jpg\", \"kamis8Oktober2026/safira_lailia_fadila/proff_delivery/zaoAbp0FGWz5KxiseDGTnAjECZWvto4g2XlxLqCp.jpg\"]', '[\"kamis8Oktober2026\\/safira_lailia_fadila\\/proof\\/N6bgmPstqvgoImbaqSojQwEE2prrDEuBmpwuiWsX.jpg\"]', NULL, '2026-10-08 17:14:47', '2026-10-09 02:50:36', NULL, '0', NULL, NULL, '0.00'),
 ('2331', '224', 'CHK-20261008-TVVCSJ', '15', '0', NULL, '31000.00', '4000.00', '1000.00', 'completed', 'paid', '794', 'ASMAH/G.10', 'santri', '0', '[\"kamis8Oktober2026/salwa_farah_fadhilah/proff_delivery/0YUaF5ZgzzdGB3UUAxLOXldj5k51hqt2gArLzNTg.jpg\", \"kamis8Oktober2026/salwa_farah_fadhilah/proff_delivery/QTUQ6ghShkNU9BlBsdNG9WCHokXmM7lSdFP8yL48.jpg\"]', '[\"kamis8Oktober2026\\/salwa_farah_fadhilah\\/proof\\/8FlheQS5DLinxhnazaTiLt84nb0UyrpzUsiFxLrB.jpg\"]', NULL, '2026-10-08 17:46:48', '2026-10-11 08:41:31', NULL, '0', NULL, NULL, '0.00'),
 ('2332', '43', 'CHK-20261008-2MJXLZ', '14', '0', NULL, '17000.00', '2000.00', '3000.00', 'completed', 'paid', '794', 'MAJID2, an. Muhammad Husain Amir Al Akrom, c9', 'santri', '0', '[\"kamis8Oktober2026/muhammad_husain_amir_al_akrom/proff_delivery/Rn3EgsOc5O9dORomdH0Q308xLeJ8atdNXln0g7V5.jpg\", \"kamis8Oktober2026/muhammad_husain_amir_al_akrom/proff_delivery/EioAkw8rne3jUkf6tEQh8aJ09PBaVxig3ev0z7Ts.jpg\"]', '[\"kamis8Oktober2026\\/muhammad_husain_amir_al_akrom\\/proof\\/Fy6kvPCLt6QxL3xIDa9reoIgLaZbIHoqFIIBqcQQ.jpg\",\"kamis8Oktober2026\\/muhammad_husain_amir_al_akrom\\/proof\\/FqbqBKKYhxiA3xxC3UKHUgKJmonyQ3iQgpXYNNtt.jpg\"]', NULL, '2026-10-08 21:04:12', '2026-10-09 02:39:39', NULL, '0', NULL, NULL, '0.00');
-INSERT INTO `orders` (`id`, `user_id`, `checkout_id`, `canteen_id`, `is_custom`, `custom_notes`, `total_price`, `admin_fee`, `delivery_fee`, `status`, `payment_status`, `courier_id`, `delivery_location`, `order_for`, `is_priority`, `proof_of_delivery`, `proof_of_payment`, `proof_of_purchase`, `created_at`, `updated_at`, `deleted_at`, `is_courier_paid_by_canteen`, `proof_courier_paid`, `voucher_id`, `voucher_discount`) VALUES
+REPLACE INTO `orders` (`id`, `user_id`, `checkout_id`, `canteen_id`, `is_custom`, `custom_notes`, `total_price`, `admin_fee`, `delivery_fee`, `status`, `payment_status`, `courier_id`, `delivery_location`, `order_for`, `is_priority`, `proof_of_delivery`, `proof_of_payment`, `proof_of_purchase`, `created_at`, `updated_at`, `deleted_at`, `is_courier_paid_by_canteen`, `proof_courier_paid`, `voucher_id`, `voucher_discount`) VALUES
 ('2333', '907', 'CHK-20261008-LDPGKJ', '13', '0', NULL, '35000.00', '2000.00', '3000.00', 'cancelled', 'unpaid', NULL, 'Asmah', 'santri', '0', NULL, NULL, NULL, '2026-10-08 18:54:02', '2026-10-08 18:54:27', NULL, '0', NULL, NULL, '0.00'),
 ('2334', '907', 'CHK-20261008-IFWD5Y', '13', '0', NULL, '35000.00', '2000.00', '3000.00', 'cancelled', 'unpaid', NULL, 'Asmah', 'santri', '0', NULL, NULL, NULL, '2026-10-08 18:55:48', '2026-10-08 18:57:28', NULL, '0', NULL, NULL, '0.00'),
 ('2335', '241', 'CHK-20261008-FGVEJG', '4', '0', NULL, '17000.00', '4000.00', '1000.00', 'completed', 'paid', '12', 'Asmah/G 5', 'santri', '0', '[\"kamis8Oktober2026/najwa_maulidda_azzahra_setyani/proff_delivery/nYnnyEOqaDLLOW5RwdHAfYtGVgaK7W5QUqTHJe4w.jpg\", \"kamis8Oktober2026/najwa_maulidda_azzahra_setyani/proff_delivery/m88VCbAxIdkiDTPoR9c0MM7Ue82LYhrISfczWXoy.jpg\"]', '[\"kamis8Oktober2026\\/najwa_maulidda_azzahra_setyani\\/proof\\/wSTQ6HBQmjbSynFBdSiOkda6WkfKAUcFXXvvVPQh.jpg\"]', NULL, '2026-10-08 19:08:16', '2026-10-11 08:41:31', NULL, '0', NULL, NULL, '0.00'),
@@ -4400,7 +4399,7 @@ INSERT INTO `orders` (`id`, `user_id`, `checkout_id`, `canteen_id`, `is_custom`,
 -- -----------------------------------------------------
 -- Table: order_items (2870 rows)
 -- -----------------------------------------------------
-INSERT INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, `subtotal`, `notes`, `created_at`, `updated_at`) VALUES
+REPLACE INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, `subtotal`, `notes`, `created_at`, `updated_at`) VALUES
 ('3', '3', '5', '1', '10000.00', '10000.00', NULL, '2026-08-09 17:46:25', '2026-08-09 17:46:25'),
 ('4', '4', '5', '1', '10000.00', '10000.00', NULL, '2026-08-09 22:43:55', '2026-08-09 22:43:55'),
 ('5', '5', '5', '1', '10000.00', '10000.00', NULL, '2026-08-10 17:52:19', '2026-08-10 17:52:19'),
@@ -4601,7 +4600,7 @@ INSERT INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, 
 ('211', '187', '12', '1', '10000.00', '10000.00', NULL, '2026-08-28 19:12:21', '2026-08-28 19:12:21'),
 ('212', '188', '11', '1', '13000.00', '13000.00', NULL, '2026-08-28 19:17:34', '2026-08-28 19:17:34'),
 ('213', '188', '12', '1', '10000.00', '10000.00', NULL, '2026-08-28 19:17:34', '2026-08-28 19:17:34');
-INSERT INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, `subtotal`, `notes`, `created_at`, `updated_at`) VALUES
+REPLACE INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, `subtotal`, `notes`, `created_at`, `updated_at`) VALUES
 ('214', '189', '11', '1', '13000.00', '13000.00', NULL, '2026-08-28 19:20:24', '2026-08-28 19:20:24'),
 ('215', '189', '12', '1', '10000.00', '10000.00', NULL, '2026-08-28 19:20:24', '2026-08-28 19:20:24'),
 ('216', '190', '11', '1', '13000.00', '13000.00', 'Level1', '2026-08-28 19:24:21', '2026-08-28 19:24:21'),
@@ -4802,7 +4801,7 @@ INSERT INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, 
 ('411', '333', '11', '1', '13000.00', '13000.00', NULL, '2026-08-30 22:59:30', '2026-08-30 22:59:30'),
 ('412', '333', '13', '1', '12000.00', '12000.00', NULL, '2026-08-30 22:59:30', '2026-08-30 22:59:30'),
 ('413', '333', '75', '1', '11000.00', '11000.00', NULL, '2026-08-30 22:59:30', '2026-08-30 22:59:30');
-INSERT INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, `subtotal`, `notes`, `created_at`, `updated_at`) VALUES
+REPLACE INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, `subtotal`, `notes`, `created_at`, `updated_at`) VALUES
 ('414', '334', '69', '1', '32000.00', '32000.00', NULL, '2026-08-30 23:08:51', '2026-08-30 23:08:51'),
 ('415', '335', '29', '2', '26000.00', '52000.00', NULL, '2026-08-30 23:08:51', '2026-08-30 23:08:51'),
 ('416', '336', '39', '1', '19000.00', '19000.00', NULL, '2026-08-30 23:08:51', '2026-08-30 23:08:51'),
@@ -5003,7 +5002,7 @@ INSERT INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, 
 ('611', '502', '65', '1', '27000.00', '27000.00', NULL, '2026-09-02 18:03:19', '2026-09-02 18:03:19'),
 ('612', '503', '39', '1', '19000.00', '19000.00', NULL, '2026-09-02 18:03:19', '2026-09-02 18:03:19'),
 ('613', '504', '10', '1', '13000.00', '13000.00', 'Tidak pedas', '2026-09-02 18:27:30', '2026-09-02 18:27:30');
-INSERT INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, `subtotal`, `notes`, `created_at`, `updated_at`) VALUES
+REPLACE INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, `subtotal`, `notes`, `created_at`, `updated_at`) VALUES
 ('614', '505', '11', '2', '13000.00', '26000.00', 'Level 1', '2026-09-02 18:32:03', '2026-09-02 18:32:03'),
 ('615', '505', '12', '1', '12000.00', '12000.00', NULL, '2026-09-02 18:32:03', '2026-09-02 18:32:03'),
 ('616', '505', '13', '1', '12000.00', '12000.00', NULL, '2026-09-02 18:32:03', '2026-09-02 18:32:03'),
@@ -5204,7 +5203,7 @@ INSERT INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, 
 ('811', '668', '61', '1', '27000.00', '27000.00', NULL, '2026-09-04 17:12:33', '2026-09-04 17:12:33'),
 ('812', '669', '11', '1', '13000.00', '13000.00', NULL, '2026-09-04 17:18:36', '2026-09-04 17:18:36'),
 ('813', '670', '50', '1', '17500.00', '17500.00', NULL, '2026-09-04 17:21:44', '2026-09-04 17:21:44');
-INSERT INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, `subtotal`, `notes`, `created_at`, `updated_at`) VALUES
+REPLACE INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, `subtotal`, `notes`, `created_at`, `updated_at`) VALUES
 ('814', '671', '73', '1', '23000.00', '23000.00', NULL, '2026-09-04 17:24:06', '2026-09-04 17:24:06'),
 ('815', '672', '28', '1', '12000.00', '12000.00', NULL, '2026-09-04 17:34:03', '2026-09-04 17:34:03'),
 ('816', '673', '33', '1', '10000.00', '10000.00', NULL, '2026-09-04 17:44:21', '2026-09-04 17:44:21'),
@@ -5405,7 +5404,7 @@ INSERT INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, 
 ('1011', '839', '14', '2', '12000.00', '24000.00', NULL, '2026-09-07 22:22:26', '2026-09-07 22:22:26'),
 ('1012', '840', '9', '1', '13000.00', '13000.00', 'Level', '2026-09-07 22:26:45', '2026-09-07 22:26:45'),
 ('1013', '841', '31', '1', '13000.00', '13000.00', NULL, '2026-09-07 22:26:45', '2026-09-07 22:26:45');
-INSERT INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, `subtotal`, `notes`, `created_at`, `updated_at`) VALUES
+REPLACE INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, `subtotal`, `notes`, `created_at`, `updated_at`) VALUES
 ('1014', '842', '9', '1', '13000.00', '13000.00', 'Level 1', '2026-09-07 22:28:14', '2026-09-07 22:28:14'),
 ('1015', '843', '31', '1', '13000.00', '13000.00', NULL, '2026-09-07 22:28:14', '2026-09-07 22:28:14'),
 ('1016', '844', '20', '1', '16000.00', '16000.00', NULL, '2026-09-07 23:06:35', '2026-09-07 23:06:35'),
@@ -5606,7 +5605,7 @@ INSERT INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, 
 ('1211', '1016', '20', '1', '16000.00', '16000.00', NULL, '2026-09-10 19:32:01', '2026-09-10 19:32:01'),
 ('1212', '1017', '11', '1', '13000.00', '13000.00', NULL, '2026-09-10 20:13:00', '2026-09-10 20:13:00'),
 ('1213', '1018', '20', '1', '16000.00', '16000.00', NULL, '2026-09-10 20:13:15', '2026-09-10 20:13:15');
-INSERT INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, `subtotal`, `notes`, `created_at`, `updated_at`) VALUES
+REPLACE INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, `subtotal`, `notes`, `created_at`, `updated_at`) VALUES
 ('1214', '1019', '20', '1', '16000.00', '16000.00', 'pedas sedang', '2026-09-10 20:15:30', '2026-09-10 20:15:30'),
 ('1215', '1020', '45', '1', '16000.00', '16000.00', NULL, '2026-09-10 20:15:30', '2026-09-10 20:15:30'),
 ('1216', '1021', '20', '2', '16000.00', '32000.00', NULL, '2026-09-10 20:16:02', '2026-09-10 20:16:02'),
@@ -5807,7 +5806,7 @@ INSERT INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, 
 ('1411', '1195', '20', '1', '16000.00', '16000.00', 'sumer', '2026-09-13 16:15:38', '2026-09-13 16:15:38'),
 ('1412', '1196', '30', '1', '26000.00', '26000.00', 'Paha atas', '2026-09-13 17:20:52', '2026-09-13 17:20:52'),
 ('1413', '1197', '64', '2', '27000.00', '54000.00', NULL, '2026-09-13 17:23:45', '2026-09-13 17:23:45');
-INSERT INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, `subtotal`, `notes`, `created_at`, `updated_at`) VALUES
+REPLACE INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, `subtotal`, `notes`, `created_at`, `updated_at`) VALUES
 ('1414', '1198', '19', '1', '13000.00', '13000.00', NULL, '2026-09-13 17:32:15', '2026-09-13 17:32:15'),
 ('1415', '1200', '59', '1', '37000.00', '37000.00', 'Kak buatkan es jeruk 2..nti tf lagi atau gmn ya', '2026-09-13 17:57:20', '2026-09-13 17:57:20'),
 ('1416', '1202', '23', '1', '23000.00', '23000.00', NULL, '2026-09-13 18:06:09', '2026-09-13 18:06:09'),
@@ -6008,7 +6007,7 @@ INSERT INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, 
 ('1614', '1373', '11', '6', '13000.00', '78000.00', 'pedas level 1', '2026-09-17 16:52:38', '2026-09-17 16:52:38'),
 ('1615', '1373', '12', '1', '12000.00', '12000.00', NULL, '2026-09-17 16:52:38', '2026-09-17 16:52:38'),
 ('1616', '1374', '20', '1', '17500.00', '17500.00', NULL, '2026-09-17 16:55:21', '2026-09-17 16:55:21');
-INSERT INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, `subtotal`, `notes`, `created_at`, `updated_at`) VALUES
+REPLACE INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, `subtotal`, `notes`, `created_at`, `updated_at`) VALUES
 ('1617', '1374', '95', '1', '7000.00', '7000.00', NULL, '2026-09-17 16:55:21', '2026-09-17 16:55:21'),
 ('1618', '1375', '89', '2', '17500.00', '35000.00', NULL, '2026-09-17 17:02:15', '2026-09-17 17:02:15'),
 ('1619', '1376', '64', '1', '30000.00', '30000.00', NULL, '2026-09-17 17:07:56', '2026-09-17 17:07:56'),
@@ -6209,7 +6208,7 @@ INSERT INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, 
 ('1814', '1533', '61', '1', '27000.00', '27000.00', NULL, '2026-09-20 18:26:49', '2026-09-20 18:26:49'),
 ('1815', '1534', '78', '1', '17500.00', '17500.00', NULL, '2026-09-20 18:27:45', '2026-09-20 18:27:45'),
 ('1816', '1535', '81', '1', '25000.00', '25000.00', NULL, '2026-09-20 19:02:43', '2026-09-20 19:02:43');
-INSERT INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, `subtotal`, `notes`, `created_at`, `updated_at`) VALUES
+REPLACE INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, `subtotal`, `notes`, `created_at`, `updated_at`) VALUES
 ('1817', '1536', '29', '1', '26000.00', '26000.00', 'atam paha atas ya kakk🙏🏻', '2026-09-20 19:21:57', '2026-09-20 19:21:57'),
 ('1818', '1536', '80', '1', '8000.00', '8000.00', NULL, '2026-09-20 19:21:57', '2026-09-20 19:21:57'),
 ('1819', '1537', '11', '1', '13000.00', '13000.00', NULL, '2026-09-20 20:10:53', '2026-09-20 20:10:53'),
@@ -6410,7 +6409,7 @@ INSERT INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, 
 ('2014', '1687', '45', '1', '14000.00', '14000.00', NULL, '2026-09-24 19:19:40', '2026-09-24 19:19:40'),
 ('2015', '1688', '16', '1', '14500.00', '14500.00', NULL, '2026-09-24 19:39:17', '2026-09-24 19:39:17'),
 ('2016', '1689', '8', '1', '27000.00', '27000.00', NULL, '2026-09-24 19:39:59', '2026-09-24 19:39:59');
-INSERT INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, `subtotal`, `notes`, `created_at`, `updated_at`) VALUES
+REPLACE INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, `subtotal`, `notes`, `created_at`, `updated_at`) VALUES
 ('2017', '1690', '24', '1', '14500.00', '14500.00', NULL, '2026-09-24 19:39:59', '2026-09-24 19:39:59'),
 ('2018', '1691', '11', '1', '13000.00', '13000.00', NULL, '2026-09-24 19:41:38', '2026-09-24 19:41:38'),
 ('2019', '1691', '75', '1', '11000.00', '11000.00', 'Mi level 3', '2026-09-24 19:41:38', '2026-09-24 19:41:38'),
@@ -6611,7 +6610,7 @@ INSERT INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, 
 ('2214', '1841', '75', '1', '11000.00', '11000.00', NULL, '2026-09-27 20:11:58', '2026-09-27 20:11:58'),
 ('2215', '1842', '61', '1', '27000.00', '27000.00', NULL, '2026-09-27 20:25:21', '2026-09-27 20:25:21'),
 ('2216', '1843', '87', '1', '16500.00', '16500.00', NULL, '2026-09-27 20:49:48', '2026-09-27 20:49:48');
-INSERT INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, `subtotal`, `notes`, `created_at`, `updated_at`) VALUES
+REPLACE INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, `subtotal`, `notes`, `created_at`, `updated_at`) VALUES
 ('2217', '1844', '61', '1', '27000.00', '27000.00', NULL, '2026-09-27 20:55:17', '2026-09-27 20:55:17'),
 ('2218', '1845', '49', '1', '14000.00', '14000.00', NULL, '2026-09-27 20:55:17', '2026-09-27 20:55:17'),
 ('2219', '1846', '59', '1', '37000.00', '37000.00', NULL, '2026-09-27 21:12:06', '2026-09-27 21:12:06'),
@@ -6812,7 +6811,7 @@ INSERT INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, 
 ('2565', '2119', '96', '1', '7000.00', '7000.00', NULL, '2026-10-02 23:13:39', '2026-10-02 23:13:39'),
 ('2566', '2120', '53', '1', '34000.00', '34000.00', NULL, '2026-10-03 16:45:58', '2026-10-03 16:45:58'),
 ('2567', '2120', '122', '1', '6000.00', '6000.00', NULL, '2026-10-03 16:45:58', '2026-10-03 16:45:58');
-INSERT INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, `subtotal`, `notes`, `created_at`, `updated_at`) VALUES
+REPLACE INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, `subtotal`, `notes`, `created_at`, `updated_at`) VALUES
 ('2568', '2121', '11', '1', '13000.00', '13000.00', 'LEVEL 2', '2026-10-03 17:04:42', '2026-10-03 17:04:42'),
 ('2569', '2121', '12', '1', '12000.00', '12000.00', NULL, '2026-10-03 17:04:42', '2026-10-03 17:04:42'),
 ('2570', '2122', '77', '1', '22000.00', '22000.00', NULL, '2026-10-03 17:05:25', '2026-10-03 17:05:25'),
@@ -7013,7 +7012,7 @@ INSERT INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, 
 ('2765', '2277', '121', '1', '21000.00', '21000.00', NULL, '2026-10-07 16:57:01', '2026-10-07 16:57:01'),
 ('2766', '2278', '8', '1', '27000.00', '27000.00', NULL, '2026-10-07 17:55:08', '2026-10-07 17:55:08'),
 ('2767', '2279', '60', '2', '32000.00', '64000.00', NULL, '2026-10-07 17:54:46', '2026-10-07 17:54:46');
-INSERT INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, `subtotal`, `notes`, `created_at`, `updated_at`) VALUES
+REPLACE INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, `subtotal`, `notes`, `created_at`, `updated_at`) VALUES
 ('2768', '2280', '50', '1', '11000.00', '11000.00', NULL, '2026-10-07 17:54:46', '2026-10-07 17:54:46'),
 ('2769', '2281', '11', '1', '13000.00', '13000.00', NULL, '2026-10-07 18:05:58', '2026-10-07 18:05:58'),
 ('2770', '2281', '12', '1', '12000.00', '12000.00', NULL, '2026-10-07 18:05:58', '2026-10-07 18:05:58'),
@@ -7214,7 +7213,7 @@ INSERT INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, 
 ('2965', '2431', '123', '1', '7000.00', '7000.00', NULL, '2026-10-09 21:22:45', '2026-10-09 21:22:45'),
 ('2966', '2432', '11', '2', '13000.00', '26000.00', 'Lvl:3 dan lvl=0', '2026-10-09 21:29:17', '2026-10-09 21:29:17'),
 ('2967', '2432', '12', '2', '12000.00', '24000.00', NULL, '2026-10-09 21:29:17', '2026-10-09 21:29:17');
-INSERT INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, `subtotal`, `notes`, `created_at`, `updated_at`) VALUES
+REPLACE INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, `subtotal`, `notes`, `created_at`, `updated_at`) VALUES
 ('2968', '2432', '74', '2', '6000.00', '12000.00', NULL, '2026-10-09 21:29:17', '2026-10-09 21:29:17'),
 ('2969', '2433', '56', '1', '29000.00', '29000.00', NULL, '2026-10-09 21:35:33', '2026-10-09 21:35:33'),
 ('2970', '2434', '20', '1', '18000.00', '18000.00', 'Level 1', '2026-10-09 22:17:26', '2026-10-09 22:17:26'),
@@ -7289,7 +7288,7 @@ INSERT INTO `order_items` (`id`, `order_id`, `product_id`, `quantity`, `price`, 
 -- -----------------------------------------------------
 -- Table: payment_logs (2168 rows)
 -- -----------------------------------------------------
-INSERT INTO `payment_logs` (`id`, `user_id`, `order_id`, `amount`, `type`, `description`, `created_at`, `updated_at`) VALUES
+REPLACE INTO `payment_logs` (`id`, `user_id`, `order_id`, `amount`, `type`, `description`, `created_at`, `updated_at`) VALUES
 ('1', '10', '1168', '1000.00', 'order_payment', 'Penerimaan laba bersih pesanan #1168', '2026-09-12 03:23:03', '2026-09-12 03:23:03'),
 ('2', '12', '1168', '1000.00', 'courier_fee', 'Penerimaan ongkir pesanan #1168', '2026-09-12 03:23:03', '2026-09-12 03:23:03'),
 ('3', '10', '1161', '1000.00', 'order_payment', 'Penerimaan laba bersih pesanan #1161', '2026-09-12 03:23:12', '2026-09-12 03:23:12'),
@@ -7490,7 +7489,7 @@ INSERT INTO `payment_logs` (`id`, `user_id`, `order_id`, `amount`, `type`, `desc
 ('198', '794', '1223', '1000.00', 'courier_fee', 'Penerimaan ongkir pesanan #1223', '2026-09-14 02:48:28', '2026-09-14 02:48:28'),
 ('199', '10', '1221', '2000.00', 'order_payment', 'Penerimaan laba bersih pesanan #1221', '2026-09-14 02:48:43', '2026-09-14 02:48:43'),
 ('200', '794', '1221', '3000.00', 'courier_fee', 'Penerimaan ongkir pesanan #1221', '2026-09-14 02:48:43', '2026-09-14 02:48:43');
-INSERT INTO `payment_logs` (`id`, `user_id`, `order_id`, `amount`, `type`, `description`, `created_at`, `updated_at`) VALUES
+REPLACE INTO `payment_logs` (`id`, `user_id`, `order_id`, `amount`, `type`, `description`, `created_at`, `updated_at`) VALUES
 ('201', '10', '1220', '2000.00', 'order_payment', 'Penerimaan laba bersih pesanan #1220', '2026-09-14 02:49:39', '2026-09-14 02:49:39'),
 ('202', '794', '1220', '3000.00', 'courier_fee', 'Penerimaan ongkir pesanan #1220', '2026-09-14 02:49:39', '2026-09-14 02:49:39'),
 ('203', '10', '1218', '0.00', 'order_payment', 'Penerimaan laba bersih pesanan #1218', '2026-09-14 02:49:49', '2026-09-14 02:49:49'),
@@ -7691,7 +7690,7 @@ INSERT INTO `payment_logs` (`id`, `user_id`, `order_id`, `amount`, `type`, `desc
 ('398', '794', '1323', '3000.00', 'courier_fee', 'Penerimaan ongkir pesanan #1323', '2026-09-17 02:33:47', '2026-09-17 02:33:47'),
 ('399', '10', '1321', '1000.00', 'order_payment', 'Penerimaan laba bersih pesanan #1321', '2026-09-17 02:33:55', '2026-09-17 02:33:55'),
 ('400', '794', '1321', '3000.00', 'courier_fee', 'Penerimaan ongkir pesanan #1321', '2026-09-17 02:33:55', '2026-09-17 02:33:55');
-INSERT INTO `payment_logs` (`id`, `user_id`, `order_id`, `amount`, `type`, `description`, `created_at`, `updated_at`) VALUES
+REPLACE INTO `payment_logs` (`id`, `user_id`, `order_id`, `amount`, `type`, `description`, `created_at`, `updated_at`) VALUES
 ('401', '10', '1330', '1500.00', 'order_payment', 'Penerimaan laba bersih pesanan #1330', '2026-09-17 02:34:10', '2026-09-17 02:34:10'),
 ('402', '794', '1330', '3000.00', 'courier_fee', 'Penerimaan ongkir pesanan #1330', '2026-09-17 02:34:10', '2026-09-17 02:34:10'),
 ('403', '10', '1325', '3000.00', 'order_payment', 'Penerimaan laba bersih pesanan #1325', '2026-09-17 02:34:23', '2026-09-17 02:34:23'),
@@ -7892,7 +7891,7 @@ INSERT INTO `payment_logs` (`id`, `user_id`, `order_id`, `amount`, `type`, `desc
 ('598', '12', '1485', '3000.00', 'courier_fee_reversal', 'Pembalikan ongkir kurir pesanan #1485 diubah status oleh Admin', '2026-09-19 01:25:48', '2026-09-19 01:25:48'),
 ('599', '10', '1484', '1800.00', 'order_cancel_reversal', 'Pembalikan laba kantin pesanan #1484 diubah status oleh Admin', '2026-09-19 01:26:05', '2026-09-19 01:26:05'),
 ('600', '12', '1484', '1000.00', 'courier_fee_reversal', 'Pembalikan ongkir kurir pesanan #1484 diubah status oleh Admin', '2026-09-19 01:26:05', '2026-09-19 01:26:05');
-INSERT INTO `payment_logs` (`id`, `user_id`, `order_id`, `amount`, `type`, `description`, `created_at`, `updated_at`) VALUES
+REPLACE INTO `payment_logs` (`id`, `user_id`, `order_id`, `amount`, `type`, `description`, `created_at`, `updated_at`) VALUES
 ('601', '10', '1479', '4000.00', 'order_cancel_reversal', 'Pembalikan laba kantin pesanan #1479 diubah status oleh Admin', '2026-09-19 01:26:17', '2026-09-19 01:26:17'),
 ('602', '12', '1479', '3000.00', 'courier_fee_reversal', 'Pembalikan ongkir kurir pesanan #1479 diubah status oleh Admin', '2026-09-19 01:26:17', '2026-09-19 01:26:17'),
 ('603', '10', '1478', '2000.00', 'order_cancel_reversal', 'Pembalikan laba kantin pesanan #1478 diubah status oleh Admin', '2026-09-19 01:26:24', '2026-09-19 01:26:24'),
@@ -8093,7 +8092,7 @@ INSERT INTO `payment_logs` (`id`, `user_id`, `order_id`, `amount`, `type`, `desc
 ('798', '12', '1580', '3000.00', 'courier_fee', 'Penerimaan ongkir pesanan #1580', '2026-09-22 03:50:35', '2026-09-22 03:50:35'),
 ('799', '10', '1576', '2000.00', 'order_payment', 'Penerimaan laba bersih pesanan #1576', '2026-09-22 03:50:51', '2026-09-22 03:50:51'),
 ('800', '12', '1576', '3000.00', 'courier_fee', 'Penerimaan ongkir pesanan #1576', '2026-09-22 03:50:51', '2026-09-22 03:50:51');
-INSERT INTO `payment_logs` (`id`, `user_id`, `order_id`, `amount`, `type`, `description`, `created_at`, `updated_at`) VALUES
+REPLACE INTO `payment_logs` (`id`, `user_id`, `order_id`, `amount`, `type`, `description`, `created_at`, `updated_at`) VALUES
 ('801', '10', '1574', '2500.00', 'order_payment', 'Penerimaan laba bersih pesanan #1574', '2026-09-22 03:51:09', '2026-09-22 03:51:09'),
 ('802', '12', '1574', '1000.00', 'courier_fee', 'Penerimaan ongkir pesanan #1574', '2026-09-22 03:51:09', '2026-09-22 03:51:09'),
 ('803', '10', '1572', '2000.00', 'order_payment', 'Penerimaan laba bersih pesanan #1572', '2026-09-22 03:51:26', '2026-09-22 03:51:26'),
@@ -8294,7 +8293,7 @@ INSERT INTO `payment_logs` (`id`, `user_id`, `order_id`, `amount`, `type`, `desc
 ('998', '794', '1677', '3000.00', 'courier_fee', 'Penerimaan ongkir pesanan #1677', '2026-09-25 02:40:12', '2026-09-25 02:40:12'),
 ('999', '10', '1676', '1000.00', 'order_payment', 'Penerimaan laba bersih pesanan #1676', '2026-09-25 02:40:18', '2026-09-25 02:40:18'),
 ('1000', '794', '1676', '3000.00', 'courier_fee', 'Penerimaan ongkir pesanan #1676', '2026-09-25 02:40:18', '2026-09-25 02:40:18');
-INSERT INTO `payment_logs` (`id`, `user_id`, `order_id`, `amount`, `type`, `description`, `created_at`, `updated_at`) VALUES
+REPLACE INTO `payment_logs` (`id`, `user_id`, `order_id`, `amount`, `type`, `description`, `created_at`, `updated_at`) VALUES
 ('1001', '10', '1674', '1000.00', 'order_payment', 'Penerimaan laba bersih pesanan #1674', '2026-09-25 02:40:24', '2026-09-25 02:40:24'),
 ('1002', '794', '1674', '3000.00', 'courier_fee', 'Penerimaan ongkir pesanan #1674', '2026-09-25 02:40:24', '2026-09-25 02:40:24'),
 ('1003', '10', '1672', '2000.00', 'order_payment', 'Penerimaan laba bersih pesanan #1672', '2026-09-25 02:40:29', '2026-09-25 02:40:29'),
@@ -8495,7 +8494,7 @@ INSERT INTO `payment_logs` (`id`, `user_id`, `order_id`, `amount`, `type`, `desc
 ('1198', '12', '1808', '3000.00', 'courier_fee', 'Penerimaan ongkir pesanan #1808', '2026-09-27 03:29:02', '2026-09-27 03:29:02'),
 ('1199', '10', '1806', '1500.00', 'order_payment', 'Penerimaan laba bersih pesanan #1806', '2026-09-27 03:29:21', '2026-09-27 03:29:21'),
 ('1200', '12', '1806', '3000.00', 'courier_fee', 'Penerimaan ongkir pesanan #1806', '2026-09-27 03:29:21', '2026-09-27 03:29:21');
-INSERT INTO `payment_logs` (`id`, `user_id`, `order_id`, `amount`, `type`, `description`, `created_at`, `updated_at`) VALUES
+REPLACE INTO `payment_logs` (`id`, `user_id`, `order_id`, `amount`, `type`, `description`, `created_at`, `updated_at`) VALUES
 ('1201', '10', '1805', '4000.00', 'order_payment', 'Penerimaan laba bersih pesanan #1805', '2026-09-27 03:29:39', '2026-09-27 03:29:39'),
 ('1202', '12', '1805', '3000.00', 'courier_fee', 'Penerimaan ongkir pesanan #1805', '2026-09-27 03:29:39', '2026-09-27 03:29:39'),
 ('1203', '10', '1804', '3000.00', 'order_payment', 'Penerimaan laba bersih pesanan #1804', '2026-09-27 03:29:53', '2026-09-27 03:29:53'),
@@ -8696,7 +8695,7 @@ INSERT INTO `payment_logs` (`id`, `user_id`, `order_id`, `amount`, `type`, `desc
 ('1398', '794', '2110', '3000.00', 'courier_fee', 'Penerimaan ongkir pesanan #2110', '2026-10-03 02:50:11', '2026-10-03 02:50:11'),
 ('1399', '10', '2108', '3000.00', 'order_payment', 'Penerimaan laba bersih pesanan #2108', '2026-10-03 02:50:18', '2026-10-03 02:50:18'),
 ('1400', '794', '2108', '1000.00', 'courier_fee', 'Penerimaan ongkir pesanan #2108', '2026-10-03 02:50:18', '2026-10-03 02:50:18');
-INSERT INTO `payment_logs` (`id`, `user_id`, `order_id`, `amount`, `type`, `description`, `created_at`, `updated_at`) VALUES
+REPLACE INTO `payment_logs` (`id`, `user_id`, `order_id`, `amount`, `type`, `description`, `created_at`, `updated_at`) VALUES
 ('1401', '10', '2103', '1000.00', 'order_payment', 'Penerimaan laba bersih pesanan #2103', '2026-10-03 02:50:29', '2026-10-03 02:50:29'),
 ('1402', '794', '2103', '3000.00', 'courier_fee', 'Penerimaan ongkir pesanan #2103', '2026-10-03 02:50:29', '2026-10-03 02:50:29'),
 ('1403', '10', '2102', '1000.00', 'order_payment', 'Penerimaan laba bersih pesanan #2102', '2026-10-03 02:50:36', '2026-10-03 02:50:36'),
@@ -8897,7 +8896,7 @@ INSERT INTO `payment_logs` (`id`, `user_id`, `order_id`, `amount`, `type`, `desc
 ('1598', '12', '2170', '3000.00', 'courier_fee', 'Penerimaan ongkir pesanan #2170', '2026-10-05 03:21:56', '2026-10-05 03:21:56'),
 ('1599', '10', '2167', '5500.00', 'order_payment', 'Penerimaan laba bersih pesanan #2167', '2026-10-05 03:22:12', '2026-10-05 03:22:12'),
 ('1600', '12', '2167', '1000.00', 'courier_fee', 'Penerimaan ongkir pesanan #2167', '2026-10-05 03:22:12', '2026-10-05 03:22:12');
-INSERT INTO `payment_logs` (`id`, `user_id`, `order_id`, `amount`, `type`, `description`, `created_at`, `updated_at`) VALUES
+REPLACE INTO `payment_logs` (`id`, `user_id`, `order_id`, `amount`, `type`, `description`, `created_at`, `updated_at`) VALUES
 ('1601', '10', '2164', '4000.00', 'order_payment', 'Penerimaan laba bersih pesanan #2164', '2026-10-05 03:22:21', '2026-10-05 03:22:21'),
 ('1602', '12', '2164', '1000.00', 'courier_fee', 'Penerimaan ongkir pesanan #2164', '2026-10-05 03:22:21', '2026-10-05 03:22:21'),
 ('1603', '10', '2165', '2000.00', 'order_payment', 'Penerimaan laba bersih pesanan #2165', '2026-10-05 03:22:32', '2026-10-05 03:22:32'),
@@ -9098,7 +9097,7 @@ INSERT INTO `payment_logs` (`id`, `user_id`, `order_id`, `amount`, `type`, `desc
 ('1798', '794', '2308', '1000.00', 'courier_fee', 'Penerimaan ongkir pesanan #2308', '2026-10-08 02:44:16', '2026-10-08 02:44:16'),
 ('1799', '10', '2307', '1000.00', 'order_payment', 'Penerimaan laba bersih pesanan #2307', '2026-10-08 02:44:24', '2026-10-08 02:44:24'),
 ('1800', '794', '2307', '3000.00', 'courier_fee', 'Penerimaan ongkir pesanan #2307', '2026-10-08 02:44:24', '2026-10-08 02:44:24');
-INSERT INTO `payment_logs` (`id`, `user_id`, `order_id`, `amount`, `type`, `description`, `created_at`, `updated_at`) VALUES
+REPLACE INTO `payment_logs` (`id`, `user_id`, `order_id`, `amount`, `type`, `description`, `created_at`, `updated_at`) VALUES
 ('1801', '10', '2301', '2000.00', 'order_payment', 'Penerimaan laba bersih pesanan #2301', '2026-10-08 02:44:44', '2026-10-08 02:44:44'),
 ('1802', '794', '2301', '3000.00', 'courier_fee', 'Penerimaan ongkir pesanan #2301', '2026-10-08 02:44:44', '2026-10-08 02:44:44'),
 ('1803', '10', '2300', '3000.00', 'order_payment', 'Penerimaan laba bersih pesanan #2300', '2026-10-08 02:45:20', '2026-10-08 02:45:20'),
@@ -9299,7 +9298,7 @@ INSERT INTO `payment_logs` (`id`, `user_id`, `order_id`, `amount`, `type`, `desc
 ('1998', '794', '2414', '3000.00', 'courier_fee', 'Penerimaan ongkir pesanan #2414', '2026-10-10 02:45:20', '2026-10-10 02:45:20'),
 ('1999', '10', '2413', '1000.00', 'order_payment', 'Penerimaan laba bersih pesanan #2413', '2026-10-10 02:45:22', '2026-10-10 02:45:22'),
 ('2000', '794', '2413', '3000.00', 'courier_fee', 'Penerimaan ongkir pesanan #2413', '2026-10-10 02:45:22', '2026-10-10 02:45:22');
-INSERT INTO `payment_logs` (`id`, `user_id`, `order_id`, `amount`, `type`, `description`, `created_at`, `updated_at`) VALUES
+REPLACE INTO `payment_logs` (`id`, `user_id`, `order_id`, `amount`, `type`, `description`, `created_at`, `updated_at`) VALUES
 ('2001', '10', '2412', '3000.00', 'order_payment', 'Penerimaan laba bersih pesanan #2412', '2026-10-10 02:45:24', '2026-10-10 02:45:24'),
 ('2002', '794', '2412', '3000.00', 'courier_fee', 'Penerimaan ongkir pesanan #2412', '2026-10-10 02:45:24', '2026-10-10 02:45:24'),
 ('2003', '10', '2390', '2000.00', 'order_payment', 'Penerimaan laba bersih pesanan #2390', '2026-10-10 02:45:26', '2026-10-10 02:45:26'),
@@ -9472,7 +9471,7 @@ INSERT INTO `payment_logs` (`id`, `user_id`, `order_id`, `amount`, `type`, `desc
 -- -----------------------------------------------------
 -- Table: vouchers (6 rows)
 -- -----------------------------------------------------
-INSERT INTO `vouchers` (`id`, `code`, `title`, `description`, `discount_type`, `discount_amount`, `min_purchase`, `canteen_id`, `created_by_user_id`, `target_type`, `target_user_ids`, `quota`, `claimed_count`, `valid_until`, `is_active`, `created_at`, `updated_at`) VALUES
+REPLACE INTO `vouchers` (`id`, `code`, `title`, `description`, `discount_type`, `discount_amount`, `min_purchase`, `canteen_id`, `created_by_user_id`, `target_type`, `target_user_ids`, `quota`, `claimed_count`, `valid_until`, `is_active`, `created_at`, `updated_at`) VALUES
 ('41', 'ONGKIRHEMAT', 'Gratis Ongkir Kamar Santri', 'Potongan ongkos kirim Rp 3.000 khusus pengantaran kamar santri Al-Mannan (Berlaku untuk semua wali & santri).', 'delivery_fee', '3000.00', '10000.00', NULL, '2', 'all', NULL, '200', '14', '2026-10-16 08:22:47', '1', '2026-10-02 08:22:47', '2026-10-02 08:22:47'),
 ('42', 'SANTRIBERKAH', 'Diskon Belanja Rp 5.000', 'Potongan harga belanja Rp 5.000 untuk minimal transaksi Rp 15.000 (Berlaku untuk semua wali & santri).', 'product_discount', '5000.00', '15000.00', NULL, '2', 'all', NULL, '150', '18', '2026-10-16 08:22:47', '1', '2026-10-02 08:22:47', '2026-10-02 08:22:47'),
 ('43', 'BEBASADMIN', 'Bebas Biaya Layanan & Admin', 'Subsidi biaya admin Rp 2.000 gratis untuk semua transaksi santri hari ini (Berlaku untuk semua wali & santri).', 'admin_fee', '2000.00', '15000.00', NULL, '2', 'all', NULL, '300', '25', '2026-10-16 08:22:47', '1', '2026-10-02 08:22:47', '2026-10-02 08:22:47'),
@@ -9483,7 +9482,7 @@ INSERT INTO `vouchers` (`id`, `code`, `title`, `description`, `discount_type`, `
 -- -----------------------------------------------------
 -- Table: user_vouchers (8 rows)
 -- -----------------------------------------------------
-INSERT INTO `user_vouchers` (`id`, `user_id`, `voucher_id`, `claimed_at`, `is_used`, `used_at`, `order_id`, `created_at`, `updated_at`) VALUES
+REPLACE INTO `user_vouchers` (`id`, `user_id`, `voucher_id`, `claimed_at`, `is_used`, `used_at`, `order_id`, `created_at`, `updated_at`) VALUES
 ('48', '882', '41', '2026-10-02 07:22:47', '0', NULL, NULL, '2026-10-02 08:22:47', '2026-10-02 08:22:47'),
 ('49', '882', '44', '2026-10-02 07:52:47', '0', NULL, NULL, '2026-10-02 08:22:47', '2026-10-02 08:22:47'),
 ('50', '15', '41', '2026-10-02 08:02:47', '0', NULL, NULL, '2026-10-02 08:22:47', '2026-10-02 08:22:47'),

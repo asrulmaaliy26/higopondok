@@ -74,14 +74,14 @@ foreach ($tables as $table) {
         $rowsBatch[] = "(" . implode(', ', $values) . ")";
 
         if (count($rowsBatch) >= $batchSize) {
-            fwrite($fp, "INSERT INTO `{$table}` ({$colList}) VALUES\n");
+            fwrite($fp, "REPLACE INTO `{$table}` ({$colList}) VALUES\n");
             fwrite($fp, implode(",\n", $rowsBatch) . ";\n");
             $rowsBatch = [];
         }
     }
 
     if (!empty($rowsBatch)) {
-        fwrite($fp, "INSERT INTO `{$table}` ({$colList}) VALUES\n");
+        fwrite($fp, "REPLACE INTO `{$table}` ({$colList}) VALUES\n");
         fwrite($fp, implode(",\n", $rowsBatch) . ";\n");
     }
 }
