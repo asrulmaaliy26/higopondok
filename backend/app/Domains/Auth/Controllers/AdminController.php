@@ -13,6 +13,16 @@ use App\Domains\Canteen\Resources\CanteenResource;
 use App\Domains\Canteen\Requests\BulkUpdateHoursRequest;
 use App\Domains\Canteen\Requests\UpdateCanteenHoursRequest;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use App\Domains\Canteen\Product;
+use App\Domains\Canteen\OrderItem;
+use App\Domains\Canteen\CanteenBanner;
+use App\Domains\Canteen\Voucher;
+use App\Domains\Canteen\UserVoucher;
+use App\Domains\Canteen\CanteenWithdrawal;
+use App\Domains\Canteen\CanteenBalanceLedger;
+use App\Domains\Admin\PaymentLog;
+use App\Domains\Admin\ActivityLog;
 
 class AdminController extends Controller
 {
@@ -414,4 +424,104 @@ class AdminController extends Controller
             'user' => $targetUser->load('roles'),
         ]);
     }
+
+    /**
+     * Super Admin: Hapus toko secara permanen beserta seluruh produk,
+     * pesanan, order items, log pembayaran, saldo ledgers, voucher, banner, dan file fisiknya.
+     */
+    public function destroyCanteen(Request $request, $id)
+    {
+        $user = $request->user();
+        if (!$user || !$user->hasRole('super_admin')) {
+            return response()->json([
+                'message' => 'Hanya Super Administrator yang berhak menghapus toko secara permanen.'
+            ], 403);
+        }
+
+        $canteen = Canteen::withTrashed()->findOrFail($id);
+        $canteenName = $canteen->name;
+
+        DB::transaction(function () use ($canteen, $request) {
+            // 1. Ambil seluruh pesanan milik toko (termasuk yang soft deleted)
+            $orders = Order::withTrashed()->where('canteen_id', $canteen->id)->get();
+            $orderIds = $orders->pluck('id')->toArray();
+
+            // 2. Hapus berkas bukti fisik pesanan
+            foreach ($orders as $order) {
+                foreach (['proof_of_delivery', 'proof_of_purchase', 'proof_of_payment', 'proof_courier_paid'] as $fileField) {
+                    if (!empty($order->$fileField)) {
+                        Storage::disk('public')->delete($order->$fileField);
+                    }
+                }
+            }
+
+            // 3. Bersihkan transaksi pembayaran, buku kas pesanan, dan order items
+            if (!empty($orderIds)) {
+                PaymentLog::whereIn('order_id', $orderIds)->delete();
+                CanteenBalanceLedger::whereIn('order_id', $orderIds)->delete();
+                OrderItem::whereIn('order_id', $orderIds)->forceDelete();
+            }
+
+            // 4. Hapus pesanan secara permanen (force delete) agar profit/rekap bersih
+            Order::withTrashed()->where('canteen_id', $canteen->id)->forceDelete();
+
+            // 5. Bersihkan buku kas kantin & penarikan saldo
+            CanteenBalanceLedger::where('canteen_id', $canteen->id)->delete();
+            CanteenWithdrawal::where('canteen_id', $canteen->id)->delete();
+
+            // 6. Hapus seluruh produk toko berserta gambar fisiknya
+            $products = Product::withTrashed()->where('canteen_id', $canteen->id)->get();
+            foreach ($products as $product) {
+                if (!empty($product->image)) {
+                    Storage::disk('public')->delete($product->image);
+                }
+                $product->forceDelete();
+            }
+
+            // 7. Bersihkan banner promosi toko berserta gambar fisiknya
+            $banners = CanteenBanner::where('canteen_id', $canteen->id)->get();
+            foreach ($banners as $banner) {
+                if (!empty($banner->image)) {
+                    Storage::disk('public')->delete($banner->image);
+                }
+                $banner->delete();
+            }
+
+            // 8. Bersihkan voucher toko & user vouchers
+            $vouchers = Voucher::where('canteen_id', $canteen->id)->get();
+            $voucherIds = $vouchers->pluck('id')->toArray();
+            if (!empty($voucherIds)) {
+                UserVoucher::whereIn('voucher_id', $voucherIds)->delete();
+            }
+            Voucher::where('canteen_id', $canteen->id)->delete();
+
+            // 9. Putus hubungan kurir (pivot canteen_couriers)
+            $canteen->couriers()->detach();
+
+            // 10. Hapus logo / gambar fisik toko jika ada
+            if (!empty($canteen->image)) {
+                Storage::disk('public')->delete($canteen->image);
+            }
+
+            // 11. Hapus cache status operasional / force close
+            Cache::forget('canteen_force_closed_' . $canteen->id);
+
+            // 12. Catat log aktivitas Super Admin
+            ActivityLog::create([
+                'user_id' => $request->user()->id,
+                'action' => 'DELETE_CANTEEN',
+                'description' => "Super Admin {$request->user()->name} menghapus permanen toko '{$canteen->name}' (ID: {$canteen->id}) beserta seluruh produk, pesanan, dan rekap profit.",
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent(),
+            ]);
+
+            // 13. Hapus entitas toko secara permanen
+            $canteen->forceDelete();
+        });
+
+        return response()->json([
+            'message' => "Toko '{$canteenName}' beserta seluruh produk, pesanan, dan rekap profit berhasil dihapus permanen.",
+        ]);
+    }
 }
+

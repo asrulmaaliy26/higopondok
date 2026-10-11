@@ -35,7 +35,41 @@ class ProductController extends Controller
     public function index(Request $request)
     {
         $canteen = $this->getActiveCanteen($request);
-        $products = $canteen->products()->latest()->paginate(10);
+        $query = $canteen->products();
+
+        // 1. Filter Pencarian Produk
+        if ($request->filled('search')) {
+            $search = trim($request->input('search'));
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('category', 'like', "%{$search}%")
+                  ->orWhere('description', 'like', "%{$search}%");
+            });
+        }
+
+        // 2. Filter Tab: Paling Laris vs Semua Menu
+        $tab = $request->input('tab');
+        $sort = $request->input('sort');
+        if ($tab === 'popular' || $tab === 'paling_laris' || $sort === 'popular') {
+            $query->orderBy('sold_count', 'desc')->latest();
+        } else {
+            $query->latest();
+        }
+
+        // 3. Opsi Open All (Tanpa Paginasi)
+        $isAll = $request->boolean('all') || $request->input('per_page') === 'all';
+        if ($isAll) {
+            $products = $query->get();
+            return ProductResource::collection($products);
+        }
+
+        // 4. Paginasi Standar
+        $perPage = (int) $request->input('per_page', 10);
+        if ($perPage <= 0) {
+            $perPage = 10;
+        }
+
+        $products = $query->paginate($perPage);
         return ProductResource::collection($products);
     }
 

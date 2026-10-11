@@ -755,14 +755,30 @@ export const ProductFormModal = ({
 
                         {/* Daftar Pilihan dalam Grup */}
                         <div className="space-y-1.5 pt-1">
-                          <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">
-                            Daftar Pilihan:
-                          </span>
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">
+                              Daftar Pilihan:
+                            </span>
+                            {group.type === 'radio' && (
+                              <span className="text-[9.5px] font-semibold text-emerald-600 dark:text-emerald-400">
+                                ★ Opsi paling atas = Pilihan Default
+                              </span>
+                            )}
+                          </div>
                           {(group.items || []).map((it, itIdx) => (
                             <div key={it.id} className="flex items-center gap-1.5">
+                              {group.type === 'radio' && itIdx === 0 && (
+                                <span className="px-1.5 py-1 text-[8.5px] font-black bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 rounded-none shrink-0" title="Pilihan urutan teratas ini otomatis terpilih sebagai default">
+                                  DEFAULT
+                                </span>
+                              )}
                               <input
                                 type="text"
-                                placeholder={`Opsi ${itIdx + 1} (Cth: Sambal Matah / Paha Atas)`}
+                                placeholder={
+                                  group.type === 'radio' && itIdx === 0 
+                                    ? "Opsi 1 (Default Terpilih, Cth: Normal / Paha Atas)" 
+                                    : `Opsi ${itIdx + 1} (Cth: Sambal Matah / Strong)`
+                                }
                                 value={it.name}
                                 onChange={(e) => updateCustomGroupItem(group.id, it.id, 'name', e.target.value)}
                                 className="flex-1 px-2 py-1 text-xs rounded-none border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"

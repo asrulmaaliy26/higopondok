@@ -267,8 +267,10 @@ export const ProductOptionModal = ({
   const customExtra = useMemo(() => {
     let sum = 0;
     customGroups.forEach(g => {
-      const sel = selectedCustom[g.id];
-      if (g.type === 'radio' && sel) {
+      const isRadio = g.type === 'radio';
+      const defaultItemId = isRadio && g.items && g.items.length > 0 ? g.items[0].id : null;
+      const sel = selectedCustom[g.id] ?? defaultItemId;
+      if (isRadio && sel) {
         const it = g.items.find(i => i.id === sel);
         if (it && it.price) sum += it.price;
       } else if (g.type === 'checkbox' && Array.isArray(sel)) {
@@ -338,8 +340,10 @@ export const ProductOptionModal = ({
     }
 
     customGroups.forEach(g => {
-      const sel = selectedCustom[g.id];
-      if (g.type === 'radio' && sel) {
+      const isRadio = g.type === 'radio';
+      const defaultItemId = isRadio && g.items && g.items.length > 0 ? g.items[0].id : null;
+      const sel = selectedCustom[g.id] ?? defaultItemId;
+      if (isRadio && sel) {
         const it = g.items.find(i => i.id === sel);
         if (it) {
           labels.push(it.name + (it.price > 0 ? ` (+${formatRupiah(it.price)})` : ''));
@@ -553,6 +557,8 @@ export const ProductOptionModal = ({
           {/* 5. Custom Groups (Pilihan Saus, Potongan Daging, Topping, dll.) */}
           {customGroups.map((group) => {
             const isRadio = group.type === 'radio';
+            const defaultItemId = isRadio && group.items && group.items.length > 0 ? group.items[0].id : null;
+            const currentVal = selectedCustom[group.id] ?? defaultItemId;
             const selectedVal = selectedCustom[group.id];
 
             return (
@@ -563,13 +569,13 @@ export const ProductOptionModal = ({
                     {group.name}
                   </span>
                   <span className="text-[10px] text-gray-500 font-semibold uppercase">
-                    {isRadio ? 'Wajib Pilih 1' : 'Bisa Pilih Banyak'}
+                    {isRadio ? 'Wajib Pilih 1 (Opsi Teratas Default)' : 'Bisa Pilih Banyak'}
                   </span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1">
-                  {(group.items || []).map((item) => {
-                    const isChecked = isRadio ? selectedVal === item.id : Array.isArray(selectedVal) && selectedVal.includes(item.id);
+                  {(group.items || []).map((item, itemIdx) => {
+                    const isChecked = isRadio ? currentVal === item.id : Array.isArray(selectedVal) && selectedVal.includes(item.id);
                     const itemPrice = parseFloat(item.price || 0);
 
                     return (
@@ -583,7 +589,18 @@ export const ProductOptionModal = ({
                             : 'bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 border-gray-300 dark:border-gray-700 hover:bg-gray-100'
                         }`}
                       >
-                        <span className="truncate pr-1">{item.name}</span>
+                        <div className="flex items-center gap-1 truncate pr-1">
+                          <span className="truncate">{item.name}</span>
+                          {isRadio && itemIdx === 0 && (
+                            <span className={`text-[9px] font-bold px-1 py-0.2 rounded-none border shrink-0 ${
+                              isChecked
+                                ? 'bg-green-700 text-green-100 border-green-500'
+                                : 'bg-gray-100 dark:bg-gray-800 text-gray-500 border-gray-300 dark:border-gray-600'
+                            }`}>
+                              Default
+                            </span>
+                          )}
+                        </div>
                         {itemPrice > 0 && (
                           <span className={`text-[10.5px] font-mono shrink-0 ${isChecked ? 'text-green-100' : 'text-green-600 dark:text-green-400'}`}>
                             +{formatRupiah(itemPrice)}

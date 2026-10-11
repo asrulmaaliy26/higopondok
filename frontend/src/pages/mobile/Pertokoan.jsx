@@ -32,6 +32,8 @@ import {
 import toast from 'react-hot-toast';
 import AppImage from '../../components/common/AppImage';
 import { PRICING_CONFIG } from '../../config/pricing';
+import { useAuthStore } from '../../store/authStore';
+import { ROLES } from '../../config/roles';
 
 /**
  * =====================================================
@@ -59,9 +61,18 @@ const rp = (n) => `Rp ${n.toLocaleString('id-ID')}`;
 
 export default function Pertokoan() {
   const queryClient = useQueryClient();
-  
+
+  // Role detection: Super Admin
+  const currentUser = useAuthStore((state) => state.user);
+  const originalAdmin = useAuthStore((state) => state.originalAdmin);
+  const isSuperAdmin = currentUser?.role === ROLES.SUPER_ADMIN || originalAdmin?.role === ROLES.SUPER_ADMIN;
+
   // Selected detail canteen modal
   const [selectedCanteen, setSelectedCanteen] = useState(null);
+
+  // Super Admin delete canteen confirmation modal state
+  const [canteenToDelete, setCanteenToDelete] = useState(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
   
   // Quick Hours Edit modal for a single canteen
   const [quickHoursCanteen, setQuickHoursCanteen] = useState(null);
@@ -337,6 +348,25 @@ export default function Pertokoan() {
     },
     onError: (err) => {
       toast.error(err.response?.data?.message || 'Gagal menghapus banner');
+    }
+  });
+
+  const deleteCanteenMutation = useMutation({
+    mutationFn: async (id) => {
+      const res = await axios.delete(`/admin/canteens/${id}`);
+      return res.data;
+    },
+    onSuccess: (data) => {
+      toast.success(data.message || 'Toko beserta seluruh produk, pesanan, dan rekap profit berhasil dihapus.');
+      invalidateAllCanteenQueries();
+      setCanteenToDelete(null);
+      setDeleteConfirmText('');
+      if (selectedCanteen && canteenToDelete && selectedCanteen.id === canteenToDelete.id) {
+        setSelectedCanteen(null);
+      }
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.message || 'Gagal menghapus toko.');
     }
   });
 
@@ -882,6 +912,23 @@ export default function Pertokoan() {
                         >
                           Detail
                         </button>
+
+                        {/* Super Admin Delete Store */}
+                        {isSuperAdmin && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setCanteenToDelete(canteen);
+                              setDeleteConfirmText('');
+                            }}
+                            title="Hapus toko ini permanen beserta seluruh produk, transaksi, & profitnya"
+                            className="px-1.5 py-0.5 bg-red-50 hover:bg-red-600 text-red-600 hover:text-white dark:bg-red-950/40 dark:text-red-400 dark:hover:text-white border border-red-200 dark:border-red-800 rounded-none text-[10px] font-bold flex items-center gap-0.5 transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-2.5 h-2.5" />
+                            <span>Hapus</span>
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1577,6 +1624,146 @@ export default function Pertokoan() {
               </form>
             </div>
 
+            {/* ZONA BAHAYA: HAPUS TOKO PERMANEN (KHUSUS SUPER ADMIN) */}
+            {isSuperAdmin && (
+              <div className="bg-red-50/60 dark:bg-red-950/30 p-2 sm:p-2.5 rounded-none border border-red-200 dark:border-red-900/60 shadow-xs space-y-2">
+                <div className="flex items-center justify-between gap-1">
+                  <h3 className="font-bold text-[10.5px] uppercase tracking-wider text-red-700 dark:text-red-400 flex items-center gap-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5 text-red-600" />
+                    Zona Bahaya (Super Admin)
+                  </h3>
+                  <span className="text-[8.5px] font-black text-red-600 uppercase px-1.5 py-0.2 bg-red-100 dark:bg-red-900/50 rounded-none border border-red-300 dark:border-red-800">
+                    Aksi Permanen
+                  </span>
+                </div>
+                <p className="text-[10px] text-red-700 dark:text-red-300 leading-relaxed">
+                  Menghapus toko ini akan melenyapkan toko dari sistem secara permanen beserta seluruh produk, berkas gambar, transaksi pesanan, buku kas saldo, dan seluruh catatan rekap profit.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCanteenToDelete(selectedCanteen);
+                    setDeleteConfirmText('');
+                  }}
+                  className="w-full bg-red-600 hover:bg-red-700 active:scale-98 text-white py-1.5 px-2.5 rounded-none font-bold text-xs transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <Trash2 size={13} />
+                  <span>Hapus Toko & Bersihkan Seluruh Profit Permanen</span>
+                </button>
+              </div>
+            )}
+
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* --- MODAL 4: KONFIRMASI HAPUS TOKO PERMANEN (SUPER ADMIN ONLY) --- */}
+      {canteenToDelete && createPortal(
+        <div className="fixed inset-0 z-[120] bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-gray-900 rounded-none w-full max-w-md p-3.5 sm:p-4 shadow-2xl border-2 border-red-500 space-y-3 my-auto animate-in zoom-in-95 duration-150">
+            {/* Header Modal */}
+            <div className="flex items-center justify-between pb-2 border-b border-gray-100 dark:border-gray-800">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-none bg-red-100 dark:bg-red-950/60 text-red-600 flex items-center justify-center border border-red-300 dark:border-red-800 shrink-0">
+                  <AlertTriangle className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-black text-xs sm:text-sm text-red-600 dark:text-red-400 leading-tight">
+                    Hapus Toko Secara Permanen
+                  </h3>
+                  <p className="text-[10px] text-gray-500 dark:text-gray-400 leading-none mt-0.5">
+                    Wewenang Khusus Super Administrator
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setCanteenToDelete(null);
+                  setDeleteConfirmText('');
+                }}
+                disabled={deleteCanteenMutation.isPending}
+                className="w-7 h-7 rounded-none bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-500 flex items-center justify-center transition-colors border border-gray-200 dark:border-gray-700 cursor-pointer disabled:opacity-50"
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            {/* Warning Message */}
+            <div className="space-y-2 text-xs">
+              <div className="p-2 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 rounded-none text-red-800 dark:text-red-200 text-[11px] leading-relaxed">
+                <span className="font-black uppercase tracking-wider block mb-1">
+                  ⚠️ Peringatan Kritis:
+                </span>
+                Apakah Anda yakin ingin menghapus toko <strong>"{canteenToDelete.name}"</strong>? Tindakan ini <strong className="underline">TIDAK DAPAT DIBATALKAN</strong>.
+              </div>
+
+              <div className="bg-gray-50 dark:bg-gray-800/60 p-2 rounded-none border border-gray-200 dark:border-gray-700 text-[10.5px] space-y-1 text-gray-700 dark:text-gray-300">
+                <p className="font-bold text-gray-900 dark:text-gray-100">Seluruh data yang bersangkutan akan dihapus tuntas:</p>
+                <ul className="space-y-0.5 pl-1">
+                  <li className="flex items-center gap-1.5 text-red-600 dark:text-red-400">
+                    <span>✕</span> Data profil toko & file logo fisik
+                  </li>
+                  <li className="flex items-center gap-1.5 text-red-600 dark:text-red-400">
+                    <span>✕</span> Seluruh produk toko & file foto produk
+                  </li>
+                  <li className="flex items-center gap-1.5 text-red-600 dark:text-red-400">
+                    <span>✕</span> Seluruh riwayat pesanan (Orders & Order Items)
+                  </li>
+                  <li className="flex items-center gap-1.5 text-red-600 dark:text-red-400">
+                    <span>✕</span> Seluruh catatan profit, buku kas saldo, & penarikan dana
+                  </li>
+                  <li className="flex items-center gap-1.5 text-red-600 dark:text-red-400">
+                    <span>✕</span> Riwayat transaksi pembayaran (Payment Logs) & bukti bayar
+                  </li>
+                  <li className="flex items-center gap-1.5 text-red-600 dark:text-red-400">
+                    <span>✕</span> Banner promosi, kupon voucher toko, & penugasan kurir
+                  </li>
+                </ul>
+              </div>
+
+              {/* Confirmation Input */}
+              <div className="space-y-1 pt-1">
+                <label className="block text-[10px] font-bold text-gray-700 dark:text-gray-300">
+                  Ketik nama toko <strong className="text-red-600 font-mono select-all">"{canteenToDelete.name}"</strong> untuk konfirmasi:
+                </label>
+                <input
+                  type="text"
+                  value={deleteConfirmText}
+                  onChange={(e) => setDeleteConfirmText(e.target.value)}
+                  placeholder={`Ketik: ${canteenToDelete.name}`}
+                  className="w-full rounded-none border border-red-300 dark:border-red-700 bg-white dark:bg-gray-800 p-1.5 text-xs font-bold text-gray-900 dark:text-white focus:ring-1 focus:ring-red-500 outline-none"
+                  disabled={deleteCanteenMutation.isPending}
+                />
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+              <button
+                type="button"
+                onClick={() => {
+                  setCanteenToDelete(null);
+                  setDeleteConfirmText('');
+                }}
+                disabled={deleteCanteenMutation.isPending}
+                className="flex-1 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-bold text-xs rounded-none border border-gray-200 dark:border-gray-700 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  deleteCanteenMutation.mutate(canteenToDelete.id);
+                }}
+                disabled={deleteCanteenMutation.isPending || deleteConfirmText.trim().toLowerCase() !== canteenToDelete.name.trim().toLowerCase()}
+                className="flex-1 py-1.5 bg-red-600 hover:bg-red-700 active:scale-98 text-white font-bold text-xs rounded-none shadow-xs flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+              >
+                <Trash2 size={13} />
+                <span>{deleteCanteenMutation.isPending ? 'Menghapus Bersih...' : 'Hapus Permanen'}</span>
+              </button>
+            </div>
           </div>
         </div>,
         document.body

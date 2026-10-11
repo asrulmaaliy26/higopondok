@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Store, Save, Plus, Edit2, Trash2, X, ChevronLeft, ChevronRight, Star, Clock, CheckCircle2, ChevronDown, Search, User } from 'lucide-react';
+import { Store, Save, Plus, Edit2, Trash2, X, ChevronLeft, ChevronRight, Star, Clock, CheckCircle2, ChevronDown, Search, User, Flame, Layers } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import toast from 'react-hot-toast';
@@ -75,7 +75,23 @@ export default function TokoSaya() {
   const [editingProduct, setEditingProduct] = useState(null);
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeCategory, setActiveCategory] = useState('Semua');
+  const [activeTab, setActiveTab] = useState('all'); // 'all' (Semua Menu) | 'popular' (Paling Laris)
+  const [showAllProducts, setShowAllProducts] = useState(false); // Toggle Open All Produk
+
+  const handleTabChange = (tabKey) => {
+    setActiveTab(tabKey);
+    setPage(1);
+  };
+
+  const handleSearchChange = (val) => {
+    setSearchTerm(val);
+    setPage(1);
+  };
+
+  const handleToggleShowAll = () => {
+    setShowAllProducts(prev => !prev);
+    setPage(1);
+  };
 
   // Queries
   const { data: canteen, isLoading: isLoadingCanteen } = useQuery({
@@ -97,10 +113,24 @@ export default function TokoSaya() {
   });
 
   const { data: productsRes, isLoading: isLoadingProducts } = useQuery({
-    queryKey: ['products', page, activeCanteenId],
+    queryKey: ['products', page, activeCanteenId, activeTab, searchTerm, showAllProducts],
     queryFn: async () => {
       try {
-        const res = await api.get(`/my-products?page=${page}&canteen_id=${activeCanteenId}`);
+        const params = new URLSearchParams();
+        params.append('canteen_id', activeCanteenId);
+        if (showAllProducts) {
+          params.append('all', '1');
+        } else {
+          params.append('page', page);
+          params.append('per_page', '10');
+        }
+        if (activeTab === 'popular') {
+          params.append('tab', 'popular');
+        }
+        if (searchTerm.trim()) {
+          params.append('search', searchTerm.trim());
+        }
+        const res = await api.get(`/my-products?${params.toString()}`);
         return res.data;
       } catch (error) {
         if (error.response?.status === 404) {
@@ -116,7 +146,7 @@ export default function TokoSaya() {
   });
 
   const products = productsRes?.data || [];
-  const pagination = productsRes ? (productsRes.meta ? {
+  const pagination = (!showAllProducts && productsRes) ? (productsRes.meta ? {
     current_page: productsRes.meta.current_page,
     last_page: productsRes.meta.last_page,
     total: productsRes.meta.total,
@@ -603,22 +633,82 @@ export default function TokoSaya() {
         </div>
       </div>
 
-      {/* TABS */}
-      <div className="mt-4 bg-white dark:bg-gray-900 sticky top-0 z-20 border-b border-gray-200 dark:border-gray-700">
-        <div className="flex overflow-x-auto hide-scrollbar px-2">
-          {['Semua Menu', 'Paling Laris'].map(tab => (
-            <button 
-              key={tab}
-              onClick={() => {}}
-              className={`px-4 py-3 whitespace-nowrap text-sm font-semibold border-b-2 transition-colors ${
-                tab === 'Semua Menu'
-                  ? 'border-green-600 text-green-600' 
-                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400'
-              }`}
-            >
-              {tab}
-            </button>
-          ))}
+      {/* TABS & TOOLBAR PENCARIAN / OPEN ALL */}
+      <div className="mt-4 bg-white dark:bg-gray-900 sticky top-0 z-20 border-b border-gray-200 dark:border-gray-700 shadow-2xs">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-8">
+          {/* Header Tab & Tombol Open All */}
+          <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800">
+            <div className="flex overflow-x-auto hide-scrollbar gap-1">
+              {[
+                { id: 'all', label: 'Semua Menu' },
+                { id: 'popular', label: 'Paling Laris' }
+              ].map(tab => {
+                const isActive = activeTab === tab.id;
+                return (
+                  <button 
+                    key={tab.id}
+                    onClick={() => handleTabChange(tab.id)}
+                    className={`px-3 sm:px-4 py-2.5 whitespace-nowrap text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
+                      isActive
+                        ? 'border-green-600 text-green-600 dark:text-green-400' 
+                        : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400'
+                    }`}
+                  >
+                    {tab.id === 'popular' && (
+                      <Flame className={`w-3.5 h-3.5 ${isActive ? 'text-amber-500 fill-amber-500' : 'text-gray-400'}`} />
+                    )}
+                    <span>{tab.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Tombol Toggle Open All Produk */}
+            <div className="flex items-center gap-1.5 shrink-0 py-1">
+              <button
+                type="button"
+                onClick={handleToggleShowAll}
+                title={showAllProducts ? 'Kembalikan ke mode paginasi (10 menu per halaman)' : 'Buka dan tampilkan seluruh menu toko tanpa paginasi'}
+                className={`px-2.5 py-1 text-[11px] font-bold rounded-none border transition-all flex items-center gap-1 cursor-pointer ${
+                  showAllProducts
+                    ? 'bg-green-600 text-white border-green-700 shadow-xs'
+                    : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-200 dark:hover:bg-gray-700'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden sm:inline">{showAllProducts ? 'Mode: Buka Semua Menu (Aktif)' : 'Buka Semua Menu'}</span>
+                <span className="sm:hidden">{showAllProducts ? 'Semua' : 'Open All'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Baris Pencarian Produk */}
+          <div className="py-2 flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                placeholder={activeTab === 'popular' ? "Cari dalam menu terlaris..." : "Cari nama menu, kategori sajian, atau deskripsi..."}
+                className="w-full pl-8 pr-7 py-1 text-xs bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-none focus:ring-1 focus:ring-green-500 focus:border-green-500 text-gray-900 dark:text-white placeholder:text-gray-400 transition-all"
+              />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => handleSearchChange('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 cursor-pointer"
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+
+            {/* Menu Counter */}
+            <div className="shrink-0 text-[10.5px] font-mono text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/80 px-2 py-1 rounded-none border border-gray-200 dark:border-gray-700">
+              <span className="font-bold text-gray-900 dark:text-white">{products.length}</span> Menu
+            </div>
+          </div>
         </div>
       </div>
 
@@ -635,19 +725,36 @@ export default function TokoSaya() {
         ) : products.length === 0 ? (
           <div className="text-center py-12 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 flex flex-col items-center">
             <Store className="w-12 h-12 mb-3 text-gray-300 dark:text-gray-600" />
-            <p className="text-sm font-bold text-gray-800 dark:text-gray-200">Belum Ada Menu Ditambahkan</p>
-            <p className="text-xs text-gray-400 mt-1">Tambahkan menu pertama Anda untuk mulai menerima pesanan.</p>
-            <button 
-              onClick={openAddProduct}
-              className="mt-4 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-xs font-bold uppercase tracking-wider rounded-none transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Tambah Menu Sekarang</span>
-            </button>
+            <p className="text-sm font-bold text-gray-800 dark:text-gray-200">
+              {searchTerm ? 'Menu Tidak Ditemukan' : activeTab === 'popular' ? 'Belum Ada Penjualan Menu' : 'Belum Ada Menu Ditambahkan'}
+            </p>
+            <p className="text-xs text-gray-400 mt-1 max-w-sm">
+              {searchTerm 
+                ? `Tidak ada sajian yang sesuai dengan kata kunci "${searchTerm}". Silakan periksa ejaan Anda.`
+                : activeTab === 'popular'
+                  ? 'Menu yang sering dipesan oleh santri akan otomatis muncul di sini berdasarkan urutan terlaris.'
+                  : 'Tambahkan menu pertama Anda untuk mulai menerima pesanan.'}
+            </p>
+            {searchTerm ? (
+              <button 
+                onClick={() => handleSearchChange('')}
+                className="mt-3 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs font-bold rounded-none transition-all cursor-pointer border border-gray-200 dark:border-gray-700"
+              >
+                Reset Pencarian
+              </button>
+            ) : (
+              <button 
+                onClick={openAddProduct}
+                className="mt-4 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-xs font-bold uppercase tracking-wider rounded-none transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Tambah Menu Sekarang</span>
+              </button>
+            )}
           </div>
         ) : (
           <div className="space-y-4 bg-white dark:bg-gray-900 p-3 sm:p-4 rounded-none border border-gray-200 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800/80">
-            {products.map((product) => (
+            {products.map((product, index) => (
               <div key={product.id} className="flex gap-3 group relative pt-4 first:pt-0">
                 {/* Product Image */}
                 <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-none bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0 border border-gray-200 dark:border-gray-700 overflow-hidden relative">
@@ -667,6 +774,14 @@ export default function TokoSaya() {
                 {/* Product Details */}
                 <div className="flex-1 min-w-0 py-0.5 flex flex-col justify-between">
                   <div>
+                    {/* Badge Paling Laris */}
+                    {activeTab === 'popular' && (
+                      <div className="inline-flex items-center gap-1 mb-1 px-1.5 py-0.2 bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-[10px] font-black rounded-none">
+                        <Flame className="w-2.5 h-2.5 text-amber-500 fill-amber-500 shrink-0" />
+                        <span>Peringkat #{index + 1} Terlaris ({product.sold_count || 0}x Dipesan)</span>
+                      </div>
+                    )}
+
                     <h3 className={`text-sm sm:text-base font-bold truncate ${!product.is_available ? 'text-gray-400' : 'text-gray-900 dark:text-white'}`}>
                       {product.name}
                     </h3>
@@ -741,28 +856,52 @@ export default function TokoSaya() {
               </div>
             ))}
             
-            {/* Pagination Controls */}
-            {pagination && pagination.last_page > 1 && (
-              <div className="flex justify-center items-center gap-3 pt-4 pb-1">
-                <button 
-                  onClick={() => setPage(old => Math.max(old - 1, 1))} 
-                  disabled={page === 1} 
-                  className="p-1.5 rounded-none border border-gray-200 dark:border-gray-700 disabled:opacity-30 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
-                >
-                  <ChevronLeft className="w-4 h-4 text-gray-600 dark:text-gray-400" />
-                </button>
-                <span className="text-xs font-bold font-mono text-gray-600 dark:text-gray-400">
-                  {page} / {pagination.last_page}
+            {/* Pagination Controls / Open All Status */}
+            {showAllProducts ? (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-2 pt-3 pb-1 border-t border-gray-100 dark:border-gray-800 text-xs text-gray-500 dark:text-gray-400">
+                <span className="font-medium">
+                  Menampilkan seluruh <strong className="text-gray-900 dark:text-white font-mono">{products.length}</strong> menu toko sekaligus (Mode Buka Semua Menu).
                 </span>
-                <button 
-                  onClick={() => setPage(old => (!productsRes || old === pagination.last_page ? old : old + 1))} 
-                  disabled={page === pagination.last_page} 
-                  className="p-1.5 rounded-none border border-gray-200 dark:border-gray-700 disabled:opacity-30 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+                <button
+                  type="button"
+                  onClick={handleToggleShowAll}
+                  className="px-2.5 py-1 text-[11px] font-bold rounded-none border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 transition-colors cursor-pointer"
                 >
-                  <ChevronRight className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                  Kembalikan ke Paginasi
                 </button>
               </div>
-            )}
+            ) : pagination && pagination.last_page > 1 ? (
+              <div className="flex flex-wrap justify-between items-center gap-2 pt-4 pb-1 border-t border-gray-100 dark:border-gray-800">
+                <button
+                  type="button"
+                  onClick={handleToggleShowAll}
+                  className="text-[11px] font-bold text-green-600 dark:text-green-400 hover:underline flex items-center gap-1 cursor-pointer"
+                >
+                  <Layers className="w-3 h-3" />
+                  <span>Buka Semua ({pagination.total} Menu)</span>
+                </button>
+
+                <div className="flex items-center gap-2 ml-auto">
+                  <button 
+                    onClick={() => setPage(old => Math.max(old - 1, 1))} 
+                    disabled={page === 1} 
+                    className="p-1.5 rounded-none border border-gray-200 dark:border-gray-700 disabled:opacity-30 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+                  >
+                    <ChevronLeft className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                  </button>
+                  <span className="text-xs font-bold font-mono text-gray-600 dark:text-gray-400">
+                    {page} / {pagination.last_page}
+                  </span>
+                  <button 
+                    onClick={() => setPage(old => (!productsRes || old === pagination.last_page ? old : old + 1))} 
+                    disabled={page === pagination.last_page} 
+                    className="p-1.5 rounded-none border border-gray-200 dark:border-gray-700 disabled:opacity-30 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+                  >
+                    <ChevronRight className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
         )}
       </div>

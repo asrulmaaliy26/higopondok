@@ -18,12 +18,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::match(['put', 'post'], '/me', [AuthController::class, 'updateProfile']);
     Route::put('/me/working-status', [AuthController::class, 'toggleWorkingStatus']);
     
-    // User management strictly for super_admin
+    // User & Store destruction management strictly for super_admin
     Route::middleware('role:super_admin')->group(function () {
         Route::get('/admin/users', [\App\Domains\Auth\Controllers\UserController::class, 'index']);
         Route::post('/admin/users', [\App\Domains\Auth\Controllers\UserController::class, 'store']);
         Route::put('/admin/users/{id}', [\App\Domains\Auth\Controllers\UserController::class, 'update']);
         Route::delete('/admin/users/{id}', [\App\Domains\Auth\Controllers\UserController::class, 'destroy']);
+        Route::delete('/admin/canteens/{id}', [AdminController::class, 'destroyCanteen']);
     });
 
     // Admin & Super Admin operational routes
