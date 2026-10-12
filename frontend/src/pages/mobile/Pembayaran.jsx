@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from '@tanstack/react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -61,6 +61,19 @@ export default function Pembayaran() {
   const [fullscreenImage, setFullscreenImage] = useState(null);
   const [expandedOrders, setExpandedOrders] = useState({});
   const [activeFilter, setActiveFilter] = useState('all');
+
+  // Handle ESC key to dismiss modal previews
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        if (fullscreenImage) setFullscreenImage(null);
+        else if (selectedProofs.length > 0) setSelectedProofs([]);
+        else if (selectedProduct) setSelectedProduct(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [fullscreenImage, selectedProofs.length, selectedProduct]);
 
   // Unified Period Filter States (Default: Bulanan / month)
   const today = new Date();
@@ -1451,23 +1464,35 @@ export default function Pembayaran() {
 
       {/* PROOF OF DELIVERY / PAYMENT FULL-SCREEN MODAL */}
       {selectedProofs.length > 0 && createPortal(
-        <div className="fixed inset-0 z-[110] bg-black/90 backdrop-blur-xs flex flex-col animate-in fade-in duration-200">
+        <div 
+          className="fixed inset-0 z-[120] bg-black/90 backdrop-blur-xs flex flex-col animate-in fade-in duration-200"
+          onClick={() => setSelectedProofs([])}
+        >
           {/* Header */}
-          <div className="flex justify-between items-center px-4 py-3 bg-black/70 border-b border-white/10 shrink-0">
+          <div 
+            className="flex justify-between items-center px-4 py-3 bg-black/80 border-b border-white/10 shrink-0 sticky top-0 z-10"
+            onClick={(e) => e.stopPropagation()}
+          >
             <span className="text-white font-bold text-sm flex items-center gap-2">
               <FileText className="w-4 h-4 text-green-400" />
               {selectedProofs.length} Berkas Bukti
             </span>
             <button 
+              type="button"
               onClick={() => setSelectedProofs([])}
-              className="w-9 h-9 bg-white/10 hover:bg-white/20 rounded-none flex items-center justify-center text-white active:scale-95 transition-all"
+              className="px-3 py-1.5 bg-red-600 hover:bg-red-700 active:scale-95 rounded-none flex items-center gap-1.5 text-white transition-all text-xs font-bold shadow-xs cursor-pointer"
+              title="Tutup Bukti (Esc)"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
+              <span>Tutup</span>
             </button>
           </div>
           
           {/* Images & Documents */}
-          <div className="flex-1 overflow-y-auto flex flex-col items-center gap-4 p-4 pb-12">
+          <div 
+            className="flex-1 overflow-y-auto flex flex-col items-center gap-4 p-4 pb-16"
+            onClick={(e) => e.stopPropagation()}
+          >
             {selectedProofs.map((proof, idx) => {
               const fileType = getFileType(proof);
               const fileName = getFileNameFromPath(proof);
@@ -1479,21 +1504,40 @@ export default function Pembayaran() {
                       <span className="font-semibold text-white flex items-center gap-1.5">
                         <FileText className="w-4 h-4 text-red-400" /> Bukti {idx + 1}: {fileName}
                       </span>
-                      <span className="px-2 py-0.5 bg-red-900/40 text-red-300 rounded font-mono text-[10px]">PDF</span>
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 bg-red-900/40 text-red-300 rounded-none font-mono text-[10px]">PDF</span>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedProofs([])}
+                          className="p-1 text-red-400 hover:text-white hover:bg-red-600/40 rounded-none transition-colors"
+                          title="Tutup Bukti"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                     <iframe 
                       src={proof} 
                       title={`Bukti PDF ${idx + 1}`} 
                       className="w-full h-[55vh] rounded-none bg-white border border-gray-700" 
                     />
-                    <a
-                      href={proof}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-full py-2.5 px-4 bg-green-600 hover:bg-green-700 active:scale-98 text-white rounded-none text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-md"
-                    >
-                      <ExternalLink className="w-4 h-4" /> Buka / Unduh Dokumen PDF
-                    </a>
+                    <div className="w-full flex gap-2">
+                      <a
+                        href={proof}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 py-2.5 px-4 bg-green-600 hover:bg-green-700 active:scale-98 text-white rounded-none text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-md"
+                      >
+                        <ExternalLink className="w-4 h-4" /> Buka / Unduh Dokumen PDF
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedProofs([])}
+                        className="py-2.5 px-4 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-none text-xs font-bold transition-all"
+                      >
+                        Tutup
+                      </button>
+                    </div>
                   </div>
                 );
               }
@@ -1522,6 +1566,14 @@ export default function Pembayaran() {
                         >
                           <ExternalLink className="w-3.5 h-3.5" />
                         </a>
+                        <button 
+                          type="button"
+                          onClick={() => setSelectedProofs([])}
+                          className="p-1 text-red-400 hover:text-white hover:bg-red-600/40 rounded-none transition-colors ml-0.5"
+                          title="Tutup Pratinjau"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
                       </div>
                     </div>
                     <img 
@@ -1559,18 +1611,39 @@ export default function Pembayaran() {
                     <p className="text-white font-bold text-sm break-all">{fileName}</p>
                     <p className="text-gray-400 text-xs mt-1">Berkas Bukti Pembayaran #{idx + 1}</p>
                   </div>
-                  <a
-                    href={proof}
-                    target="_blank"
-                    download
-                    rel="noopener noreferrer"
-                    className="w-full py-2.5 px-4 bg-green-600 hover:bg-green-700 active:scale-98 text-white rounded-none text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-md"
-                  >
-                    <Download className="w-4 h-4" /> Unduh / Buka Berkas
-                  </a>
+                  <div className="w-full flex gap-2">
+                    <a
+                      href={proof}
+                      target="_blank"
+                      download
+                      rel="noopener noreferrer"
+                      className="flex-1 py-2.5 px-4 bg-green-600 hover:bg-green-700 active:scale-98 text-white rounded-none text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-md"
+                    >
+                      <Download className="w-4 h-4" /> Unduh / Buka Berkas
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedProofs([])}
+                      className="py-2.5 px-4 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-none text-xs font-bold transition-all"
+                    >
+                      Tutup
+                    </button>
+                  </div>
                 </div>
               );
             })}
+
+            {/* Bottom Close Button */}
+            <div className="w-full max-w-xl pt-2">
+              <button
+                type="button"
+                onClick={() => setSelectedProofs([])}
+                className="w-full py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-none text-xs font-bold flex items-center justify-center gap-1.5 transition-colors border border-gray-700"
+              >
+                <X className="w-4 h-4 text-red-400" />
+                <span>Tutup Pratinjau Bukti</span>
+              </button>
+            </div>
           </div>
         </div>,
         document.body
