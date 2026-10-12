@@ -184,6 +184,7 @@ export default function Keranjang() {
       }
 
       queryClient.invalidateQueries({ queryKey: ['orders'] });
+      queryClient.invalidateQueries({ queryKey: ['user_orders'] });
       toast.success(res.data?.message || 'Pesanan berhasil dibuat!');
       navigate({ to: '/dashboard/pembayaran' });
     } catch (err) {

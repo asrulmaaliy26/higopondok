@@ -693,7 +693,7 @@ export default function Pembayaran() {
       </div>
 
       <div className="p-3 sm:p-4 md:px-6 max-w-7xl mx-auto pb-36 sm:pb-44">
-        {isLoading && !orders ? (
+        {isLoading && !ordersRes ? (
           <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-xs">
             <LoadingSpinner 
               text="Memuat Riwayat Pesanan..." 
