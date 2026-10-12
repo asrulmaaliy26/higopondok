@@ -153,17 +153,27 @@ class AuthController extends Controller
             }
         }
 
-        // Field status Guru/Staff — HANYA ADMIN yang boleh mengubah
+        // Field status Guru/Staff — HANYA ADMIN yang boleh mengubah nilainya
         $teacherFields = ['is_teacher', 'niy', 'teacher_unit'];
         foreach ($teacherFields as $field) {
             if ($request->has($field)) {
-                if (!$user->hasRole('admin')) {
+                $newVal = $request->$field;
+                if ($field === 'is_teacher') {
+                    $hasChanged = filter_var($newVal, FILTER_VALIDATE_BOOLEAN) !== (bool) $user->is_teacher;
+                } else {
+                    $hasChanged = (string) ($newVal ?? '') !== (string) ($user->$field ?? '');
+                }
+
+                if ($hasChanged && !$user->hasRole('admin')) {
                     return response()->json([
                         'message' => 'Perubahan status Guru/Staff hanya dapat dilakukan oleh Admin.',
                         'error_code' => 'UNAUTHORIZED_TEACHER_UPDATE',
                     ], 403);
                 }
-                $user->$field = $request->$field;
+
+                if ($user->hasRole('admin')) {
+                    $user->$field = $request->$field;
+                }
             }
         }
         

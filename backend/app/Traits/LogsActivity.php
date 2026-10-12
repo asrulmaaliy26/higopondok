@@ -7,6 +7,16 @@ use Illuminate\Support\Facades\Auth;
 
 trait LogsActivity
 {
+    protected static ?\WeakMap $activityChangesMap = null;
+
+    protected static function getActivityChangesMap(): \WeakMap
+    {
+        if (self::$activityChangesMap === null) {
+            self::$activityChangesMap = new \WeakMap();
+        }
+        return self::$activityChangesMap;
+    }
+
     protected static function bootLogsActivity()
     {
         static::created(function ($model) {
@@ -25,11 +35,13 @@ trait LogsActivity
                     'new' => $newValue,
                 ];
             }
-            $model->_activityChanges = $changes;
+            self::getActivityChangesMap()[$model] = $changes;
         });
 
         static::updated(function ($model) {
-            $changes = $model->_activityChanges ?? [];
+            $map = self::getActivityChangesMap();
+            $changes = isset($map[$model]) ? $map[$model] : [];
+            unset($map[$model]);
             self::logAction($model, 'updated', $changes);
         });
 

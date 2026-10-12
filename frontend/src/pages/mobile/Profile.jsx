@@ -25,6 +25,7 @@ export default function Profile() {
   const navigate = useNavigate();
   const userRole = getUserRole(user);
   const role = userRole;
+  const isAdmin = isAdminLevel(user) || !!originalAdmin;
 
   const { isStandalone, installApp } = usePwaStore();
   const queryClient = useQueryClient();
@@ -198,9 +199,11 @@ export default function Profile() {
     if (userData.santri_room !== user?.santri_room) formData.append('santri_room', userData.santri_room);
     if (userData.santri_class !== user?.santri_class) formData.append('santri_class', userData.santri_class);
     if (userData.santri_level !== user?.santri_level) formData.append('santri_level', userData.santri_level);
-    if (userData.is_teacher !== undefined) formData.append('is_teacher', userData.is_teacher ? '1' : '0');
-    if (userData.niy !== user?.niy) formData.append('niy', userData.niy || '');
-    if (userData.teacher_unit !== user?.teacher_unit) formData.append('teacher_unit', userData.teacher_unit || '');
+    if (isAdmin) {
+      if (Boolean(userData.is_teacher) !== Boolean(user?.is_teacher)) formData.append('is_teacher', userData.is_teacher ? '1' : '0');
+      if ((userData.niy || '') !== (user?.niy || '')) formData.append('niy', userData.niy || '');
+      if ((userData.teacher_unit || '') !== (user?.teacher_unit || '')) formData.append('teacher_unit', userData.teacher_unit || '');
+    }
     if (userAvatarFile) formData.append('avatar', userAvatarFile);
     await updateUserMutation.mutateAsync(formData);
   };
@@ -465,7 +468,7 @@ export default function Profile() {
                 <span className="text-xs">{user?.is_teacher ? '🎓' : '⭐'}</span>
                 <span className="font-extrabold">{user?.is_teacher ? `Guru / Staff ${user?.teacher_unit || ''}` : 'Santri Al-Mannan'}</span>
                 <span className="text-[10.5px] font-normal opacity-90 truncate">
-                  • {user?.is_teacher ? (user?.niy ? `NIY: ${user.niy}` : 'Belum isi NIY') : `Kamar: ${user?.santri_room || 'Belum diisi'}`}
+                  • {user?.is_teacher ? (user?.niy ? `NIY: ${user.niy}` : 'Belum isi NIY') : `No. HP: ${user?.phone ? `+${user.phone}` : 'Belum diisi'}`}
                 </span>
               </div>
               <div className="flex items-center gap-0.5 text-[10.5px] font-black shrink-0">
@@ -514,10 +517,10 @@ export default function Profile() {
             {(!userRole || userRole === ROLES.USER) && (
               <>
                 <MenuItem 
-                  icon={MapPin} 
-                  title="Kamar & Lokasi Pengantaran" 
-                  badge={user?.is_teacher ? (user?.teacher_unit ? `Ruang Guru ${user.teacher_unit}` : 'Ruang Guru') : (user?.santri_room ? user.santri_room : 'Atur Kamar')}
-                  badgeColor={user?.is_teacher ? 'bg-indigo-700' : (user?.santri_room ? 'bg-green-600' : 'bg-amber-600')}
+                  icon={Smartphone} 
+                  title="Nomor WhatsApp & HP" 
+                  badge={user?.phone ? `+${user.phone}` : 'Atur No HP'}
+                  badgeColor={user?.phone ? 'bg-green-600' : 'bg-amber-600'}
                   onClick={() => setShowEditUserModal(true)} 
                 />
                 <MenuItem 
@@ -529,9 +532,9 @@ export default function Profile() {
                 />
                 <MenuItem 
                   icon={Users} 
-                  title={user?.is_teacher ? "Akun Santri Terhubung (Opsional)" : "Akun Keluarga / Wali Santri"} 
-                  badge={user?.santri_name ? 'Terisi' : (user?.is_teacher ? 'Opsional' : 'Wajib')}
-                  badgeColor={user?.santri_name ? 'bg-green-600' : (user?.is_teacher ? 'bg-gray-500' : 'bg-amber-600')}
+                  title={user?.is_teacher ? "Akun Santri Terhubung (Opsional)" : "Kamar & Keluarga Santri"} 
+                  badge={user?.santri_room ? user.santri_room : (user?.santri_name ? 'Terisi' : (user?.is_teacher ? 'Opsional' : 'Wajib'))}
+                  badgeColor={user?.santri_room ? 'bg-green-600' : (user?.is_teacher ? 'bg-gray-500' : 'bg-amber-600')}
                   onClick={() => setShowKeluargaModal(true)} 
                 />
               </>
@@ -960,18 +963,28 @@ export default function Profile() {
                       <span>Akun Guru / Staff Yayasan</span>
                     </div>
                     <p className="text-[11px] text-emerald-700 dark:text-emerald-300 mt-0.5">
-                      Prioritas pengantaran langsung ke Ruang Guru / Kantor Unit.
+                      {user?.is_teacher 
+                        ? 'Prioritas pengantaran langsung ke Ruang Guru / Kantor Unit.' 
+                        : 'Status ini diverifikasi & ditetapkan langsung oleh Admin Yayasan.'}
                     </p>
                   </div>
-                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                    <input 
-                      type="checkbox" 
-                      checked={userData.is_teacher} 
-                      onChange={e => setUserData({ ...userData, is_teacher: e.target.checked })} 
-                      className="sr-only peer"
-                    />
-                    <div className="w-9 h-5 bg-gray-300 peer-focus:outline-none rounded-none peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-green-600"></div>
-                  </label>
+                  {isAdmin ? (
+                    <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                      <input 
+                        type="checkbox" 
+                        checked={userData.is_teacher} 
+                        onChange={e => setUserData({ ...userData, is_teacher: e.target.checked })} 
+                        className="sr-only peer"
+                      />
+                      <div className="w-9 h-5 bg-gray-300 peer-focus:outline-none rounded-none peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-green-600"></div>
+                    </label>
+                  ) : (
+                    <span className={`px-2 py-0.5 text-[10px] font-bold rounded-none shrink-0 ${
+                      user?.is_teacher ? 'bg-emerald-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
+                    }`}>
+                      {user?.is_teacher ? 'Aktif' : 'Bukan Guru'}
+                    </span>
+                  )}
                 </div>
 
                 {userData.is_teacher && (
