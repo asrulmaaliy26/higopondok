@@ -1291,27 +1291,34 @@ export default function AdminPesanan() {
                       </div>
                     </div>
 
-                    {/* 5. Footer: Total Price & Minimalist Actions */}
-                    <div className="pt-1.5 border-t border-gray-200 dark:border-gray-700/80 flex items-center justify-between gap-1.5">
-                      <div className="min-w-0">
-                        <span className="text-sm font-black text-green-700 dark:text-green-400 block leading-tight">
-                          Rp {parseFloat(order.total_price || 0).toLocaleString('id-ID')}
-                        </span>
-                        <span className="text-[10px] text-gray-400 font-medium truncate block">
-                          Ongkir: Rp {parseFloat(order.delivery_fee || 0).toLocaleString('id-ID')}
+                    {/* 5. Footer: Total Price (Row 1) & Minimalist Actions (Row 2) */}
+                    <div className="pt-1.5 border-t border-gray-200 dark:border-gray-700/80 space-y-1.5">
+                      {/* Row 1: Total Price & Ongkir */}
+                      <div className="flex items-baseline justify-between gap-1 min-w-0">
+                        <div className="flex items-baseline gap-1.5 min-w-0">
+                          <span className="text-sm sm:text-base font-black text-green-700 dark:text-green-400 font-mono leading-none">
+                            Rp {parseFloat(order.total_price || 0).toLocaleString('id-ID')}
+                          </span>
+                          <span className="text-[10px] text-gray-500 dark:text-gray-400 font-medium truncate">
+                            • Ongkir Rp {parseFloat(order.delivery_fee || 0).toLocaleString('id-ID')}
+                          </span>
+                        </div>
+                        <span className="text-[10px] font-bold text-gray-400 font-mono shrink-0">
+                          {order.items?.length || 0} Item
                         </span>
                       </div>
 
-                      {/* Minimalist Action Buttons */}
-                      <div className="flex items-center gap-1 shrink-0">
+                      {/* Row 2: Full-width Action Buttons Bar */}
+                      <div className="flex items-center gap-1 w-full">
                         {order.status !== 'cancelled' ? (
                           <>
                             <button
+                              type="button"
                               onClick={() => {
                                 setOrderToCancel(order);
                                 setCancelReason('');
                               }}
-                              className="p-1.5 bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300 rounded-none text-xs font-bold transition-colors border border-red-200 dark:border-red-800 cursor-pointer"
+                              className="h-7 w-7 flex items-center justify-center bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300 rounded-none text-xs font-bold transition-colors border border-red-200 dark:border-red-800 shrink-0 cursor-pointer"
                               title={order.status === 'completed' ? 'Batalkan pesanan yang sudah selesai' : 'Batalkan Pesanan'}
                             >
                               <X className="w-3.5 h-3.5" />
@@ -1321,7 +1328,7 @@ export default function AdminPesanan() {
                                 type="button"
                                 onClick={() => handleOpenChangeStatusModal(order, 'processing', 'tomorrow')}
                                 disabled={updateStatusMutation.isPending}
-                                className="px-1.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-300 dark:border-amber-800 rounded-none text-[10.5px] font-bold transition-colors flex items-center gap-0.5 shadow-2xs cursor-pointer"
+                                className="h-7 px-2 bg-amber-50 hover:bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-300 dark:border-amber-800 rounded-none text-[10.5px] font-bold transition-colors flex items-center gap-1 shadow-2xs cursor-pointer shrink-0"
                                 title="Jadwalkan pesanan ke Besok"
                               >
                                 <Calendar className="w-3 h-3 text-amber-600 dark:text-amber-400" />
@@ -1330,12 +1337,12 @@ export default function AdminPesanan() {
                             )}
                           </>
                         ) : (
-                          <div className="flex items-center gap-1">
+                          <>
                             <button
                               type="button"
                               onClick={() => handleContinueOrder(order)}
                               disabled={updateStatusMutation.isPending}
-                              className="px-2 py-1 bg-green-50 hover:bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-300 border border-green-300 dark:border-green-800 rounded-none text-[11px] font-bold transition-colors flex items-center gap-1 shadow-2xs cursor-pointer"
+                              className="h-7 px-2 bg-green-50 hover:bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-300 border border-green-300 dark:border-green-800 rounded-none text-[11px] font-bold transition-colors flex items-center gap-1 shadow-2xs cursor-pointer shrink-0"
                               title="Lanjutkan Pesanan (Otomatis ditugaskan ke Kurir Toko)"
                             >
                               <Truck className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
@@ -1345,43 +1352,47 @@ export default function AdminPesanan() {
                               type="button"
                               onClick={() => handleOpenChangeStatusModal(order, 'processing', 'tomorrow')}
                               disabled={updateStatusMutation.isPending}
-                              className="px-1.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-300 dark:border-amber-800 rounded-none text-[10.5px] font-bold transition-colors flex items-center gap-0.5 shadow-2xs cursor-pointer"
+                              className="h-7 px-2 bg-amber-50 hover:bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-300 dark:border-amber-800 rounded-none text-[10.5px] font-bold transition-colors flex items-center gap-1 shadow-2xs cursor-pointer shrink-0"
                               title="Lanjutkan dan Jadwalkan pesanan ke Besok"
                             >
                               <Calendar className="w-3 h-3 text-amber-600 dark:text-amber-400" />
                               <span>Besok</span>
                             </button>
-                          </div>
+                          </>
                         )}
 
                         <button
+                          type="button"
                           onClick={() => handleOpenUploadPaymentModal(order)}
-                          className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-none text-xs font-bold transition-colors cursor-pointer"
+                          className="h-7 w-7 flex items-center justify-center bg-emerald-50 hover:bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-none text-xs font-bold transition-colors shrink-0 cursor-pointer"
                           title="Unggah / Tambah Bukti Transfer Santri"
                         >
                           <UploadCloud className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                         </button>
 
                         <button
+                          type="button"
                           onClick={() => handleOpenChangeStatusModal(order)}
-                          className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-none text-[11px] font-bold transition-colors flex items-center gap-1 shadow-2xs cursor-pointer"
+                          className="flex-1 min-w-0 h-7 px-2 bg-blue-50 hover:bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-none text-[11px] font-bold transition-colors flex items-center justify-center gap-1 shadow-2xs cursor-pointer"
                           title="Ubah Status Pesanan"
                         >
-                          <RotateCcw className="w-3 h-3" />
-                          <span>Status</span>
+                          <RotateCcw className="w-3 h-3 shrink-0" />
+                          <span className="truncate">Status</span>
                         </button>
 
                         <button
+                          type="button"
                           onClick={() => handlePrintSingleReceipt(order)}
-                          className="p-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800 rounded-none text-xs font-bold transition-colors cursor-pointer"
+                          className="h-7 w-7 flex items-center justify-center bg-amber-50 hover:bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800 rounded-none text-xs font-bold transition-colors shrink-0 cursor-pointer"
                           title="Cetak Struk Thermal / A4"
                         >
                           <Printer className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
                         </button>
 
                         <button
+                          type="button"
                           onClick={() => setOrderToDelete(order)}
-                          className="p-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 dark:bg-gray-800 dark:text-gray-400 hover:text-red-600 rounded-none text-xs font-bold transition-colors border border-gray-200 dark:border-gray-700 cursor-pointer"
+                          className="h-7 w-7 flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-gray-600 dark:bg-gray-800 dark:text-gray-400 hover:text-red-600 rounded-none text-xs font-bold transition-colors border border-gray-200 dark:border-gray-700 shrink-0 cursor-pointer"
                           title="Hapus / Pindahkan ke Kotak Sampah"
                         >
                           <Trash2 className="w-3.5 h-3.5" />

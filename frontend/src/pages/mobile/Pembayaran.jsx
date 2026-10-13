@@ -392,9 +392,6 @@ export default function Pembayaran() {
     });
   }, [filteredOrders]);
 
-  // Gojek-style Activity Tabs: 'in_progress' (Dalam Proses) vs 'history' (Riwayat Selesai)
-  const [activityTab, setActivityTab] = useState('in_progress');
-
   // Thermal Receipt Modal States
   const [receiptModalOpen, setReceiptModalOpen] = useState(false);
   const [selectedReceiptOrder, setSelectedReceiptOrder] = useState(null);
@@ -415,24 +412,8 @@ export default function Pembayaran() {
     setReceiptModalOpen(true);
   };
 
-  const inProgressGroups = useMemo(() => {
-    return checkoutGroups.filter(g => 
-      g.overallStatus === 'pending' || 
-      g.overallStatus === 'processing' || 
-      g.payment_status === 'waiting_confirmation' || 
-      g.payment_status === 'unpaid'
-    );
-  }, [checkoutGroups]);
-
-  const historyGroups = useMemo(() => {
-    return checkoutGroups.filter(g => 
-      (g.overallStatus === 'completed' || g.overallStatus === 'cancelled') &&
-      g.payment_status !== 'unpaid' &&
-      g.payment_status !== 'waiting_confirmation'
-    );
-  }, [checkoutGroups]);
-
-  const displayedGroups = activityTab === 'in_progress' ? inProgressGroups : historyGroups;
+  // Unified Orders Feed (Tampilkan semua status pesanan: proses, selesai, batal)
+  const displayedGroups = checkoutGroups;
 
   const filters = [
     { key: 'all', label: 'Semua Status' },
@@ -545,43 +526,6 @@ export default function Pembayaran() {
               Pantau pesanan aktif, riwayat transaksi, & struk belanja santri.
             </p>
           </div>
-        </div>
-
-        {/* GOJEK-STYLE 2 SEGMENTED ACTIVITY TABS */}
-        <div className="grid grid-cols-2 p-1 bg-gray-100 dark:bg-gray-800 border-t border-b border-gray-200 dark:border-gray-700">
-          <button
-            type="button"
-            onClick={() => setActivityTab('in_progress')}
-            className={`py-2 text-xs font-black uppercase tracking-wider rounded-none transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-              activityTab === 'in_progress'
-                ? 'bg-white dark:bg-gray-900 text-green-700 dark:text-green-400 shadow-xs border border-gray-200 dark:border-gray-700'
-                : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'
-            }`}
-          >
-            <span>Dalam Proses</span>
-            {inProgressGroups.length > 0 && (
-              <span className="px-1.5 py-0.2 text-[10px] bg-green-600 text-white font-mono rounded-none">
-                {inProgressGroups.length}
-              </span>
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActivityTab('history')}
-            className={`py-2 text-xs font-black uppercase tracking-wider rounded-none transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-              activityTab === 'history'
-                ? 'bg-white dark:bg-gray-900 text-green-700 dark:text-green-400 shadow-xs border border-gray-200 dark:border-gray-700'
-                : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'
-            }`}
-          >
-            <span>Riwayat Selesai</span>
-            {historyGroups.length > 0 && (
-              <span className="px-1.5 py-0.2 text-[10px] bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-mono rounded-none">
-                {historyGroups.length}
-              </span>
-            )}
-          </button>
         </div>
 
         {/* COMPACT FILTER BAR — Mode + Status dalam 1-2 baris */}
@@ -715,485 +659,376 @@ export default function Pembayaran() {
             />
           </div>
         ) : displayedGroups.length === 0 ? (
-          activityTab === 'in_progress' ? (
-            <div className="text-center py-12 text-gray-500 flex flex-col items-center bg-white dark:bg-gray-900 rounded-none border border-gray-200 dark:border-gray-800 p-6 shadow-2xs">
-              <Clock className="w-14 h-14 mb-3 text-green-600/60 dark:text-green-400/60" />
-              <h3 className="font-bold text-gray-800 dark:text-gray-200 text-sm mb-1">
-                Tidak Ada Pesanan yang Sedang Berjalan
-              </h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400 max-w-xs mb-3">
-                Semua pesanan Anda telah tuntas atau Anda belum membuat pesanan baru hari ini.
-              </p>
-              <div className="flex gap-2">
-                {historyGroups.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setActivityTab('history')}
-                    className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-none text-xs font-bold transition-all shadow-2xs"
-                  >
-                    Lihat Riwayat Selesai ({historyGroups.length})
-                  </button>
-                )}
-                <Link
-                  to="/dashboard/kantin"
-                  className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-none text-xs font-bold transition-all shadow-2xs"
-                >
-                  Pesan Menu ➔
-                </Link>
-              </div>
-            </div>
-          ) : (
-            <div className="text-center py-12 text-gray-500 flex flex-col items-center bg-white dark:bg-gray-900 rounded-none border border-gray-200 dark:border-gray-800 p-6 shadow-2xs">
-              <ShoppingBag className="w-14 h-14 mb-3 text-gray-300 dark:text-gray-600" />
-              <h3 className="font-bold text-gray-800 dark:text-gray-200 text-sm mb-1">
-                Belum Ada Riwayat Transaksi Selesai
-              </h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400 max-w-xs mb-3">
-                {activeFilter === 'all' 
-                  ? `Belum ada pesanan selesai pada periode ${getFilterLabel()}.` 
-                  : `Tidak ada pesanan selesai berstatus '${filters.find(f=>f.key===activeFilter)?.label}' pada periode ${getFilterLabel()}.`}
-              </p>
+          <div className="text-center py-12 text-gray-500 flex flex-col items-center bg-white dark:bg-gray-900 rounded-none border border-gray-200 dark:border-gray-800 p-6 shadow-2xs">
+            <ShoppingBag className="w-12 h-12 mb-2.5 text-gray-400 dark:text-gray-500" />
+            <h3 className="font-bold text-gray-800 dark:text-gray-200 text-sm mb-1">
+              Tidak Ada Pesanan Ditemukan
+            </h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400 max-w-xs mb-3">
+              {activeFilter === 'all' 
+                ? `Belum ada riwayat pesanan pada periode ${getFilterLabel()}.` 
+                : `Tidak ada pesanan berstatus '${filters.find(f => f.key === activeFilter)?.label}' pada periode ${getFilterLabel()}.`}
+            </p>
+            <div className="flex gap-2">
               {filterMode !== 'all' && (
                 <button
                   type="button"
                   onClick={() => setFilterMode('all')}
-                  className="px-3 py-1.5 bg-green-50 hover:bg-green-100 dark:bg-green-950/60 dark:hover:bg-green-900 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800 rounded-none text-xs font-bold transition-all shadow-2xs"
+                  className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-none text-xs font-bold transition-all shadow-2xs cursor-pointer"
                 >
                   Lihat Semua Waktu
                 </button>
               )}
+              <Link
+                to="/dashboard/kantin"
+                className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-none text-xs font-bold transition-all shadow-2xs"
+              >
+                Pesan Menu Sekarang ➔
+              </Link>
             </div>
-          )
+          </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-2.5 sm:gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5 sm:gap-3">
             {displayedGroups.map(group => {
               const isMulti = group.isMultiStore;
               const singleOrder = group.orders[0];
               const cardKey = group.key;
               const isExpanded = !!expandedOrders[cardKey];
               const allPending = group.orders.every(o => o.status === 'pending');
-
               const isTeacherGroup = group.orders.some(o => o.order_for === 'guru' || o.is_priority);
 
+              // Status Badges strictly using Green theme & semantic accents (AGENTS.md)
+              const getOrderStatusBadge = () => {
+                switch (group.overallStatus) {
+                  case 'completed':
+                    return {
+                      label: 'Selesai',
+                      cls: 'bg-green-50 text-green-700 border-green-200 dark:bg-green-950/60 dark:text-green-300 dark:border-green-800'
+                    };
+                  case 'processing':
+                    return {
+                      label: 'Diproses',
+                      cls: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800'
+                    };
+                  case 'cancelled':
+                    return {
+                      label: 'Dibatalkan',
+                      cls: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/60 dark:text-red-300 dark:border-red-800'
+                    };
+                  default:
+                    return {
+                      label: 'Menunggu',
+                      cls: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800'
+                    };
+                }
+              };
+
+              const getPaymentStatusBadge = () => {
+                switch (group.payment_status) {
+                  case 'paid':
+                    return {
+                      label: 'Lunas',
+                      cls: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300 border border-green-200 dark:border-green-800'
+                    };
+                  case 'waiting_confirmation':
+                    return {
+                      label: 'Menunggu Kasir',
+                      cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 ring-1 ring-amber-400 border border-amber-200 animate-pulse'
+                    };
+                  default:
+                    return {
+                      label: 'Belum Bayar',
+                      cls: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300 border border-yellow-200'
+                    };
+                }
+              };
+
+              const orderBadge = getOrderStatusBadge();
+              const paymentBadge = getPaymentStatusBadge();
+
+              // Clean duplicate item notes (e.g. "[Level 1] • [Level 1]" -> "[Level 1]")
+              const cleanItemNotes = (noteStr) => {
+                if (!noteStr) return '';
+                const parts = noteStr.split('•').map(s => s.trim()).filter(Boolean);
+                return Array.from(new Set(parts)).join(' • ');
+              };
+
               return (
-                <div key={cardKey} className={`bg-white dark:bg-gray-900 p-4 sm:p-5 rounded-none border shadow-sm hover:shadow-md transition-all space-y-3 ${
-                  isTeacherGroup 
-                    ? 'border-indigo-400 dark:border-indigo-600 ring-2 ring-indigo-400/30 hover:border-indigo-600' 
-                    : 'border-green-300/90 dark:border-green-800 hover:border-green-500 dark:hover:border-green-600'
-                }`}>
+                <div 
+                  key={cardKey} 
+                  className={`bg-white dark:bg-gray-900 p-3 sm:p-3.5 rounded-none border shadow-2xs hover:shadow-xs transition-all space-y-2.5 ${
+                    isTeacherGroup 
+                      ? 'border-indigo-400 dark:border-indigo-600 ring-1 ring-indigo-400/30' 
+                      : 'border-gray-200 dark:border-gray-800 hover:border-green-400 dark:hover:border-green-600'
+                  }`}
+                >
                   {/* Priority strip for teacher group */}
                   {isTeacherGroup && (
-                    <div className="bg-gradient-to-r from-indigo-700 via-purple-700 to-indigo-800 text-white px-3 py-1 rounded-none flex items-center gap-2 -mx-4 sm:-mx-5 -mt-4 sm:-mt-5 mb-0 shadow-xs">
-                      <span className="text-[11px] font-black tracking-tight">⚡ PESANAN PRIORITAS • GURU / STAFF YAYASAN</span>
+                    <div className="bg-gradient-to-r from-indigo-700 to-purple-700 text-white px-2.5 py-0.5 rounded-none flex items-center gap-1.5 -mx-3 sm:-mx-3.5 -mt-3 sm:-mt-3.5 mb-1 text-[10px] font-black tracking-tight">
+                      <span>⚡ PESANAN PRIORITAS • GURU / STAFF YAYASAN</span>
                     </div>
                   )}
-                  {/* Header: ID, Date, Canteen Name & Status Badges */}
 
-                  <div className="flex justify-between items-start gap-2 pb-3 border-b border-gray-200 dark:border-gray-700/80">
-                    <div>
-                      <div className="flex items-center gap-1.5 flex-wrap text-xs text-gray-500 mb-1">
-                        <span className="font-bold text-gray-800 dark:text-gray-200">
-                          {group.checkoutId ? `Checkout #${group.checkoutId}` : `Order #${singleOrder.id}`}
+                  {/* Header: Canteen, ID, Date, & Status Badges (Gojek Style) */}
+                  <div className="flex justify-between items-start gap-2 pb-2 border-b border-gray-100 dark:border-gray-800">
+                    <div className="min-w-0 flex-1">
+                      {/* Merchant Title */}
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <Store className="w-3.5 h-3.5 text-green-600 dark:text-green-400 shrink-0" />
+                        <h3 className="font-extrabold text-sm sm:text-base text-gray-900 dark:text-white truncate">
+                          {isMulti ? `${group.orders.length} Toko Pesanan` : (singleOrder.canteen?.name || 'Kantin')}
+                        </h3>
+                      </div>
+
+                      {/* Order ID & Date Line */}
+                      <div className="flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-gray-500 mt-0.5 font-mono">
+                        <span className="font-semibold text-gray-600 dark:text-gray-300">
+                          {group.checkoutId ? `#${group.checkoutId}` : `#ORD-${singleOrder.id}`}
                         </span>
                         <span>•</span>
                         <span>{new Date(group.created_at).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' })}</span>
                       </div>
 
-                      {isMulti ? (
-                        <div>
-                          <h3 className="font-extrabold text-base sm:text-lg text-gray-900 dark:text-white flex items-center gap-1.5">
-                            <Store className="w-4 h-4 text-green-600 dark:text-green-400 shrink-0" />
-                            <span>{group.orders.length} Toko Pesanan</span>
-                          </h3>
-                          <p className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold mt-0.5">
-                            {group.orders.map(o => o.canteen?.name).filter(Boolean).join(' • ')}
-                          </p>
-                        </div>
-                      ) : (
-                        <h3 className="font-extrabold text-base sm:text-lg text-gray-900 dark:text-white flex items-center gap-1.5">
-                          <Store className="w-4 h-4 text-green-600 dark:text-green-400 shrink-0" />
-                          {singleOrder.canteen?.name || 'Kantin'}
-                        </h3>
-                      )}
-
+                      {/* Location Chip */}
                       {group.delivery_location && (
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 flex items-center gap-1.5 flex-wrap">
-                          <span>📍</span> 
-                          <span className="font-semibold text-gray-700 dark:text-gray-300">
-                            {isTeacherGroup ? 'Antar Langsung Guru/Staff:' : 'Kamar Santri:'}
-                          </span>
-                          <span className={`font-mono font-bold px-1 border text-xs ${
-                            isTeacherGroup 
-                              ? 'text-indigo-900 dark:text-indigo-200 bg-indigo-100 dark:bg-indigo-950/50 border-indigo-300 dark:border-indigo-700' 
-                              : 'text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800'
-                          }`}>
+                        <div className="flex items-center gap-1 mt-1 text-[10px] text-gray-500">
+                          <span>📍</span>
+                          <span>{isTeacherGroup ? 'Ruang Guru:' : 'Kamar:'}</span>
+                          <span className="font-mono font-bold text-gray-800 dark:text-gray-200 px-1 py-0.2 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
                             {group.delivery_location}
                           </span>
-                          {isTeacherGroup && (
-                            <span className="text-[10px] bg-amber-400 text-indigo-950 font-black px-1.5 py-0.2 uppercase">
-                              ⚡ Prioritas
-                            </span>
-                          )}
-                        </p>
+                        </div>
                       )}
                     </div>
 
+                    {/* Status Badges */}
                     <div className="flex flex-col items-end gap-1 shrink-0">
-                      {/* Payment Status Badge */}
-                      <div className={`px-2.5 py-0.5 rounded-none text-[10px] font-bold shadow-2xs ${
-                        group.payment_status === 'paid' 
-                          ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300 border border-green-200 dark:border-green-800' 
-                          : group.payment_status === 'waiting_confirmation'
-                            ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 ring-1 ring-amber-400 animate-pulse border border-amber-200'
-                            : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300 border border-yellow-200'
-                      }`}>
-                        {group.payment_status === 'paid' 
-                          ? 'Sudah Dibayar' 
-                          : group.payment_status === 'waiting_confirmation' 
-                            ? 'Menunggu Validasi Toko' 
-                            : 'Belum Bayar'}
-                      </div>
-
-                      {/* Order Status Badge */}
-                      <div className={`px-2.5 py-0.5 rounded-none text-[10px] font-bold border ${
-                        group.overallStatus === 'completed' 
-                          ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800' 
-                          : group.overallStatus === 'processing' 
-                          ? 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800' 
-                          : group.overallStatus === 'cancelled'
-                          ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/60 dark:text-red-300 dark:border-red-800'
-                          : 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700'
-                      }`}>
-                        {group.overallStatus === 'pending' ? 'Menunggu Konfirmasi' : 
-                         group.overallStatus === 'processing' ? 'Sedang Diproses' : 
-                         group.overallStatus === 'completed' ? 'Selesai' : 
-                         group.overallStatus === 'cancelled' ? 'Dibatalkan' : group.overallStatus}
-                      </div>
+                      <span className={`px-2 py-0.5 rounded-none text-[10px] font-bold border ${orderBadge.cls}`}>
+                        {orderBadge.label}
+                      </span>
+                      <span className={`px-2 py-0.5 rounded-none text-[10px] font-bold border ${paymentBadge.cls}`}>
+                        {paymentBadge.label}
+                      </span>
                     </div>
                   </div>
 
-                  {/* Items List Box */}
-                  <div className="space-y-2 py-1">
+                  {/* Items List (Compact & Clean) */}
+                  <div className="py-1 space-y-1">
                     {isMulti ? (
-                      // Multi-store: Render per-canteen sections
                       group.orders.map((order, oIdx) => (
-                        <div key={order.id} className="p-2.5 rounded-none bg-gray-50/80 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700/60 space-y-1.5">
-                          <div className="flex items-center justify-between pb-1 border-b border-gray-200/60 dark:border-gray-700/60">
-                            <div className="flex items-center gap-1.5">
-                              <Store className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
-                              <span className="font-bold text-xs text-gray-900 dark:text-white">
-                                {order.canteen?.name || `Toko ${oIdx + 1}`}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              <span className={`px-1.5 py-0.2 rounded-none text-[9px] font-bold border ${
-                                order.status === 'completed' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                                order.status === 'processing' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
-                                order.status === 'cancelled' ? 'bg-red-50 text-red-700 border-red-200' :
-                                'bg-gray-100 text-gray-700 border-gray-200'
-                              }`}>
-                                {order.status === 'pending' ? 'Menunggu' : order.status === 'processing' ? 'Diproses' : order.status === 'completed' ? 'Selesai' : order.status}
-                              </span>
-                              {order.canteen?.whatsapp_number && (
-                                <a
-                                  href={formatPhoneWA(order.canteen.whatsapp_number) + `?text=${encodeURIComponent(buildOrderWAText(order))}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-emerald-600 hover:text-emerald-700 p-0.5 rounded-none hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors"
-                                  title="Hubungi Toko ini via WhatsApp"
-                                >
-                                  <MessageCircle className="w-3.5 h-3.5" />
-                                </a>
-                              )}
-                            </div>
-                          </div>
-
-                          {order.custom_notes && (
-                            <div className="bg-purple-50/80 dark:bg-purple-950/30 p-2 rounded-none border border-purple-200/80 dark:border-purple-900/50">
-                              <span className="text-[10px] font-bold text-purple-700 dark:text-purple-300 uppercase block mb-0.5">Catatan Toko:</span>
-                              <p className="text-xs font-medium text-purple-900 dark:text-purple-200 whitespace-pre-wrap">
-                                {order.custom_notes}
-                              </p>
-                            </div>
-                          )}
-
-                          {order.items?.map(item => (
-                            <div key={item.id} className="text-xs py-1 hover:bg-gray-100/50 dark:hover:bg-gray-800/60 transition-colors rounded-none">
-                              <div className="flex justify-between items-center cursor-pointer" onClick={() => setSelectedProduct(item.product)}>
-                                <span className="text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
-                                  <span className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 font-bold px-1.5 py-0.2 rounded-none text-[11px]">
-                                    {item.quantity}x
-                                  </span>
-                                  <span className="font-medium">{item.product?.name}</span>
-                                </span>
-                                <span className="font-bold font-mono text-gray-900 dark:text-white">
-                                  Rp {Math.round(parseFloat(item.subtotal)).toLocaleString('id-ID')}
-                                </span>
-                              </div>
-                              {item.notes && (
-                                <p className="text-[10px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.2 rounded-none mt-0.5 inline-block font-medium ml-6">
-                                  📝 {item.notes}
-                                </p>
-                              )}
-                            </div>
-                          ))}
-
-                          <div className="flex justify-between text-[11px] font-semibold text-gray-500 dark:text-gray-400 pt-1 border-t border-gray-200/40 dark:border-gray-700/40">
-                            <span>Total Toko Ini:</span>
-                            <span className="text-gray-800 dark:text-gray-200 font-bold font-mono">
+                        <div key={order.id} className="pb-1.5 mb-1.5 border-b border-gray-100 dark:border-gray-800/80 last:border-b-0 last:mb-0">
+                          <div className="flex items-center justify-between text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-0.5">
+                            <span className="flex items-center gap-1 truncate">
+                              <span className="w-1.5 h-1.5 bg-green-500 rounded-none shrink-0" />
+                              {order.canteen?.name || `Toko ${oIdx + 1}`}
+                            </span>
+                            <span className="font-mono text-gray-500 text-[10px]">
                               Rp {Math.round(parseFloat(order.total_price)).toLocaleString('id-ID')}
                             </span>
                           </div>
-                        </div>
-                      ))
-                    ) : (
-                      // Single Store items
-                      <>
-                        {singleOrder.custom_notes && (
-                          <div className="bg-purple-50/80 dark:bg-purple-950/30 p-2.5 rounded-none border border-purple-200/80 dark:border-purple-900/50 mb-2">
-                            <span className="text-[10px] font-bold text-purple-700 dark:text-purple-300 uppercase block mb-0.5">Catatan Pesanan:</span>
-                            <p className="text-xs font-medium text-purple-900 dark:text-purple-200 whitespace-pre-wrap">
-                              {singleOrder.custom_notes}
-                            </p>
-                          </div>
-                        )}
-
-                        {singleOrder.items?.map(item => (
-                          <div key={item.id} className="text-sm p-2 rounded-none hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors">
-                            <div className="flex justify-between items-center cursor-pointer" onClick={() => setSelectedProduct(item.product)}>
-                              <span className="text-gray-700 dark:text-gray-300 flex items-center gap-2">
-                                <span className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 font-bold px-1.5 py-0.5 rounded-none text-xs">{item.quantity}x</span>
-                                <span className="font-medium text-xs sm:text-sm">{item.product?.name}</span>
-                              </span>
-                              <span className="font-bold font-mono text-gray-900 dark:text-white text-xs sm:text-sm">
+                          {order.items?.map(item => (
+                            <div key={item.id} className="flex justify-between items-start text-xs py-0.5 gap-2">
+                              <div className="min-w-0 flex items-start gap-1.5">
+                                <span className="text-green-700 dark:text-green-400 font-bold font-mono text-[11px] shrink-0">
+                                  {item.quantity}x
+                                </span>
+                                <div className="min-w-0">
+                                  <span className="text-gray-800 dark:text-gray-200 font-medium truncate block">
+                                    {item.product?.name}
+                                  </span>
+                                  {item.notes && (
+                                    <span className="text-[10px] text-gray-400 dark:text-gray-500 block truncate">
+                                      Catatan: {cleanItemNotes(item.notes)}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <span className="font-mono text-gray-700 dark:text-gray-300 font-semibold shrink-0 text-right text-xs">
                                 Rp {Math.round(parseFloat(item.subtotal)).toLocaleString('id-ID')}
                               </span>
                             </div>
-                            {item.notes && (
-                              <p className="text-[11px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-none mt-1 inline-block font-medium ml-7">
-                                📝 Catatan: {item.notes}
-                              </p>
-                            )}
+                          ))}
+                        </div>
+                      ))
+                    ) : (
+                      singleOrder.items?.map(item => (
+                        <div key={item.id} className="flex justify-between items-start text-xs py-0.5 gap-2">
+                          <div className="min-w-0 flex items-start gap-1.5">
+                            <span className="text-green-700 dark:text-green-400 font-bold font-mono text-[11px] shrink-0">
+                              {item.quantity}x
+                            </span>
+                            <div className="min-w-0">
+                              <span className="text-gray-800 dark:text-gray-200 font-medium truncate block">
+                                {item.product?.name}
+                              </span>
+                              {item.notes && (
+                                <span className="text-[10px] text-gray-400 dark:text-gray-500 block truncate">
+                                  Catatan: {cleanItemNotes(item.notes)}
+                                </span>
+                              )}
+                            </div>
                           </div>
-                        ))}
-                      </>
+                          <span className="font-mono text-gray-700 dark:text-gray-300 font-semibold shrink-0 text-right text-xs">
+                            Rp {Math.round(parseFloat(item.subtotal)).toLocaleString('id-ID')}
+                          </span>
+                        </div>
+                      ))
                     )}
                   </div>
 
-                  {/* DEDICATED VISUAL PROOF & DOCUMENTATION SECTION */}
+                  {/* DEDICATED COMPACT DOCUMENTATION & PROOF TILES (Gojek Style) */}
                   {((group.proof_of_purchase && group.proof_of_purchase.length > 0) || 
                     (group.overallStatus === 'completed' && group.proof_of_delivery && group.proof_of_delivery.length > 0) ||
                     group.proof_of_payment || 
                     (group.overallStatus !== 'cancelled' && group.payment_status === 'unpaid')) && (
-                    <div className="pt-3 pb-1 border-t border-gray-200 dark:border-gray-700 space-y-2.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
-                          <Sparkles className="w-3.5 h-3.5 text-green-600" />
-                          Bukti & Dokumentasi Foto
+                    <div className="pt-2 border-t border-gray-100 dark:border-gray-800 space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="font-bold text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                          <Receipt className="w-3.5 h-3.5 text-green-600" />
+                          Bukti & Dokumentasi
                         </span>
-                        <span className="text-[10px] text-gray-400 font-medium">
-                          Klik kartu untuk memperbesar
-                        </span>
+                        <span className="text-[10px] text-gray-400">Klik untuk perbesar</span>
                       </div>
 
-                      {/* 1. Struk Pembelian Toko Card (Kurir) */}
-                      {group.proof_of_purchase && group.proof_of_purchase.length > 0 && (() => {
-                        const proofs = group.proof_of_purchase;
-                        const firstProofUrl = getStorageUrl(proofs[0]);
-                        const count = proofs.length;
-                        const fullUrls = proofs.map(p => getStorageUrl(p));
+                      {/* Compact Tiles Grid */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                        {/* 1. Struk Toko (Kurir) */}
+                        {group.proof_of_purchase && group.proof_of_purchase.length > 0 && (() => {
+                          const proofs = group.proof_of_purchase;
+                          const firstProofUrl = getStorageUrl(proofs[0]);
+                          const count = proofs.length;
+                          const fullUrls = proofs.map(p => getStorageUrl(p));
 
-                        return (
-                          <div 
-                            onClick={() => setSelectedProofs(fullUrls)}
-                            className="group relative overflow-hidden bg-gradient-to-r from-purple-50 via-purple-50/70 to-indigo-50/40 dark:from-purple-950/40 dark:via-purple-950/20 dark:to-indigo-950/30 border-2 border-purple-300/80 dark:border-purple-800/80 hover:border-purple-500 dark:hover:border-purple-600 rounded-none p-2.5 sm:p-3 transition-all duration-200 hover:shadow-md cursor-pointer active:scale-[0.99] flex items-center justify-between gap-3"
-                          >
-                            <div className="flex items-center gap-3 min-w-0">
-                              <div className="relative w-12 h-12 rounded-none overflow-hidden bg-purple-100 dark:bg-purple-900/50 shrink-0 ring-2 ring-purple-400/80 dark:ring-purple-700 shadow-xs flex items-center justify-center">
-                                <img 
-                                  src={firstProofUrl} 
-                                  alt="Struk Toko" 
-                                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                                  onError={(e) => {
-                                    e.target.style.display = 'none';
-                                    if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
-                                  }}
-                                />
-                                <div className="hidden absolute inset-0 bg-purple-100 dark:bg-purple-900/50 items-center justify-center text-purple-600 dark:text-purple-400">
-                                  <Receipt className="w-5 h-5" />
-                                </div>
-                                <span className="absolute bottom-0.5 right-0.5 bg-black/60 text-[9px] text-white px-1 py-0.2 rounded font-bold backdrop-blur-xs">
-                                  🔍
-                                </span>
-                              </div>
-
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className="text-xs sm:text-sm font-black text-purple-950 dark:text-purple-100 truncate">
-                                    Struk Pembelian Toko
-                                  </span>
-                                  <span className="px-1.5 py-0.2 rounded-none text-[10px] font-bold bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
-                                    {count} Foto
-                                  </span>
-                                </div>
-                                <p className="text-[11px] text-purple-700/80 dark:text-purple-300/80 truncate mt-0.5 flex items-center gap-1">
-                                  <span>Foto nota kasir dari kurir • Sentuh untuk lihat</span>
-                                </p>
-                              </div>
-                            </div>
-
-                            <div className="shrink-0">
-                              <button
-                                type="button"
-                                className="px-3 py-1.5 bg-purple-600 group-hover:bg-purple-700 text-white rounded-none text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 group-hover:gap-2"
-                              >
-                                <Eye className="w-3.5 h-3.5" />
-                                <span>Lihat Struk</span>
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })()}
-
-                      {/* 2. Bukti Serah Terima Card */}
-                      {group.overallStatus === 'completed' && group.proof_of_delivery && group.proof_of_delivery.length > 0 && (() => {
-                        const proofs = group.proof_of_delivery;
-                        const firstProofUrl = getStorageUrl(proofs[0]);
-                        const count = proofs.length;
-                        const fullUrls = proofs.map(p => getStorageUrl(p));
-
-                        return (
-                          <div 
-                            onClick={() => setSelectedProofs(fullUrls)}
-                            className="group relative overflow-hidden bg-gradient-to-r from-blue-50 via-sky-50/70 to-emerald-50/40 dark:from-blue-950/40 dark:via-sky-950/20 dark:to-emerald-950/30 border-2 border-blue-300/80 dark:border-blue-800/80 hover:border-blue-500 dark:hover:border-blue-600 rounded-none p-2.5 sm:p-3 transition-all duration-200 hover:shadow-md cursor-pointer active:scale-[0.99] flex items-center justify-between gap-3"
-                          >
-                            <div className="flex items-center gap-3 min-w-0">
-                              <div className="relative w-12 h-12 rounded-none overflow-hidden bg-blue-100 dark:bg-blue-900/50 shrink-0 ring-2 ring-blue-400/80 dark:ring-blue-700 shadow-xs flex items-center justify-center">
-                                <img 
-                                  src={firstProofUrl} 
-                                  alt="Bukti Serah Terima" 
-                                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                                  onError={(e) => {
-                                    e.target.style.display = 'none';
-                                    if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
-                                  }}
-                                />
-                                <div className="hidden absolute inset-0 bg-blue-100 dark:bg-blue-900/50 items-center justify-center text-blue-600 dark:text-blue-400">
-                                  <Camera className="w-5 h-5" />
-                                </div>
-                                <span className="absolute bottom-0.5 right-0.5 bg-black/60 text-[9px] text-white px-1 py-0.2 rounded font-bold backdrop-blur-xs">
-                                  📸
-                                </span>
-                              </div>
-
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className="text-xs sm:text-sm font-black text-blue-950 dark:text-blue-100 truncate">
-                                    Foto Paket Sampai ke Santri
-                                  </span>
-                                  <span className="px-1.5 py-0.2 rounded-none text-[10px] font-bold bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                                    {count} Foto
-                                  </span>
-                                </div>
-                                <p className="text-[11px] text-blue-700/80 dark:text-blue-300/80 truncate mt-0.5 flex items-center gap-1">
-                                  <span>Foto paket diterima santri • Sentuh untuk lihat</span>
-                                </p>
-                              </div>
-                            </div>
-
-                            <div className="shrink-0">
-                              <button
-                                type="button"
-                                className="px-3 py-1.5 bg-blue-600 group-hover:bg-blue-700 text-white rounded-none text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 group-hover:gap-2"
-                              >
-                                <Camera className="w-3.5 h-3.5" />
-                                <span>Lihat Foto</span>
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })()}
-
-                      {/* 3. Bukti Transfer Card (Pembayaran Wali) */}
-                      {group.proof_of_payment && (() => {
-                        const proofs = Array.isArray(group.proof_of_payment) ? group.proof_of_payment : [group.proof_of_payment];
-                        const firstProofUrl = getStorageUrl(proofs[0]);
-                        const count = proofs.length;
-                        const fullUrls = proofs.map(p => getStorageUrl(p));
-                        const isPaid = group.payment_status === 'paid';
-                        const isWaiting = group.payment_status === 'waiting_confirmation';
-
-                        return (
-                          <div className="space-y-2">
-                            {isWaiting && (
-                              <div className="p-2.5 bg-amber-50 dark:bg-amber-950/40 rounded-none border border-amber-200 dark:border-amber-800 flex items-center gap-2.5 text-xs text-amber-800 dark:text-amber-300 font-medium shadow-2xs">
-                                <span className="text-base shrink-0 animate-pulse">⏳</span>
-                                <div className="min-w-0">
-                                  <strong className="block font-bold">Bukti Transfer Berhasil Terkirim</strong>
-                                  <span>Sedang menunggu pihak toko memvalidasi pembayaran Anda.</span>
-                                </div>
-                              </div>
-                            )}
-                            {isPaid && (
-                              <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/40 rounded-none border border-emerald-200 dark:border-emerald-800 flex items-center gap-2.5 text-xs text-emerald-800 dark:text-emerald-300 font-medium shadow-2xs">
-                                <CheckCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                                <div className="min-w-0">
-                                  <strong className="block font-bold">Pembayaran Divalidasi Lunas</strong>
-                                  <span>Pembayaran Anda telah diverifikasi oleh kasir toko.</span>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Visual Proof Card */}
+                          return (
                             <div 
                               onClick={() => setSelectedProofs(fullUrls)}
-                              className="group relative overflow-hidden bg-gradient-to-r from-indigo-50 via-blue-50/40 to-purple-50/30 dark:from-indigo-950/40 dark:via-blue-950/20 dark:to-purple-950/30 border-2 border-indigo-300/80 dark:border-indigo-800/80 hover:border-indigo-500 dark:hover:border-indigo-600 rounded-none p-2.5 sm:p-3 transition-all duration-200 hover:shadow-md cursor-pointer active:scale-[0.99] flex items-center justify-between gap-3"
+                              className="group flex items-center justify-between gap-2 p-1.5 bg-gray-50 hover:bg-gray-100 dark:bg-gray-800/60 dark:hover:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-none cursor-pointer transition-all active:scale-[0.99]"
                             >
-                              <div className="flex items-center gap-3 min-w-0">
-                                <div className="relative w-12 h-12 rounded-none overflow-hidden bg-indigo-100 dark:bg-indigo-900/50 shrink-0 ring-2 ring-indigo-400/80 dark:ring-indigo-700 shadow-xs flex items-center justify-center">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className="w-9 h-9 bg-purple-100 dark:bg-purple-900/40 border border-purple-200 dark:border-purple-800 shrink-0 overflow-hidden flex items-center justify-center">
                                   <img 
                                     src={firstProofUrl} 
-                                    alt="Bukti Transfer" 
-                                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                                    alt="Struk Toko" 
+                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                                     onError={(e) => {
                                       e.target.style.display = 'none';
                                       if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
                                     }}
                                   />
-                                  <div className="hidden absolute inset-0 bg-indigo-100 dark:bg-indigo-900/50 items-center justify-center text-indigo-600 dark:text-indigo-400">
-                                    <ImageIcon className="w-5 h-5" />
+                                  <div className="hidden inset-0 items-center justify-center text-purple-600">
+                                    <Receipt className="w-4 h-4" />
                                   </div>
-                                  <span className="absolute bottom-0.5 right-0.5 bg-black/60 text-[9px] text-white px-1 py-0.2 rounded font-bold backdrop-blur-xs">
-                                    💳
-                                  </span>
                                 </div>
-
                                 <div className="min-w-0">
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="text-xs sm:text-sm font-black text-indigo-950 dark:text-indigo-100 truncate">
-                                      Bukti Transfer Anda
-                                    </span>
-                                    <span className="px-1.5 py-0.2 rounded-none text-[10px] font-bold bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                                      {count} Foto
-                                    </span>
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-xs font-bold text-gray-800 dark:text-gray-200 truncate">Struk Toko</span>
+                                    <span className="text-[9px] px-1 py-0.2 bg-purple-100 text-purple-700 dark:bg-purple-900/60 dark:text-purple-300 font-mono font-bold">{count} Foto</span>
                                   </div>
-                                  <p className="text-[11px] text-indigo-700/80 dark:text-indigo-300/80 truncate mt-0.5">
-                                    Klik untuk melihat foto bukti transfer Anda
-                                  </p>
+                                  <span className="text-[10px] text-gray-400 block truncate">Nota kasir kurir</span>
                                 </div>
                               </div>
+                              <span className="text-[11px] font-bold text-purple-600 dark:text-purple-400 shrink-0 flex items-center gap-0.5">
+                                Lihat <Eye className="w-3 h-3" />
+                              </span>
+                            </div>
+                          );
+                        })()}
 
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                <button
-                                  type="button"
-                                  className="px-3 py-1.5 bg-indigo-600 group-hover:bg-indigo-700 text-white rounded-none text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 group-hover:gap-2"
-                                >
-                                  <Eye className="w-3.5 h-3.5" />
-                                  <span>Lihat</span>
-                                </button>
+                        {/* 2. Foto Paket Sampai ke Santri */}
+                        {group.overallStatus === 'completed' && group.proof_of_delivery && group.proof_of_delivery.length > 0 && (() => {
+                          const proofs = group.proof_of_delivery;
+                          const firstProofUrl = getStorageUrl(proofs[0]);
+                          const count = proofs.length;
+                          const fullUrls = proofs.map(p => getStorageUrl(p));
 
+                          return (
+                            <div 
+                              onClick={() => setSelectedProofs(fullUrls)}
+                              className="group flex items-center justify-between gap-2 p-1.5 bg-gray-50 hover:bg-gray-100 dark:bg-gray-800/60 dark:hover:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-none cursor-pointer transition-all active:scale-[0.99]"
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className="w-9 h-9 bg-blue-100 dark:bg-blue-900/40 border border-blue-200 dark:border-blue-800 shrink-0 overflow-hidden flex items-center justify-center">
+                                  <img 
+                                    src={firstProofUrl} 
+                                    alt="Foto Paket" 
+                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                                    onError={(e) => {
+                                      e.target.style.display = 'none';
+                                      if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
+                                    }}
+                                  />
+                                  <div className="hidden inset-0 items-center justify-center text-blue-600">
+                                    <Camera className="w-4 h-4" />
+                                  </div>
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-xs font-bold text-gray-800 dark:text-gray-200 truncate">Paket Santri</span>
+                                    <span className="text-[9px] px-1 py-0.2 bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-300 font-mono font-bold">{count} Foto</span>
+                                  </div>
+                                  <span className="text-[10px] text-gray-400 block truncate">Bukti serah terima</span>
+                                </div>
+                              </div>
+                              <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400 shrink-0 flex items-center gap-0.5">
+                                Lihat <Eye className="w-3 h-3" />
+                              </span>
+                            </div>
+                          );
+                        })()}
+
+                        {/* 3. Bukti Transfer Anda */}
+                        {group.proof_of_payment && (() => {
+                          const proofs = Array.isArray(group.proof_of_payment) ? group.proof_of_payment : [group.proof_of_payment];
+                          const firstProofUrl = getStorageUrl(proofs[0]);
+                          const count = proofs.length;
+                          const fullUrls = proofs.map(p => getStorageUrl(p));
+                          const isPaid = group.payment_status === 'paid';
+                          const isWaiting = group.payment_status === 'waiting_confirmation';
+
+                          return (
+                            <div 
+                              onClick={() => setSelectedProofs(fullUrls)}
+                              className="group flex items-center justify-between gap-2 p-1.5 bg-gray-50 hover:bg-gray-100 dark:bg-gray-800/60 dark:hover:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-none cursor-pointer transition-all active:scale-[0.99]"
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className="w-9 h-9 bg-emerald-100 dark:bg-emerald-900/40 border border-emerald-200 dark:border-emerald-800 shrink-0 overflow-hidden flex items-center justify-center">
+                                  <img 
+                                    src={firstProofUrl} 
+                                    alt="Bukti Transfer" 
+                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                                    onError={(e) => {
+                                      e.target.style.display = 'none';
+                                      if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
+                                    }}
+                                  />
+                                  <div className="hidden inset-0 items-center justify-center text-emerald-600">
+                                    <ImageIcon className="w-4 h-4" />
+                                  </div>
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-xs font-bold text-gray-800 dark:text-gray-200 truncate">Bukti Transfer</span>
+                                    <span className={`text-[9px] px-1 py-0.2 font-mono font-bold ${
+                                      isPaid 
+                                        ? 'bg-green-100 text-green-700 dark:bg-green-900/60 dark:text-green-300' 
+                                        : isWaiting 
+                                        ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-300 animate-pulse' 
+                                        : 'bg-gray-100 text-gray-600'
+                                    }`}>
+                                      {isPaid ? 'Lunas' : isWaiting ? 'Menunggu' : `${count} Foto`}
+                                    </span>
+                                  </div>
+                                  <span className="text-[10px] text-gray-400 block truncate">
+                                    {isPaid ? 'Divalidasi kasir' : isWaiting ? 'Menunggu kasir' : 'Transfer bank'}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <span className="text-[11px] font-bold text-green-600 dark:text-green-400 flex items-center gap-0.5">
+                                  Lihat <Eye className="w-3 h-3" />
+                                </span>
                                 {group.overallStatus !== 'cancelled' && group.payment_status !== 'paid' && (
-                                  <button 
+                                  <button
                                     type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
@@ -1206,20 +1041,21 @@ export default function Pembayaran() {
                                       });
                                       setShowPaymentProofModal(true);
                                     }}
-                                    className="px-2.5 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-none text-xs font-bold shadow-xs transition-all flex items-center gap-1 active:scale-95"
+                                    className="px-1.5 py-0.5 bg-green-600 text-white rounded-none text-[10px] font-bold hover:bg-green-700 transition-colors"
+                                    title="Tambah bukti transfer"
                                   >
-                                    <span>+ Tambah</span>
+                                    +
                                   </button>
                                 )}
                               </div>
                             </div>
-                          </div>
-                        );
-                      })()}
+                          );
+                        })()}
+                      </div>
 
-                      {/* 4. Section Upload Pertama Kali (Jika belum ada bukti & belum lunas) */}
+                      {/* 4. Compact Upload Bar (Jika belum bayar dan belum upload bukti) */}
                       {group.overallStatus !== 'cancelled' && group.payment_status === 'unpaid' && !group.proof_of_payment && (
-                        <div className="space-y-2">
+                        <div className="space-y-1 pt-1">
                           <button 
                             type="button"
                             onClick={() => {
@@ -1232,32 +1068,23 @@ export default function Pembayaran() {
                               });
                               setShowPaymentProofModal(true);
                             }}
-                            className="w-full flex items-center justify-between p-3.5 bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white rounded-none transition-all font-bold shadow-md shadow-green-600/20 active:scale-[0.98] group cursor-pointer"
+                            className="w-full flex items-center justify-between py-2 px-2.5 bg-green-600 hover:bg-green-700 text-white rounded-none transition-all font-bold text-xs shadow-xs active:scale-[0.99] cursor-pointer"
                           >
-                            <div className="flex items-center gap-2.5 text-left">
-                              <div className="w-9 h-9 bg-white/20 rounded-none flex items-center justify-center shrink-0">
-                                <Camera className="w-5 h-5 text-white" />
-                              </div>
-                              <div>
-                                <p className="text-xs sm:text-sm font-extrabold leading-tight">
-                                  {isMulti ? 'Unggah 1 Bukti Transfer Bersama' : 'Unggah Bukti Transfer Sekarang'}
-                                </p>
-                                <p className="text-[10px] text-white/80 font-normal mt-0.5">
-                                  {isMulti 
-                                    ? `Bayar total Rp ${Math.round(group.grandTotal).toLocaleString('id-ID')} untuk ${group.orders.length} toko` 
-                                    : 'Kirim foto bukti transfer agar pesanan segera diproses'}
-                                </p>
-                              </div>
-                            </div>
-                            <span className="px-2.5 py-1 bg-white/20 group-hover:bg-white/30 rounded-none text-xs font-black shrink-0 flex items-center gap-1">
-                              Upload ➔
+                            <span className="flex items-center gap-1.5 truncate">
+                              <Camera className="w-3.5 h-3.5 shrink-0" />
+                              <span className="truncate">
+                                {isMulti ? `Upload Bukti Pembayaran (${group.orders.length} Toko)` : 'Upload Bukti Pembayaran'}
+                              </span>
+                            </span>
+                            <span className="font-mono text-[11px] font-black shrink-0 ml-2">
+                              Rp {Math.round(group.grandTotal).toLocaleString('id-ID')} ➔
                             </span>
                           </button>
 
                           {!group.orders.every(o => isPaymentTime(o)) && (
-                            <p className="text-[11px] text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-3 py-1.5 rounded-none border border-amber-200 dark:border-amber-800/60 flex items-center gap-1.5">
-                              <Clock className="w-3.5 h-3.5 shrink-0 text-amber-600" />
-                              <span>Ada toko yang sedang tutup. Bukti transfer tetap dapat Anda kirim sekarang dan akan diverifikasi saat toko buka.</span>
+                            <p className="text-[10px] text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-2 py-1 rounded-none border border-amber-200 dark:border-amber-800/60 flex items-center gap-1.5">
+                              <Clock className="w-3 h-3 shrink-0 text-amber-600" />
+                              <span>Ada toko sedang tutup. Bukti transfer tetap dapat diunggah dan diverifikasi saat buka.</span>
                             </p>
                           )}
                         </div>
@@ -1265,30 +1092,30 @@ export default function Pembayaran() {
                     </div>
                   )}
 
-                  {/* Rincian Biaya & Total */}
-                  <div className="pt-2 border-t border-gray-200 dark:border-gray-700 space-y-2">
+                  {/* Rincian Biaya & Total (Compact) */}
+                  <div className="pt-2 border-t border-gray-100 dark:border-gray-800 space-y-1.5">
                     <button 
                       onClick={() => toggleOrderDetails(cardKey)}
-                      className="w-full flex items-center justify-between py-1 text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+                      className="w-full flex items-center justify-between text-[11px] text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
                     >
-                      <span className="font-semibold">Rincian Biaya & Ongkir</span>
-                      <span className="text-[10px] font-bold border px-2 py-0.5 rounded-none bg-gray-50 dark:bg-gray-800 dark:border-gray-700 text-gray-600 dark:text-gray-300">
-                        {isExpanded ? 'Tutup ⌃' : 'Lihat ⌄'}
+                      <span className="font-semibold">Rincian Biaya</span>
+                      <span className="text-[10px] font-mono font-bold text-gray-600 dark:text-gray-300">
+                        {isExpanded ? 'Tutup ⌃' : 'Detail ⌄'}
                       </span>
                     </button>
 
                     {isExpanded && (
-                      <div className="space-y-1.5 text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 p-2.5 rounded-none border border-gray-200 dark:border-gray-700/80">
+                      <div className="space-y-1 text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 p-2 rounded-none border border-gray-200 dark:border-gray-700/80">
                         <div className="flex justify-between">
                           <span>Subtotal Produk {isMulti ? `(${group.orders.length} Toko)` : ''}</span>
-                          <span className="font-semibold text-gray-900 dark:text-white">
+                          <span className="font-semibold font-mono text-gray-900 dark:text-white">
                             Rp {Math.round(group.totalProductSubtotal).toLocaleString('id-ID')}
                           </span>
                         </div>
                         {group.totalDeliveryFee > 0 && (
                           <div className="flex justify-between">
                             <span>Ongkos Kirim {isMulti ? `(${group.orders.length} Toko)` : '(Kurir)'}</span>
-                            <span className="font-semibold text-gray-900 dark:text-white">
+                            <span className="font-semibold font-mono text-gray-900 dark:text-white">
                               Rp {Math.round(group.totalDeliveryFee).toLocaleString('id-ID')}
                             </span>
                           </div>
@@ -1296,19 +1123,19 @@ export default function Pembayaran() {
                         {group.totalAdminFee > 0 && (
                           <div className="flex justify-between">
                             <span>Biaya Layanan & Admin {isMulti ? `(${group.orders.length} Toko)` : ''}</span>
-                            <span className="font-semibold text-gray-900 dark:text-white">
+                            <span className="font-semibold font-mono text-gray-900 dark:text-white">
                               Rp {Math.round(group.totalAdminFee).toLocaleString('id-ID')}
                             </span>
                           </div>
                         )}
 
                         {isMulti && (
-                          <div className="pt-1.5 mt-1 border-t border-gray-200 dark:border-gray-700 space-y-1 text-[11px]">
+                          <div className="pt-1 mt-1 border-t border-gray-200 dark:border-gray-700 space-y-0.5 text-[11px]">
                             <span className="font-bold text-gray-700 dark:text-gray-300 block">Rincian Per Toko:</span>
                             {group.orders.map(o => (
                               <div key={o.id} className="flex justify-between text-gray-500 dark:text-gray-400">
                                 <span>{o.canteen?.name || `Toko #${o.canteen_id}`}</span>
-                                <span className="font-medium text-gray-800 dark:text-gray-200">
+                                <span className="font-mono font-medium text-gray-800 dark:text-gray-200">
                                   Rp {Math.round(parseFloat(o.total_price)).toLocaleString('id-ID')}
                                 </span>
                               </div>
@@ -1318,32 +1145,26 @@ export default function Pembayaran() {
                       </div>
                     )}
 
-                    <div className="flex justify-between items-center pt-1">
-                      <div>
-                        <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 font-medium">
-                          Total Pembayaran
-                        </p>
-                        {isMulti && (
-                          <span className="text-[10px] text-green-600 dark:text-green-400 font-semibold">
-                            (1x transfer untuk {group.orders.length} toko)
-                          </span>
-                        )}
-                      </div>
-                      <p className="font-black text-green-700 dark:text-green-400 text-base sm:text-lg">
+                    {/* Total Pembayaran */}
+                    <div className="flex justify-between items-baseline pt-0.5">
+                      <span className="text-xs text-gray-500 dark:text-gray-400 font-bold">
+                        Total {isMulti ? `(${group.orders.length} Toko)` : 'Pesanan'}
+                      </span>
+                      <span className="font-black font-mono text-green-700 dark:text-green-400 text-sm sm:text-base">
                         Rp {Math.round(group.grandTotal).toLocaleString('id-ID')}
-                      </p>
+                      </span>
                     </div>
 
-                    {/* Contact & Receipt Buttons */}
-                    <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+                    {/* Action Buttons: Struk, Chat Toko, Chat Kurir */}
+                    <div className="flex flex-wrap gap-1.5 pt-1.5 border-t border-gray-100 dark:border-gray-800">
                       <button
                         type="button"
                         onClick={() => handleOpenReceipt(group)}
-                        className="flex-1 min-w-[110px] flex items-center justify-center gap-1.5 py-2 px-3 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 border border-gray-200 dark:border-gray-700 rounded-none text-xs font-bold transition-all shadow-2xs active:scale-[0.98] cursor-pointer"
+                        className="flex-1 min-w-[85px] flex items-center justify-center gap-1 py-1.5 px-2 bg-gray-50 hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 border border-gray-200 dark:border-gray-700 rounded-none text-xs font-bold transition-all active:scale-[0.98] cursor-pointer"
                         title="Lihat & Cetak Struk Digital"
                       >
-                        <Receipt className="w-4 h-4 text-green-600 dark:text-green-400" /> 
-                        <span>Struk Digital</span>
+                        <Receipt className="w-3.5 h-3.5 text-green-600 dark:text-green-400" /> 
+                        <span>Struk</span>
                       </button>
 
                       {!isMulti && singleOrder.canteen?.whatsapp_number && (
@@ -1351,10 +1172,10 @@ export default function Pembayaran() {
                           href={formatPhoneWA(singleOrder.canteen.whatsapp_number) + `?text=${encodeURIComponent(buildOrderWAText(singleOrder))}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex-1 min-w-[110px] flex items-center justify-center gap-1.5 py-2 px-3 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800 rounded-none text-xs font-bold transition-all shadow-2xs active:scale-[0.98]"
+                          className="flex-1 min-w-[85px] flex items-center justify-center gap-1 py-1.5 px-2 bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-950/40 dark:text-green-300 dark:hover:bg-green-900/50 border border-green-200 dark:border-green-800 rounded-none text-xs font-bold transition-all active:scale-[0.98]"
                         >
-                          <MessageCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> 
-                          <span>Hubungi Toko</span>
+                          <MessageCircle className="w-3.5 h-3.5 text-green-600 dark:text-green-400" /> 
+                          <span>Chat Toko</span>
                         </a>
                       )}
                       {(() => {
@@ -1365,10 +1186,10 @@ export default function Pembayaran() {
                               href={formatPhoneWA(courierOrder.courier.phone) + `?text=${encodeURIComponent(buildCourierWAText(group))}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="flex-1 min-w-[110px] flex items-center justify-center gap-1.5 py-2 px-3 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-800 rounded-none text-xs font-bold transition-all shadow-2xs active:scale-[0.98]"
+                              className="flex-1 min-w-[85px] flex items-center justify-center gap-1 py-1.5 px-2 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-800 rounded-none text-xs font-bold transition-all active:scale-[0.98]"
                             >
-                              <MessageCircle className="w-4 h-4 text-blue-600 dark:text-blue-400" /> 
-                              <span>Hubungi Kurir</span>
+                              <MessageCircle className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" /> 
+                              <span>Chat Kurir</span>
                             </a>
                           );
                         }
@@ -1378,13 +1199,13 @@ export default function Pembayaran() {
                     
                     {/* Cancel Button */}
                     {allPending && (
-                      <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
+                      <div className="pt-1">
                         <button 
                           onClick={() => handleCancelGroup(group.orders)}
                           disabled={cancelMutation.isPending}
-                          className="w-full flex items-center justify-center gap-1.5 py-2 px-3 bg-red-50 text-red-700 hover:bg-red-100 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-900/50 border border-red-200 dark:border-red-800 rounded-none text-xs font-bold transition-colors disabled:opacity-50"
+                          className="w-full flex items-center justify-center gap-1 py-1.5 px-2 bg-red-50 text-red-700 hover:bg-red-100 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-900/50 border border-red-200 dark:border-red-800 rounded-none text-xs font-bold transition-colors disabled:opacity-50"
                         >
-                          <XCircle className="w-4 h-4" /> 
+                          <XCircle className="w-3.5 h-3.5" /> 
                           {cancelMutation.isPending ? 'Membatalkan...' : `Batalkan Pesanan ${isMulti ? `(${group.orders.length} Toko)` : ''}`}
                         </button>
                       </div>

@@ -80,7 +80,8 @@ class ProductController extends Controller
         $validated = $request->validated();
         
         if ($request->hasFile('image')) {
-            $path = $this->storeOptimizedImage($request->file('image'), $user, 'products');
+            $targetUser = $canteen->user ?: $user;
+            $path = $this->storeOptimizedImage($request->file('image'), $targetUser, 'products');
             $validated['image'] = $path;
         }
 
@@ -104,7 +105,8 @@ class ProductController extends Controller
             if ($product->image && Storage::disk('public')->exists($product->image)) {
                 Storage::disk('public')->delete($product->image);
             }
-            $path = $this->storeOptimizedImage($request->file('image'), $user, 'products');
+            $targetUser = $canteen->user ?: $user;
+            $path = $this->storeOptimizedImage($request->file('image'), $targetUser, 'products');
             $validated['image'] = $path;
         }
 

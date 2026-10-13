@@ -156,7 +156,7 @@ export default function Profile() {
 
   // Fetch multiple canteens
   const { data: canteens = [], isLoading: isLoadingCanteens } = useQuery({
-    queryKey: ['canteens'],
+    queryKey: ['my_canteens_list'],
     queryFn: async () => {
       const res = await api.get('/my-canteens');
       return res.data.data || res.data;

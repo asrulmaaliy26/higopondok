@@ -18,7 +18,11 @@ import {
   Bike,
   AlertCircle,
   UtensilsCrossed,
-  Sparkles
+  Sparkles,
+  Flame,
+  Coffee,
+  Utensils,
+  Check
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api, { getStorageUrl } from '../../lib/axios';
@@ -28,18 +32,7 @@ import { useCartStore } from '../../store/cartStore';
 import AppImage from '../../components/common/AppImage';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { ProductOptionModal } from '../../components/modals/ProductOptionModal';
-
-const hasVariants = (product) => {
-  const cfg = product?.variant_config;
-  if (!cfg) return false;
-  return !!(
-    cfg.spicy?.enabled ||
-    cfg.temperature?.enabled ||
-    cfg.portion?.enabled ||
-    cfg.sugar?.enabled ||
-    (cfg.custom?.enabled && cfg.custom?.groups?.length > 0)
-  );
-};
+import { hasVariants, getAvailableVariantPills } from '../../lib/variantUtils';
 
 export default function DetailKantin() {
   const { id } = useParams({ strict: false });
@@ -402,9 +395,18 @@ export default function DetailKantin() {
           ) : (
             <div className="space-y-2">
               {filteredProducts.map((product) => {
-                const inCart = canteenCart[String(product.id)]?.quantity || 0;
+                const cartItemsForThisProduct = Object.entries(canteenCart || {})
+                  .filter(([key]) => key === String(product.id) || key.startsWith(`${product.id}_`))
+                  .map(([key, item]) => ({
+                    key,
+                    quantity: item.quantity || 0,
+                    options: item.options || [],
+                    notes: item.notes || ''
+                  }));
+                const inCart = cartItemsForThisProduct.reduce((sum, item) => sum + item.quantity, 0);
                 const isAvailable = product.is_available === 1 || product.is_available === true;
                 const productHasVariants = hasVariants(product);
+                const variantPills = productHasVariants ? getAvailableVariantPills(product) : [];
 
                 return (
                   <div
@@ -438,6 +440,61 @@ export default function DetailKantin() {
                         >
                           {product.description || 'Menu lezat & higienis khas kantin santri Al-Mannan'}
                         </p>
+
+                        {/* Deskripsi Opsi Varian yang Tersedia untuk Dipilih */}
+                        {productHasVariants && variantPills.length > 0 && (
+                          <div
+                            onClick={() => isAvailable && handleAddToCart(product)}
+                            className={`mt-1.5 flex flex-wrap gap-1 items-center ${isAvailable ? 'cursor-pointer' : ''}`}
+                          >
+                            <span className="text-[9.5px] font-bold text-purple-700 dark:text-purple-400 uppercase tracking-wider flex items-center gap-0.5">
+                              <Sparkles className="w-2.5 h-2.5 text-purple-500" /> Pilihan:
+                            </span>
+                            {variantPills.map((pill, idx) => (
+                              <span
+                                key={idx}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-purple-50 dark:bg-purple-950/50 text-purple-800 dark:text-purple-200 border border-purple-200 dark:border-purple-800/80 rounded-none text-[10px] font-medium"
+                              >
+                                {pill.type === 'spicy' && <Flame className="w-2.5 h-2.5 text-red-500 shrink-0" />}
+                                {pill.type === 'temperature' && <Coffee className="w-2.5 h-2.5 text-blue-500 shrink-0" />}
+                                {pill.type === 'portion' && <Utensils className="w-2.5 h-2.5 text-emerald-600 shrink-0" />}
+                                {pill.type !== 'spicy' && pill.type !== 'temperature' && pill.type !== 'portion' && (
+                                  <Sparkles className="w-2.5 h-2.5 text-purple-500 shrink-0" />
+                                )}
+                                <span>{pill.label}</span>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Rincian Varian yang Sudah Dipilih ke Keranjang */}
+                        {cartItemsForThisProduct.length > 0 && (
+                          <div className="mt-1.5 flex flex-wrap gap-1 items-center">
+                            <span className="text-[9.5px] font-bold text-green-700 dark:text-green-300 uppercase tracking-wider flex items-center gap-0.5">
+                              <Check className="w-2.5 h-2.5" /> Terpilih:
+                            </span>
+                            {cartItemsForThisProduct.map((cartItem) => (
+                              <span
+                                key={cartItem.key}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-green-50 dark:bg-green-950/40 text-green-800 dark:text-green-300 border border-green-200 dark:border-green-800 rounded-none text-[10px] font-mono font-bold"
+                              >
+                                <span className="bg-green-600 text-white px-1 py-0.1 text-[9px]">
+                                  {cartItem.quantity}x
+                                </span>
+                                <span>
+                                  {cartItem.options && cartItem.options.length > 0
+                                    ? cartItem.options.join(', ')
+                                    : 'Standar'}
+                                </span>
+                                {cartItem.notes && (
+                                  <span className="text-[9px] text-gray-500 dark:text-gray-400 font-sans italic font-normal">
+                                    ({cartItem.notes})
+                                  </span>
+                                )}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
 
                       <div className="pt-2 mt-1 flex items-center justify-between">

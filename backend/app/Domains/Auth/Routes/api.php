@@ -38,7 +38,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/admin/canteens/{id}/toggle-direct-close', [AdminController::class, 'toggleDirectClose']);
         Route::get('/admin/stats', [AdminController::class, 'dashboardStats']);
         Route::put('/admin/canteens/{id}/fees', [AdminController::class, 'updateFees']);
+        Route::put('/admin/canteens/{id}/couriers', [AdminController::class, 'updateCouriers']);
+        Route::get('/admin/couriers-list', [AdminController::class, 'couriersList']);
         Route::put('/admin/canteens/{id}/hours', [AdminController::class, 'updateHours']);
+        Route::put('/admin/products/{id}/toggle-availability', [AdminController::class, 'toggleProductAvailability']);
         Route::post('/admin/canteens/{id}/pay-debt', [AdminController::class, 'payAdminDebt']);
         Route::post('/admin/canteens/{id}/withdraw', [AdminController::class, 'processWithdrawal']);
         

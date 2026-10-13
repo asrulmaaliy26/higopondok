@@ -2,17 +2,7 @@ import React, { useState } from 'react';
 import { Store, Save, Plus, Edit2, Trash2, X, ChevronLeft, ChevronRight, Star, Clock, CheckCircle2, ChevronDown, Search, User, Flame, Layers, Sparkles } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
-const hasVariants = (product) => {
-  const cfg = product?.variant_config;
-  if (!cfg) return false;
-  return !!(
-    cfg.spicy?.enabled ||
-    cfg.temperature?.enabled ||
-    cfg.portion?.enabled ||
-    cfg.sugar?.enabled ||
-    (cfg.custom?.enabled && Array.isArray(cfg.custom?.groups) && cfg.custom?.groups?.length > 0)
-  );
-};
+import { hasVariants, getAvailableVariantPills } from '../../lib/variantUtils';
 import { useNavigate } from '@tanstack/react-router';
 import toast from 'react-hot-toast';
 import api, { getStorageUrl } from '../../lib/axios';
@@ -817,6 +807,20 @@ export default function TokoSaya() {
                       <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1 line-clamp-2 leading-snug">
                         {product.description}
                       </p>
+                    )}
+
+                    {/* Rincian Opsi Varian Aktif */}
+                    {hasVariants(product) && (
+                      <div className="mt-1 flex flex-wrap gap-1 items-center">
+                        {getAvailableVariantPills(product).map((pill, pIdx) => (
+                          <span
+                            key={pIdx}
+                            className="text-[9.5px] px-1.5 py-0.2 bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 rounded-none font-semibold"
+                          >
+                            {pill.label}
+                          </span>
+                        ))}
+                      </div>
                     )}
                     
                     {/* Stock & Availability */}

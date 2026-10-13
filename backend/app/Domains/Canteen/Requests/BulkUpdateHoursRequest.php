@@ -11,7 +11,7 @@ class BulkUpdateHoursRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return $this->user() && $this->user()->hasRole('admin');
+        return $this->user() && ($this->user()->hasRole('admin') || $this->user()->hasRole('super_admin'));
     }
 
     /**

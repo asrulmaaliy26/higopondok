@@ -27,13 +27,20 @@ import {
   Eye,
   EyeOff,
   UploadCloud,
-  Plus
+  Plus,
+  Truck,
+  UtensilsCrossed,
+  Package,
+  Tag,
+  Pencil
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import AppImage from '../../components/common/AppImage';
 import { PRICING_CONFIG } from '../../config/pricing';
 import { useAuthStore } from '../../store/authStore';
 import { ROLES } from '../../config/roles';
+import { ProductFormModal } from '../../components/modals/ProductFormModal';
+import { hasVariants, getAvailableVariantPills } from '../../lib/variantUtils';
 
 /**
  * =====================================================
@@ -79,6 +86,10 @@ export default function Pertokoan() {
   const [quickOpenTime, setQuickOpenTime] = useState('08:00');
   const [quickCloseTime, setQuickCloseTime] = useState('22:00');
 
+  // Quick Courier Assignment modal for a single canteen
+  const [courierModalCanteen, setCourierModalCanteen] = useState(null);
+  const [selectedCourierIds, setSelectedCourierIds] = useState([]);
+
   // Bulk Hours Edit modal
   const [isBulkHoursModalOpen, setIsBulkHoursModalOpen] = useState(false);
   const [bulkCategory, setBulkCategory] = useState('all');
@@ -96,6 +107,15 @@ export default function Pertokoan() {
   const [detailOpenTime, setDetailOpenTime] = useState('');
   const [detailCloseTime, setDetailCloseTime] = useState('');
   const [detailCategory, setDetailCategory] = useState('kauman');
+
+  // Detail Modal Tab & Menu Listing states
+  const [detailTab, setDetailTab] = useState('info'); // 'info' | 'menu'
+  const [menuSearch, setMenuSearch] = useState('');
+  const [menuCategoryFilter, setMenuCategoryFilter] = useState('all');
+  const [menuStatusFilter, setMenuStatusFilter] = useState('all'); // 'all' | 'available' | 'unavailable'
+  const [viewProductImage, setViewProductImage] = useState(null);
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState(null);
 
   // Banner Management states for selected canteen
   const [newBannerTitle, setNewBannerTitle] = useState('');
@@ -121,11 +141,21 @@ export default function Pertokoan() {
     }
   });
 
+  // 3. Fetch Couriers List for Store Assignment
+  const { data: couriersList = [] } = useQuery({
+    queryKey: ['admin_couriers_list'],
+    queryFn: async () => {
+      const res = await axios.get('/admin/couriers-list');
+      return res.data || [];
+    }
+  });
+
   const isGlobalForceClosed = Boolean(globalStatus?.is_global_force_closed);
 
   const invalidateAllCanteenQueries = () => {
     queryClient.invalidateQueries({ queryKey: ['admin-canteens'] });
     queryClient.invalidateQueries({ queryKey: ['admin-canteens-status'] });
+    queryClient.invalidateQueries({ queryKey: ['admin_couriers_list'] });
     queryClient.invalidateQueries({ queryKey: ['canteens'] });
     queryClient.invalidateQueries({ queryKey: ['public_canteens_list'] });
     queryClient.invalidateQueries({ queryKey: ['my_canteens_list'] });
@@ -265,6 +295,25 @@ export default function Pertokoan() {
     }
   });
 
+  // Update Canteen Couriers
+  const updateCouriersMutation = useMutation({
+    mutationFn: async ({ id, courier_ids }) => {
+      const res = await axios.put(`/admin/canteens/${id}/couriers`, { courier_ids });
+      return res.data;
+    },
+    onSuccess: (data) => {
+      toast.success(data.message || 'Kurir toko berhasil diperbarui');
+      invalidateAllCanteenQueries();
+      if (selectedCanteen && selectedCanteen.id === data.canteen?.id) {
+        setSelectedCanteen(data.canteen);
+      }
+      setCourierModalCanteen(null);
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.message || 'Gagal memperbarui kurir toko');
+    }
+  });
+
   // Withdraw Canteen Balance
   const withdrawMutation = useMutation({
     mutationFn: async ({ id, amount, notes }) => {
@@ -370,6 +419,129 @@ export default function Pertokoan() {
     }
   });
 
+  // Fetch products for selected canteen in detail modal (fallback & real-time cache)
+  const { 
+    data: canteenProductsData, 
+    isLoading: isLoadingProducts, 
+    refetch: refetchProducts 
+  } = useQuery({
+    queryKey: ['canteen-products', selectedCanteen?.id],
+    queryFn: async () => {
+      const res = await axios.get(`/my-products?canteen_id=${selectedCanteen.id}&all=true`);
+      return res.data?.data || res.data || [];
+    },
+    enabled: !!selectedCanteen?.id,
+    staleTime: 1000 * 60 * 2,
+  });
+
+  // Toggle product availability mutation
+  const toggleProductAvailabilityMutation = useMutation({
+    mutationFn: async (productId) => {
+      const res = await axios.put(`/admin/products/${productId}/toggle-availability`);
+      return res.data;
+    },
+    onSuccess: (data) => {
+      toast.success(data.message || 'Status ketersediaan menu berhasil diperbarui');
+      queryClient.invalidateQueries({ queryKey: ['canteen-products', selectedCanteen?.id] });
+      queryClient.invalidateQueries({ queryKey: ['admin-canteens'] });
+      if (selectedCanteen && selectedCanteen.products) {
+        const updated = (selectedCanteen.products || []).map(p => 
+          p.id === data.product?.id ? { ...p, is_available: data.product.is_available } : p
+        );
+        setSelectedCanteen({ ...selectedCanteen, products: updated });
+      }
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.message || 'Gagal mengubah status ketersediaan menu');
+    }
+  });
+
+  // Save/Update Product Mutation (Admin / Super Admin)
+  const saveProductMutation = useMutation({
+    mutationFn: async (formData) => {
+      const activeCanteenId = selectedCanteen.id;
+      if (editingProduct) {
+        formData.append('_method', 'PUT');
+        const res = await axios.post(`/my-products/${editingProduct.id}?canteen_id=${activeCanteenId}`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        return res.data;
+      }
+      const res = await axios.post(`/my-products?canteen_id=${activeCanteenId}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      return res.data;
+    },
+    onSuccess: (data) => {
+      toast.success(editingProduct ? 'Menu berhasil diperbarui!' : 'Menu baru berhasil ditambahkan!');
+      setIsProductModalOpen(false);
+      setEditingProduct(null);
+      queryClient.invalidateQueries({ queryKey: ['canteen-products', selectedCanteen?.id] });
+      queryClient.invalidateQueries({ queryKey: ['admin-canteens'] });
+      if (selectedCanteen && selectedCanteen.products) {
+        const prodData = data.product?.data || data.product;
+        if (prodData) {
+          if (editingProduct) {
+            const updated = selectedCanteen.products.map(p => p.id === prodData.id ? prodData : p);
+            setSelectedCanteen({ ...selectedCanteen, products: updated });
+          } else {
+            setSelectedCanteen({ ...selectedCanteen, products: [prodData, ...selectedCanteen.products] });
+          }
+        }
+      }
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.message || 'Gagal menyimpan data menu');
+    }
+  });
+
+  const handleSaveProduct = async (data, file) => {
+    if (!selectedCanteen) return;
+    const formData = new FormData();
+    const priceVal = parseFloat(data.price || 0);
+    const fallbackHpp = priceVal > 1000 ? priceVal - 1000 : priceVal;
+    const finalHpp = data.hpp !== undefined && data.hpp !== '' ? parseFloat(data.hpp) : fallbackHpp;
+
+    formData.append('name', data.name);
+    formData.append('category', data.category || '');
+    formData.append('description', data.description || '');
+    if (data.variant_config) {
+      formData.append('variant_config', typeof data.variant_config === 'string' ? data.variant_config : JSON.stringify(data.variant_config));
+    }
+    formData.append('price', priceVal);
+    formData.append('hpj', priceVal);
+    formData.append('hpp', finalHpp);
+    formData.append('stock', parseInt(data.stock || 0, 10));
+    formData.append('is_available', data.is_available ? 1 : 0);
+    
+    if (file) {
+      formData.append('image', file);
+    }
+    formData.append('canteen_id', selectedCanteen.id);
+    
+    await saveProductMutation.mutateAsync(formData);
+  };
+
+  // Delete product mutation (Admin / Super Admin)
+  const deleteProductMutation = useMutation({
+    mutationFn: async (productId) => {
+      const res = await axios.delete(`/my-products/${productId}?canteen_id=${selectedCanteen.id}`);
+      return res.data;
+    },
+    onSuccess: (data, productId) => {
+      toast.success(data.message || 'Menu berhasil dihapus');
+      queryClient.invalidateQueries({ queryKey: ['canteen-products', selectedCanteen?.id] });
+      queryClient.invalidateQueries({ queryKey: ['admin-canteens'] });
+      if (selectedCanteen && selectedCanteen.products) {
+        const updated = selectedCanteen.products.filter(p => p.id !== productId);
+        setSelectedCanteen({ ...selectedCanteen, products: updated });
+      }
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.message || 'Gagal menghapus menu');
+    }
+  });
+
   const handleBannerFileChange = (e) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -405,6 +577,13 @@ export default function Pertokoan() {
   // --- HANDLERS ---
   const handleOpenDetail = (canteen) => {
     setSelectedCanteen(canteen);
+    setDetailTab('info');
+    setMenuSearch('');
+    setMenuCategoryFilter('all');
+    setMenuStatusFilter('all');
+    setViewProductImage(null);
+    setIsProductModalOpen(false);
+    setEditingProduct(null);
     setDetailCategory(canteen.category || 'kauman');
     setDetailOpenTime(canteen.open_time?.substring(0, 5) || '08:00');
     setDetailCloseTime(canteen.close_time?.substring(0, 5) || '22:00');
@@ -420,6 +599,13 @@ export default function Pertokoan() {
     setQuickHoursCanteen(canteen);
     setQuickOpenTime(canteen.open_time?.substring(0, 5) || '08:00');
     setQuickCloseTime(canteen.close_time?.substring(0, 5) || '22:00');
+  };
+
+  const handleOpenCourierModal = (e, canteen) => {
+    e?.stopPropagation();
+    setCourierModalCanteen(canteen);
+    const currentIds = canteen.couriers ? canteen.couriers.map(c => c.id) : (canteen.courier_ids || []);
+    setSelectedCourierIds(currentIds);
   };
 
   const handleDirectToggleClose = (e, canteen) => {
@@ -489,6 +675,27 @@ export default function Pertokoan() {
     // Filter zona dinamis dari CANTEEN_ZONES
     if (CANTEEN_ZONES.some(z => z.id === filterTab)) return c.category === filterTab;
     return true;
+  });
+
+  // --- DETAIL MODAL PRODUCTS CALCULATION ---
+  const rawProducts = canteenProductsData || selectedCanteen?.products || [];
+  const totalProductsCount = rawProducts.length;
+  const availableProductsCount = rawProducts.filter(p => p.is_available).length;
+  const unavailableProductsCount = totalProductsCount - availableProductsCount;
+
+  // Extract unique categories from products
+  const productCategories = Array.from(new Set(rawProducts.map(p => p.category).filter(Boolean)));
+
+  // Filter products by search, category, and status
+  const filteredProducts = rawProducts.filter(p => {
+    const matchesSearch = !menuSearch || 
+      p.name?.toLowerCase().includes(menuSearch.toLowerCase()) || 
+      p.description?.toLowerCase().includes(menuSearch.toLowerCase());
+    const matchesCategory = menuCategoryFilter === 'all' || p.category === menuCategoryFilter;
+    const matchesStatus = menuStatusFilter === 'all' || 
+      (menuStatusFilter === 'available' && p.is_available) || 
+      (menuStatusFilter === 'unavailable' && !p.is_available);
+    return matchesSearch && matchesCategory && matchesStatus;
   });
 
   return (
@@ -780,21 +987,24 @@ export default function Pertokoan() {
                             </span>
                           </div>
                           
-                          <div className="flex items-center gap-1 flex-wrap mt-0.5">
-                            <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate flex items-center gap-0.5 leading-none">
+                          <div className="flex items-center gap-1.5 text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 truncate">
+                            <span className="truncate flex items-center gap-0.5">
                               <User className="w-2.5 h-2.5 text-gray-400 shrink-0" />
                               <span className="truncate">{canteen.user?.name || '-'}</span>
-                            </p>
-                            {canteen.banners && canteen.banners.length > 0 ? (
-                              <span className="inline-flex items-center gap-0.5 px-1 py-0.2 text-[7.5px] font-black bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 rounded-none shrink-0" title="Toko ini sudah memasang banner promosi">
-                                <Sparkles className="w-2 h-2 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                                <span>Banner ({canteen.banners.length})</span>
+                            </span>
+                            <span className="text-gray-300 dark:text-gray-700 shrink-0">•</span>
+                            <span 
+                              onClick={(e) => handleOpenCourierModal(e, canteen)}
+                              className="truncate flex items-center gap-0.5 font-medium cursor-pointer hover:underline text-gray-700 dark:text-gray-300"
+                              title="Klik untuk mengatur kurir"
+                            >
+                              <Truck className="w-2.5 h-2.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                              <span className="truncate">
+                                {canteen.couriers && canteen.couriers.length > 0
+                                  ? canteen.couriers.map(c => c.name).join(', ')
+                                  : 'Belum ada kurir'}
                               </span>
-                            ) : (
-                              <span className="inline-flex items-center px-1 py-0.2 text-[7.5px] font-medium bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500 border border-gray-200 dark:border-gray-700 rounded-none shrink-0" title="Belum pasang banner">
-                                Tanpa Banner
-                              </span>
-                            )}
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -808,9 +1018,9 @@ export default function Pertokoan() {
                       </div>
                     </div>
 
-                    {/* Bottom Row: Operational Status Badge & Action Buttons */}
-                    <div className="flex items-center justify-between gap-1 pt-1 border-t border-gray-100 dark:border-gray-800">
-                      <div className="flex items-center gap-1 min-w-0">
+                    {/* Middle Row: Operational Status Badge & Toggle Button */}
+                    <div className="flex items-center justify-between gap-1 pt-1.5 border-t border-gray-100 dark:border-gray-800">
+                      <div className="min-w-0">
                         {canteen.status === 'pending' ? (
                           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 text-[9px] font-bold rounded-none border border-amber-200 dark:border-amber-800 truncate">
                             <span className="w-1.5 h-1.5 rounded-none bg-amber-500 animate-pulse shrink-0"></span>
@@ -839,10 +1049,9 @@ export default function Pertokoan() {
                         )}
                       </div>
 
-                      {/* Action Buttons Group */}
-                      <div className="flex items-center gap-1 shrink-0">
-                        {/* Direct Approve Canteen Button if Pending */}
-                        {canteen.status === 'pending' && (
+                      {/* Direct Toggle Action (Approve if pending, or Buka/Tutup) */}
+                      <div>
+                        {canteen.status === 'pending' ? (
                           <button
                             type="button"
                             onClick={(e) => {
@@ -853,21 +1062,18 @@ export default function Pertokoan() {
                             }}
                             disabled={approveCanteenMutation.isPending}
                             title="Setujui toko ini agar mulai aktif berjualan"
-                            className="px-1.5 py-0.5 bg-green-600 hover:bg-green-700 text-white rounded-none text-[10px] font-bold flex items-center gap-0.5 shadow-xs transition-all disabled:opacity-50 cursor-pointer"
+                            className="px-2 py-0.5 bg-green-600 hover:bg-green-700 text-white rounded-none text-[10px] font-bold flex items-center gap-1 shadow-xs transition-all disabled:opacity-50 cursor-pointer"
                           >
                             <CheckCircle size={10} />
                             <span>{approveCanteenMutation.isPending ? '...' : 'Setujui'}</span>
                           </button>
-                        )}
-
-                        {/* Direct Toggle Close / Open */}
-                        {canteen.status === 'approved' && (
+                        ) : (
                           <button
                             type="button"
                             onClick={(e) => handleDirectToggleClose(e, canteen)}
                             disabled={toggleDirectCloseMutation.isPending}
                             title={canteen.is_force_closed ? 'Buka toko kembali' : 'Tutup toko sekarang'}
-                            className={`px-1.5 py-0.5 rounded-none text-[10px] font-bold flex items-center gap-0.5 transition-all shadow-xs cursor-pointer ${
+                            className={`px-2 py-0.5 rounded-none text-[10px] font-bold flex items-center gap-1 transition-all shadow-xs cursor-pointer ${
                               canteen.is_force_closed
                                 ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
                                 : 'bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 dark:bg-red-950/50 dark:text-red-300 dark:border-red-800'
@@ -877,59 +1083,61 @@ export default function Pertokoan() {
                             <span>{canteen.is_force_closed ? 'Buka' : 'Tutup'}</span>
                           </button>
                         )}
-
-                        {/* Banner Management Button */}
-                        <button
-                          type="button"
-                          onClick={() => handleOpenDetail(canteen)}
-                          title={canteen.banners?.length > 0 ? `Kelola ${canteen.banners.length} banner toko ini` : 'Unggah banner promosi untuk toko ini'}
-                          className={`px-1.5 py-0.5 rounded-none text-[10px] font-bold flex items-center gap-0.5 transition-colors border cursor-pointer ${
-                            canteen.banners?.length > 0
-                              ? 'bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
-                              : 'bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-700'
-                          }`}
-                        >
-                          <ImageIcon className="w-2.5 h-2.5" />
-                          <span>Banner{canteen.banners?.length > 0 ? ` (${canteen.banners.length})` : ''}</span>
-                        </button>
-
-                        {/* Quick Edit Hours */}
-                        <button
-                          type="button"
-                          onClick={(e) => handleOpenQuickHours(e, canteen)}
-                          title="Atur jam buka/tutup toko ini"
-                          className="px-1.5 py-0.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-none text-[10px] font-bold flex items-center gap-0.5 transition-colors border border-gray-200 dark:border-gray-700 cursor-pointer"
-                        >
-                          <Clock className="w-2.5 h-2.5 text-gray-500" />
-                          <span>Jam</span>
-                        </button>
-
-                        {/* Full Detail */}
-                        <button
-                          type="button"
-                          onClick={() => handleOpenDetail(canteen)}
-                          className="px-2 py-0.5 bg-green-50 hover:bg-green-100 dark:bg-green-950/40 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800/60 rounded-none text-[10px] font-bold transition-colors cursor-pointer"
-                        >
-                          Detail
-                        </button>
-
-                        {/* Super Admin Delete Store */}
-                        {isSuperAdmin && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setCanteenToDelete(canteen);
-                              setDeleteConfirmText('');
-                            }}
-                            title="Hapus toko ini permanen beserta seluruh produk, transaksi, & profitnya"
-                            className="px-1.5 py-0.5 bg-red-50 hover:bg-red-600 text-red-600 hover:text-white dark:bg-red-950/40 dark:text-red-400 dark:hover:text-white border border-red-200 dark:border-red-800 rounded-none text-[10px] font-bold flex items-center gap-0.5 transition-colors cursor-pointer"
-                          >
-                            <Trash2 className="w-2.5 h-2.5" />
-                            <span>Hapus</span>
-                          </button>
-                        )}
                       </div>
+                    </div>
+
+                    {/* Bottom Row: 4 Equal-Width Action Buttons Grid (Presisi & Bebas Potong) */}
+                    <div className="grid grid-cols-4 gap-1 pt-1 border-t border-gray-100 dark:border-gray-800">
+                      {/* Tombol 1: Kurir */}
+                      <button
+                        type="button"
+                        onClick={(e) => handleOpenCourierModal(e, canteen)}
+                        title="Atur kurir yang bertugas untuk toko ini"
+                        className={`w-full py-1 px-0.5 rounded-none text-[10px] font-bold flex items-center justify-center gap-0.5 transition-colors border cursor-pointer truncate ${
+                          canteen.couriers?.length > 0
+                            ? 'bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
+                            : 'bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-800'
+                        }`}
+                      >
+                        <Truck className="w-2.5 h-2.5 shrink-0" />
+                        <span className="truncate">Kurir{canteen.couriers?.length > 0 ? ` (${canteen.couriers.length})` : ''}</span>
+                      </button>
+
+                      {/* Tombol 2: Banner */}
+                      <button
+                        type="button"
+                        onClick={() => handleOpenDetail(canteen)}
+                        title="Kelola banner promosi toko ini"
+                        className={`w-full py-1 px-0.5 rounded-none text-[10px] font-bold flex items-center justify-center gap-0.5 transition-colors border cursor-pointer truncate ${
+                          canteen.banners?.length > 0
+                            ? 'bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                            : 'bg-gray-50 hover:bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700'
+                        }`}
+                      >
+                        <ImageIcon className="w-2.5 h-2.5 shrink-0" />
+                        <span className="truncate">Banner{canteen.banners?.length > 0 ? ` (${canteen.banners.length})` : ''}</span>
+                      </button>
+
+                      {/* Tombol 3: Jam */}
+                      <button
+                        type="button"
+                        onClick={(e) => handleOpenQuickHours(e, canteen)}
+                        title="Atur jam buka/tutup toko ini"
+                        className="w-full py-1 px-0.5 bg-gray-50 hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-none text-[10px] font-bold flex items-center justify-center gap-0.5 transition-colors border border-gray-200 dark:border-gray-700 cursor-pointer truncate"
+                      >
+                        <Clock className="w-2.5 h-2.5 shrink-0 text-gray-500" />
+                        <span className="truncate">Jam</span>
+                      </button>
+
+                      {/* Tombol 4: Detail */}
+                      <button
+                        type="button"
+                        onClick={() => handleOpenDetail(canteen)}
+                        title="Buka rincian lengkap toko"
+                        className="w-full py-1 px-0.5 bg-green-600 hover:bg-green-700 active:scale-98 text-white rounded-none text-[10px] font-bold transition-all shadow-xs flex items-center justify-center gap-0.5 cursor-pointer truncate"
+                      >
+                        <span className="truncate">Detail</span>
+                      </button>
                     </div>
                   </div>
                 );
@@ -1134,6 +1342,154 @@ export default function Pertokoan() {
         document.body
       )}
 
+      {/* --- MODAL KHUSUS: ATUR KURIR TOKO --- */}
+      {courierModalCanteen && createPortal(
+        <div className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-gray-900 rounded-none w-full max-w-md p-3.5 sm:p-4 shadow-2xl border border-gray-200 dark:border-gray-800 space-y-3 my-auto animate-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-2 border-b border-gray-100 dark:border-gray-800">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-none bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center border border-emerald-300 dark:border-emerald-800 shrink-0">
+                  <Truck className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="font-bold text-sm text-gray-900 dark:text-white">Atur Kurir Toko</h3>
+                  <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate max-w-[240px]">
+                    {courierModalCanteen.name}
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setCourierModalCanteen(null)}
+                className="w-7 h-7 rounded-none bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-500 flex items-center justify-center transition-colors border border-gray-200 dark:border-gray-700 cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Info notice */}
+            <div className="p-2 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 text-[11px] text-emerald-800 dark:text-emerald-300 leading-snug">
+              Pilih kurir yang bertanggung jawab mengantar pesanan dari <strong>{courierModalCanteen.name}</strong>. Anda dapat memilih 1 kurir utama atau lebih.
+            </div>
+
+            {/* Couriers List */}
+            <div className="space-y-1.5 max-h-[260px] overflow-y-auto pr-0.5">
+              {couriersList.length === 0 ? (
+                <div className="text-center py-4 text-xs text-gray-400">
+                  Belum ada akun pengguna dengan role kurir di sistem.
+                </div>
+              ) : (
+                couriersList.map((courier) => {
+                  const isSelected = selectedCourierIds.includes(courier.id);
+                  const otherCanteens = (courier.assigned_canteens || []).filter(c => c.id !== courierModalCanteen.id);
+
+                  return (
+                    <div 
+                      key={courier.id}
+                      onClick={() => {
+                        setSelectedCourierIds(prev => 
+                          prev.includes(courier.id)
+                            ? prev.filter(id => id !== courier.id)
+                            : [...prev, courier.id]
+                        );
+                      }}
+                      className={`p-2 rounded-none border transition-all cursor-pointer flex items-start justify-between gap-2 ${
+                        isSelected 
+                          ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 ring-1 ring-emerald-500' 
+                          : 'bg-white dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                      }`}
+                    >
+                      <div className="flex items-start gap-2 min-w-0">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => {}}
+                          className="mt-0.5 rounded-none text-emerald-600 focus:ring-emerald-500 shrink-0"
+                        />
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-bold text-xs text-gray-900 dark:text-white truncate">
+                              {courier.name}
+                            </span>
+                            {courier.is_working ? (
+                              <span className="text-[9px] font-bold text-emerald-600 bg-emerald-100 dark:bg-emerald-900/40 px-1 rounded-none border border-emerald-300 dark:border-emerald-800">
+                                Aktif
+                              </span>
+                            ) : (
+                              <span className="text-[9px] font-medium text-gray-500 bg-gray-100 dark:bg-gray-700 px-1 rounded-none">
+                                Off
+                              </span>
+                            )}
+                          </div>
+                          {courier.phone && (
+                            <p className="text-[10px] text-gray-500 dark:text-gray-400">{courier.phone}</p>
+                          )}
+                          {otherCanteens.length > 0 && (
+                            <p className="text-[9px] text-gray-400 dark:text-gray-500 truncate mt-0.5">
+                              Toko lain: {otherCanteens.map(c => c.name).join(', ')}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Quick single-select button */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedCourierIds([courier.id]);
+                        }}
+                        title="Jadikan satu-satunya kurir untuk toko ini"
+                        className="px-1.5 py-0.5 bg-gray-100 hover:bg-emerald-100 text-gray-700 hover:text-emerald-800 dark:bg-gray-700 dark:hover:bg-emerald-900 dark:text-gray-300 text-[9px] font-bold rounded-none border border-gray-200 dark:border-gray-600 shrink-0 cursor-pointer"
+                      >
+                        Pilih Tunggal
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Quick Action buttons & Submit */}
+            <div className="flex items-center justify-between gap-2 pt-1 border-t border-gray-100 dark:border-gray-800">
+              <button
+                type="button"
+                onClick={() => setSelectedCourierIds([])}
+                className="text-[10px] text-red-600 hover:underline font-bold cursor-pointer"
+              >
+                Kosongkan Kurir
+              </button>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setCourierModalCanteen(null)}
+                  className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-bold text-xs rounded-none border border-gray-200 dark:border-gray-700 transition-colors cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateCouriersMutation.mutate({
+                      id: courierModalCanteen.id,
+                      courier_ids: selectedCourierIds
+                    });
+                  }}
+                  disabled={updateCouriersMutation.isPending}
+                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-none shadow-xs flex items-center justify-center gap-1.5 disabled:opacity-50 transition-all cursor-pointer"
+                >
+                  <Save size={13} />
+                  <span>{updateCouriersMutation.isPending ? 'Menyimpan...' : 'Simpan Kurir'}</span>
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>,
+        document.body
+      )}
+
       {/* --- MODAL 3: DETAIL TOKO LENGKAP (HIGH DENSITY & COMPACT GOBIZ STYLE) --- */}
       {selectedCanteen && createPortal(
         <div className="fixed inset-0 z-[100] bg-white dark:bg-gray-950 flex flex-col animate-in slide-in-from-bottom-full duration-200 font-sans">
@@ -1175,8 +1531,44 @@ export default function Pertokoan() {
             </div>
           </div>
           
+          {/* Sticky Tab Navigation Bar */}
+          <div className="sticky top-[41px] z-20 bg-gray-50/95 dark:bg-gray-900/95 backdrop-blur-xs border-b border-gray-200 dark:border-gray-800 px-2.5 sm:px-3 py-1 flex items-center gap-1 shadow-xs">
+            <button
+              type="button"
+              onClick={() => setDetailTab('info')}
+              className={`flex-1 py-1.5 px-2 text-[11px] font-bold rounded-none border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                detailTab === 'info'
+                  ? 'bg-green-600 text-white border-green-600 shadow-xs'
+                  : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-750'
+              }`}
+            >
+              <SlidersHorizontal size={12} className="shrink-0" />
+              <span>Pengaturan & Info Toko</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setDetailTab('menu')}
+              className={`flex-1 py-1.5 px-2 text-[11px] font-bold rounded-none border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                detailTab === 'menu'
+                  ? 'bg-green-600 text-white border-green-600 shadow-xs'
+                  : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-750'
+              }`}
+            >
+              <UtensilsCrossed size={12} className="shrink-0" />
+              <span>Daftar Menu Toko</span>
+              <span className={`px-1.5 py-0.2 text-[9.5px] font-mono font-black rounded-none ${
+                detailTab === 'menu'
+                  ? 'bg-green-800 text-white'
+                  : 'bg-green-100 dark:bg-green-950/60 text-green-700 dark:text-green-300'
+              }`}>
+                {totalProductsCount}
+              </span>
+            </button>
+          </div>
+
           <div className="flex-1 overflow-y-auto p-1.5 sm:p-2.5 pb-16 space-y-1.5 max-w-4xl mx-auto w-full">
-            
+            {detailTab === 'info' && (
+              <>
             {/* Quick Status & Action Bar - Ramping & Padat */}
             <div className="p-1.5 sm:p-2 rounded-none bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 flex items-center justify-between gap-2 shadow-xs">
               <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
@@ -1461,8 +1853,8 @@ export default function Pertokoan() {
               )}
             </div>
 
-            {/* Grid 2 Kolom: Zona Lokasi & Jam Operasional Berdampingan di Desktop */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+            {/* Grid 3 Kolom: Zona Lokasi, Jam Operasional, & Kurir Pengantar Berdampingan */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-1.5">
               {/* Card A: Zona Lokasi & Tarif Layanan (Ramping) */}
               <div className="bg-white dark:bg-gray-900 p-2 sm:p-2.5 rounded-none border border-gray-200 dark:border-gray-800 shadow-xs space-y-1.5 flex flex-col justify-between">
                 <div>
@@ -1567,6 +1959,70 @@ export default function Pertokoan() {
                   Format 24 jam (Jam Buka s/d Jam Tutup toko)
                 </p>
               </div>
+
+              {/* Card C: Kurir Pengantar Toko (Ramping) */}
+              <div className="bg-white dark:bg-gray-900 p-2 sm:p-2.5 rounded-none border border-gray-200 dark:border-gray-800 shadow-xs space-y-1.5 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between gap-1 mb-1">
+                    <h3 className="font-bold text-[10.5px] uppercase tracking-wider text-gray-900 dark:text-white flex items-center gap-1.5">
+                      <Truck className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      <span className="truncate">Kurir Pengantar</span>
+                    </h3>
+                    <span className="text-[10px] font-mono font-bold text-emerald-700 dark:text-emerald-400 shrink-0">
+                      {selectedCanteen.couriers?.length || 0} Kurir
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-1.5 bg-gray-50 dark:bg-gray-800/50 p-1 border border-gray-200 dark:border-gray-700 h-[29px]">
+                    <div className="min-w-0 flex items-center gap-1">
+                      {selectedCanteen.couriers && selectedCanteen.couriers.length > 0 ? (
+                        <span className="text-[11px] font-bold text-emerald-800 dark:text-emerald-300 truncate">
+                          {selectedCanteen.couriers.map(c => c.name).join(', ')}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-400 flex items-center gap-1">
+                          <AlertTriangle size={11} className="shrink-0" />
+                          <span className="truncate">Belum ada</span>
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => handleOpenCourierModal(e, selectedCanteen)}
+                      className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white rounded-none font-bold text-[10px] transition-all disabled:opacity-50 flex items-center justify-center gap-1 shadow-xs h-full shrink-0 cursor-pointer whitespace-nowrap"
+                    >
+                      <Truck size={10} className="shrink-0" />
+                      <span className="whitespace-nowrap">Ubah</span>
+                    </button>
+                  </div>
+                </div>
+                <p className="text-[9.5px] text-gray-500 dark:text-gray-400 pt-0.5 leading-tight truncate">
+                  Menerima pesanan otomatis toko saat status diproses
+                </p>
+              </div>
+            </div>
+
+            {/* Quick Menu Card (Jembatan ke Tab Menu) */}
+            <div className="bg-white dark:bg-gray-900 p-2 sm:p-2.5 rounded-none border border-gray-200 dark:border-gray-800 shadow-xs flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-8 h-8 rounded-none bg-green-50 dark:bg-green-950/50 border border-green-200 dark:border-green-800 flex items-center justify-center shrink-0">
+                  <UtensilsCrossed size={15} className="text-green-600 dark:text-green-400" />
+                </div>
+                <div className="min-w-0">
+                  <h4 className="text-xs font-bold text-gray-900 dark:text-white truncate">Katalog Menu & Produk Toko</h4>
+                  <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate">
+                    {totalProductsCount} menu • <span className="text-green-600 dark:text-green-400 font-bold">{availableProductsCount} tersedia</span> • <span className="text-red-500 font-bold">{unavailableProductsCount} habis</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDetailTab('menu')}
+                className="px-2.5 py-1 bg-green-600 hover:bg-green-700 active:scale-98 text-white rounded-none font-bold text-xs transition-all flex items-center gap-1 cursor-pointer shrink-0 shadow-xs"
+              >
+                <span>Lihat Seluruh Menu</span>
+                <span className="font-mono text-[10px]">({totalProductsCount})</span>
+              </button>
             </div>
 
             {/* Pencairan Saldo (Withdrawal - Compact Ramping) */}
@@ -1652,11 +2108,386 @@ export default function Pertokoan() {
                 </button>
               </div>
             )}
+              </>
+            )}
+
+            {/* TAB 2: DAFTAR SELURUH MENU & PRODUK TOKO */}
+            {detailTab === 'menu' && (
+              <div className="space-y-1.5 animate-in fade-in-50 duration-150">
+                {/* 1. Summary Bar & Refresh */}
+                <div className="bg-white dark:bg-gray-900 p-2 sm:p-2.5 rounded-none border border-gray-200 dark:border-gray-800 shadow-xs flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-black text-gray-900 dark:text-white flex items-center gap-1.5">
+                      <UtensilsCrossed size={14} className="text-green-600 dark:text-green-400" />
+                      <span>Katalog Menu Toko</span>
+                    </span>
+                    <span className="text-[10px] font-bold px-1.5 py-0.2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-none border border-gray-200 dark:border-gray-700">
+                      Total: <span className="font-mono font-black">{totalProductsCount}</span>
+                    </span>
+                    <span className="text-[10px] font-bold px-1.5 py-0.2 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 rounded-none border border-emerald-200 dark:border-emerald-800">
+                      Tersedia: <span className="font-mono font-black">{availableProductsCount}</span>
+                    </span>
+                    {unavailableProductsCount > 0 && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.2 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 rounded-none border border-red-200 dark:border-red-800">
+                        Habis: <span className="font-mono font-black">{unavailableProductsCount}</span>
+                      </span>
+                    )}
+                  </div>
+                  
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingProduct(null);
+                        setIsProductModalOpen(true);
+                      }}
+                      className="p-1 px-2.5 text-[10px] font-bold text-white bg-green-600 hover:bg-green-700 active:scale-98 rounded-none transition-all flex items-center gap-1 cursor-pointer shadow-xs"
+                      title="Tambah menu baru ke toko ini"
+                    >
+                      <Plus size={11} />
+                      <span>Tambah Menu</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => refetchProducts()}
+                      disabled={isLoadingProducts}
+                      className="p-1 px-2 text-[10px] font-bold text-gray-600 dark:text-gray-300 hover:text-green-600 dark:hover:text-green-400 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-none transition-colors flex items-center gap-1 cursor-pointer shrink-0"
+                      title="Segarkan data menu"
+                    >
+                      <RefreshCw size={11} className={isLoadingProducts ? 'animate-spin' : ''} />
+                      <span>Segarkan</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. Filter & Search Controls */}
+                <div className="bg-white dark:bg-gray-900 p-2 sm:p-2.5 rounded-none border border-gray-200 dark:border-gray-800 shadow-xs space-y-1.5">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5">
+                    {/* Search Input */}
+                    <div className="relative flex-1">
+                      <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <input
+                        type="text"
+                        value={menuSearch}
+                        onChange={(e) => setMenuSearch(e.target.value)}
+                        placeholder="Cari nama menu, deskripsi, atau kategori..."
+                        className="w-full pl-7 pr-7 py-1 text-xs rounded-none border border-gray-300 dark:border-gray-700 dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-1 focus:ring-green-500 font-sans h-[30px]"
+                      />
+                      {menuSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setMenuSearch('')}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                        >
+                          <X size={12} />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Status Filter Tabs */}
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setMenuStatusFilter('all')}
+                        className={`px-2 py-1 text-[10px] font-bold rounded-none border transition-colors cursor-pointer h-[30px] ${
+                          menuStatusFilter === 'all'
+                            ? 'bg-green-600 text-white border-green-600'
+                            : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        Semua ({totalProductsCount})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMenuStatusFilter('available')}
+                        className={`px-2 py-1 text-[10px] font-bold rounded-none border transition-colors cursor-pointer h-[30px] ${
+                          menuStatusFilter === 'available'
+                            ? 'bg-emerald-600 text-white border-emerald-600'
+                            : 'bg-white dark:bg-gray-800 text-emerald-700 dark:text-emerald-400 border-gray-200 dark:border-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        Tersedia ({availableProductsCount})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMenuStatusFilter('unavailable')}
+                        className={`px-2 py-1 text-[10px] font-bold rounded-none border transition-colors cursor-pointer h-[30px] ${
+                          menuStatusFilter === 'unavailable'
+                            ? 'bg-red-600 text-white border-red-600'
+                            : 'bg-white dark:bg-gray-800 text-red-600 dark:text-red-400 border-gray-200 dark:border-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        Habis ({unavailableProductsCount})
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Category Filter Pills (if any) */}
+                  {productCategories.length > 0 && (
+                    <div className="flex items-center gap-1 overflow-x-auto pt-0.5 no-scrollbar">
+                      <span className="text-[9.5px] font-bold text-gray-400 uppercase tracking-wider shrink-0 mr-1 flex items-center gap-1">
+                        <Tag size={10} />
+                        Kategori:
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setMenuCategoryFilter('all')}
+                        className={`px-2 py-0.5 text-[9.5px] font-bold rounded-none border shrink-0 transition-colors cursor-pointer ${
+                          menuCategoryFilter === 'all'
+                            ? 'bg-green-600 text-white border-green-600'
+                            : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        Semua Kategori
+                      </button>
+                      {productCategories.map(cat => (
+                        <button
+                          key={cat}
+                          type="button"
+                          onClick={() => setMenuCategoryFilter(cat)}
+                          className={`px-2 py-0.5 text-[9.5px] font-bold rounded-none border shrink-0 transition-colors cursor-pointer capitalize ${
+                            menuCategoryFilter === cat
+                              ? 'bg-green-600 text-white border-green-600'
+                              : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-200'
+                          }`}
+                        >
+                          {cat}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* 3. Product List Table (High Density Flat Sharp UI) */}
+                {filteredProducts.length === 0 ? (
+                  <div className="bg-white dark:bg-gray-900 p-8 rounded-none border border-gray-200 dark:border-gray-800 shadow-xs text-center space-y-2">
+                    <UtensilsCrossed size={32} className="mx-auto text-gray-300 dark:text-gray-600" />
+                    <p className="text-xs font-bold text-gray-700 dark:text-gray-300">Tidak ada menu yang sesuai</p>
+                    <p className="text-[10px] text-gray-400">
+                      {totalProductsCount === 0 
+                        ? 'Toko ini belum menambahkan produk atau menu makanan/minuman.' 
+                        : 'Coba ubah kata kunci pencarian atau filter status menu di atas.'}
+                    </p>
+                    {menuSearch && (
+                      <button
+                        type="button"
+                        onClick={() => { setMenuSearch(''); setMenuCategoryFilter('all'); setMenuStatusFilter('all'); }}
+                        className="px-2.5 py-1 text-xs bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-none border border-gray-300 dark:border-gray-700 cursor-pointer"
+                      >
+                        Reset Filter
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-none shadow-xs overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="bg-gray-50 dark:bg-gray-800/70 border-b border-gray-200 dark:border-gray-800 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            <th className="py-2 px-2 text-center w-8">No</th>
+                            <th className="py-2 px-1.5 w-10 text-center">Foto</th>
+                            <th className="py-2 px-2">Menu & Kategori</th>
+                            <th className="py-2 px-2 text-center w-20">Status</th>
+                            <th className="py-2 px-2 text-right w-16">Stok</th>
+                            <th className="py-2 px-2 text-right w-16">Terjual</th>
+                            <th className="py-2 px-2 text-right w-24">HPP</th>
+                            <th className="py-2 px-2 text-right w-24">Harga Jual</th>
+                            <th className="py-2 px-2 text-right w-24">Profit</th>
+                            <th className="py-2 px-2 text-center w-28">Aksi</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 dark:divide-gray-800/80">
+                          {filteredProducts.map((product, idx) => {
+                            const price = parseFloat(product.price || product.hpj || 0);
+                            const hpp = parseFloat(product.hpp || 0);
+                            const profit = price - hpp;
+                            const variantPills = getAvailableVariantPills(product);
+
+                            return (
+                              <tr 
+                                key={product.id} 
+                                className="hover:bg-gray-50/80 dark:hover:bg-gray-800/40 transition-colors"
+                              >
+                                <td className="py-2 px-2 text-center font-mono text-[10px] text-gray-400">
+                                  {idx + 1}
+                                </td>
+                                <td className="py-1 px-1.5 text-center">
+                                  {product.image ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => setViewProductImage(product)}
+                                      className="w-8 h-8 rounded-none border border-gray-200 dark:border-gray-700 overflow-hidden shrink-0 cursor-pointer hover:opacity-80 transition-opacity mx-auto block"
+                                      title="Klik untuk perbesar gambar"
+                                    >
+                                      <AppImage
+                                        src={getStorageUrl(product.image)}
+                                        alt={product.name}
+                                        className="w-full h-full object-cover"
+                                      />
+                                    </button>
+                                  ) : (
+                                    <div className="w-8 h-8 rounded-none bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-center mx-auto text-gray-400">
+                                      <UtensilsCrossed size={12} />
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="py-1.5 px-2 min-w-[130px]">
+                                  <div className="font-bold text-gray-900 dark:text-white leading-tight">
+                                    {product.name}
+                                  </div>
+                                  <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                                    {product.category && (
+                                      <span className="px-1 py-0.2 bg-gray-100 dark:bg-gray-800 text-[9px] font-semibold text-gray-600 dark:text-gray-300 rounded-none border border-gray-200 dark:border-gray-700 uppercase">
+                                        {product.category}
+                                      </span>
+                                    )}
+                                    {variantPills.length > 0 && (
+                                      <div className="flex items-center gap-1 flex-wrap">
+                                        {variantPills.map((pill, pIdx) => (
+                                          <span
+                                            key={pIdx}
+                                            className="px-1 py-0.2 bg-purple-50 dark:bg-purple-950/40 text-[9px] font-semibold text-purple-700 dark:text-purple-300 rounded-none border border-purple-200 dark:border-purple-800"
+                                          >
+                                            {pill.label}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="py-1.5 px-2 text-center whitespace-nowrap">
+                                  <span className={`px-1.5 py-0.5 text-[9.5px] font-bold rounded-none border inline-flex items-center gap-1 ${
+                                    product.is_available
+                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'
+                                      : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-800'
+                                  }`}>
+                                    <span className={`w-1.5 h-1.5 rounded-none ${product.is_available ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
+                                    {product.is_available ? 'Tersedia' : 'Habis'}
+                                  </span>
+                                </td>
+                                <td className="py-1.5 px-2 text-right font-mono text-[11px] text-gray-700 dark:text-gray-300 font-semibold whitespace-nowrap">
+                                  {product.stock !== null && product.stock !== undefined ? product.stock : '∞'}
+                                </td>
+                                <td className="py-1.5 px-2 text-right font-mono text-[11px] text-gray-700 dark:text-gray-300 font-semibold whitespace-nowrap">
+                                  {product.sold_count || 0}
+                                </td>
+                                <td className="py-1.5 px-2 text-right font-mono text-[11px] text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                                  {rp(hpp)}
+                                </td>
+                                <td className="py-1.5 px-2 text-right font-mono text-[11px] font-bold text-gray-900 dark:text-white whitespace-nowrap">
+                                  {rp(price)}
+                                </td>
+                                <td className="py-1.5 px-2 text-right font-mono text-[11px] font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                                  +{rp(profit)}
+                                </td>
+                                <td className="py-1.5 px-2 text-center whitespace-nowrap">
+                                  <div className="flex items-center justify-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingProduct(product);
+                                        setIsProductModalOpen(true);
+                                      }}
+                                      className="px-1.5 py-0.5 text-[9.5px] font-bold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-950/30 dark:border-blue-800 dark:text-blue-300 rounded-none transition-colors flex items-center gap-0.5 cursor-pointer"
+                                      title="Edit rincian menu"
+                                    >
+                                      <Pencil size={10} />
+                                      <span>Edit</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleProductAvailabilityMutation.mutate(product.id)}
+                                      disabled={toggleProductAvailabilityMutation.isPending}
+                                      title={product.is_available ? 'Ubah status jadi Habis' : 'Ubah status jadi Tersedia'}
+                                      className={`px-1.5 py-0.5 text-[9.5px] font-bold rounded-none border transition-all cursor-pointer ${
+                                        product.is_available
+                                          ? 'bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800'
+                                          : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800'
+                                      }`}
+                                    >
+                                      {product.is_available ? 'Off' : 'On'}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (window.confirm(`Hapus menu "${product.name}" secara permanen dari toko ini?`)) {
+                                          deleteProductMutation.mutate(product.id);
+                                        }
+                                      }}
+                                      disabled={deleteProductMutation.isPending}
+                                      className="p-1 text-[9.5px] font-bold bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 dark:bg-red-950/30 dark:border-red-800 rounded-none transition-colors flex items-center cursor-pointer"
+                                      title="Hapus Menu"
+                                    >
+                                      <Trash2 size={10} />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
           </div>
         </div>,
         document.body
       )}
+
+      {/* Lightbox Preview Gambar Menu */}
+      {viewProductImage && createPortal(
+        <div 
+          onClick={() => setViewProductImage(null)}
+          className="fixed inset-0 z-[150] bg-black/80 backdrop-blur-xs flex items-center justify-center p-3 animate-in fade-in-50 cursor-pointer"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()} 
+            className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-none max-w-sm w-full overflow-hidden shadow-2xl space-y-2 p-2.5"
+          >
+            <div className="flex items-center justify-between pb-1 border-b border-gray-100 dark:border-gray-800">
+              <h4 className="text-xs font-bold text-gray-900 dark:text-white truncate">
+                {viewProductImage.name}
+              </h4>
+              <button
+                type="button"
+                onClick={() => setViewProductImage(null)}
+                className="w-6 h-6 flex items-center justify-center text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 rounded-none border border-gray-200 dark:border-gray-700 cursor-pointer"
+              >
+                <X size={13} />
+              </button>
+            </div>
+            <div className="w-full aspect-square bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 overflow-hidden">
+              <AppImage
+                src={getStorageUrl(viewProductImage.image)}
+                alt={viewProductImage.name}
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <div className="flex items-center justify-between px-1 text-[11px] font-mono pt-1">
+              <span className="text-gray-500">Harga Jual: <strong className="text-gray-900 dark:text-white font-bold">{rp(viewProductImage.price || viewProductImage.hpj || 0)}</strong></span>
+              <span className="text-emerald-600 font-bold">HPP: {rp(viewProductImage.hpp || 0)}</span>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Modal Form Tambah / Edit Menu (Super Admin & Admin) */}
+      <ProductFormModal
+        isOpen={isProductModalOpen}
+        onClose={() => {
+          setIsProductModalOpen(false);
+          setEditingProduct(null);
+        }}
+        editingProduct={editingProduct}
+        onSave={handleSaveProduct}
+        isPending={saveProductMutation.isPending}
+      />
 
       {/* --- MODAL 4: KONFIRMASI HAPUS TOKO PERMANEN (SUPER ADMIN ONLY) --- */}
       {canteenToDelete && createPortal(

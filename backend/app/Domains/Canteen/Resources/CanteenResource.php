@@ -67,9 +67,23 @@ class CanteenResource extends JsonResource
             'whatsapp_number' => $this->whatsapp_number,
             'distance' => $this->distance, // if calculated in query
             'product_income' => $product_income,
-            'delivery_income' => $delivery_income,
-            'products' => $this->whenLoaded('products'),
-            'banners' => $this->whenLoaded('banners'),
+            'products' => $this->whenLoaded('products', function () {
+                return ProductResource::collection($this->products);
+            }),
+            'couriers' => $this->whenLoaded('couriers', function () {
+                return $this->couriers->map(function ($c) {
+                    return [
+                        'id' => $c->id,
+                        'name' => $c->name,
+                        'phone' => $c->phone,
+                        'email' => $c->email,
+                        'is_working' => (bool) $c->is_working,
+                    ];
+                });
+            }),
+            'courier_ids' => $this->whenLoaded('couriers', function () {
+                return $this->couriers->pluck('id')->toArray();
+            }),
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

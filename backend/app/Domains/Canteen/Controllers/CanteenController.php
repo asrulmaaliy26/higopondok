@@ -64,7 +64,7 @@ class CanteenController extends Controller
         $user = $request->user();
 
         if ($user && ($user->hasRole('admin') || $user->hasRole('super_admin'))) {
-            $canteens = Canteen::with(['user:id,name,email,phone'])
+            $canteens = Canteen::with(['user:id,name,email,phone', 'products'])
                 ->withCount(['orders as pending_orders_count' => function ($query) {
                     $query->whereIn('status', ['pending', 'processing']);
                 }])->get();
@@ -72,7 +72,7 @@ class CanteenController extends Controller
         }
 
         $canteens = $user->canteens()
-            ->with(['user:id,name,email,phone'])
+            ->with(['user:id,name,email,phone', 'products'])
             ->withCount(['orders as pending_orders_count' => function ($query) {
                 $query->whereIn('status', ['pending', 'processing']);
             }])

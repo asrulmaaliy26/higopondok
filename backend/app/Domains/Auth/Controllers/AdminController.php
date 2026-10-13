@@ -10,6 +10,7 @@ use App\Domains\Delivery\Driver;
 use App\Domains\Auth\User;
 use App\Domains\Canteen\Order;
 use App\Domains\Canteen\Resources\CanteenResource;
+use App\Domains\Canteen\Resources\ProductResource;
 use App\Domains\Canteen\Requests\BulkUpdateHoursRequest;
 use App\Domains\Canteen\Requests\UpdateCanteenHoursRequest;
 use Illuminate\Support\Facades\DB;
@@ -28,12 +29,28 @@ class AdminController extends Controller
 {
     public function allCanteens()
     {
-        // Get all canteens with their user and pending/approved banners
-        $canteens = Canteen::with(['user', 'banners' => function($q) {
-            $q->orderBy('created_at', 'desc');
-        }])->orderBy('created_at', 'desc')->get();
+        // Get all canteens with user, couriers, banners, and products
+        $canteens = Canteen::with([
+            'user', 
+            'couriers:id,name,phone,email,is_working',
+            'banners' => function($q) {
+                $q->orderBy('created_at', 'desc');
+            },
+            'products' => function($q) {
+                $q->orderBy('is_available', 'desc')->orderBy('name', 'asc');
+            }
+        ])->orderBy('created_at', 'desc')->get();
         
         return CanteenResource::collection($canteens);
+    }
+
+    public function couriersList()
+    {
+        $couriers = User::role('kurir')
+            ->with('assignedCanteens:id,name')
+            ->get(['id', 'name', 'phone', 'email', 'is_working']);
+
+        return response()->json($couriers);
     }
 
     public function globalStatus()
@@ -114,6 +131,43 @@ class AdminController extends Controller
         ]);
         
         return response()->json(['message' => 'Zona lokasi & tarif toko berhasil diperbarui', 'canteen' => new CanteenResource($canteen)]);
+    }
+
+    public function updateCouriers(Request $request, $id)
+    {
+        $request->validate([
+            'courier_ids' => 'present|array',
+            'courier_ids.*' => 'integer|exists:users,id',
+        ]);
+
+        $canteen = Canteen::findOrFail($id);
+
+        DB::transaction(function () use ($canteen, $request) {
+            $canteen->couriers()->sync($request->input('courier_ids', []));
+        });
+
+        return response()->json([
+            'message' => "Kurir untuk toko \"{$canteen->name}\" berhasil diperbarui",
+            'canteen' => new CanteenResource($canteen->fresh()->load([
+                'user',
+                'couriers:id,name,phone,email,is_working',
+                'banners' => function($q) {
+                    $q->orderBy('created_at', 'desc');
+                }
+            ]))
+        ]);
+    }
+
+    public function toggleProductAvailability($id)
+    {
+        $product = Product::findOrFail($id);
+        $product->is_available = !$product->is_available;
+        $product->save();
+
+        return response()->json([
+            'message' => "Status menu \"{$product->name}\" berhasil diubah menjadi " . ($product->is_available ? 'Tersedia' : 'Habis'),
+            'product' => new ProductResource($product)
+        ]);
     }
 
     public function updateHours(UpdateCanteenHoursRequest $request, $id)

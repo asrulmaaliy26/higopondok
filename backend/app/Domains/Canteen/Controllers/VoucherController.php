@@ -20,7 +20,7 @@ class VoucherController extends Controller
         $user = $request->user('sanctum') ?? auth('sanctum')->user() ?? $request->user();
 
         if ($request->hasHeader('X-Impersonate-User-Id')) {
-            if ($user && $user->hasRole('admin')) {
+            if ($user && ($user->hasRole('admin') || $user->hasRole('super_admin'))) {
                 $impersonateId = $request->header('X-Impersonate-User-Id');
                 $targetUser = \App\Domains\Auth\User::find($impersonateId);
                 if ($targetUser) {

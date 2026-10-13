@@ -1017,7 +1017,7 @@ class OrderController extends Controller
         $startDate = $request->query('start_date');
         $endDate = $request->query('end_date');
 
-        if (!$user->hasRole('admin')) {
+        if (!$user->hasRole('admin') && !$user->hasRole('super_admin')) {
             $assignedCanteenIds = $user->assignedCanteens()->pluck('canteens.id')->toArray();
             if (empty($assignedCanteenIds)) {
                 return response()->json([]);
@@ -1036,7 +1036,7 @@ class OrderController extends Controller
             ->orderBy('is_priority', 'desc')
             ->orderBy('created_at', 'desc');
 
-        if (!$user->hasRole('admin')) {
+        if (!$user->hasRole('admin') && !$user->hasRole('super_admin')) {
             $query->whereIn('canteen_id', $assignedCanteenIds)
                   ->where('courier_id', $courierId);
         }
@@ -1044,7 +1044,7 @@ class OrderController extends Controller
         if ($scope === 'assigned') {
             $query->where('courier_id', $courierId);
         } elseif ($scope === 'pending') {
-            if (!$user->hasRole('admin')) {
+            if (!$user->hasRole('admin') && !$user->hasRole('super_admin')) {
                 return response()->json([]);
             }
             $query->where('status', 'pending');
@@ -1130,7 +1130,7 @@ class OrderController extends Controller
 
         $isOrderCourier = ($order->courier_id !== null && $order->courier_id === $user->id);
         $isCanteenOwner = $order->canteen && $order->canteen->user_id === $user->id;
-        $isAdmin = $user->hasRole('admin');
+        $isAdmin = $user->hasRole('admin') || $user->hasRole('super_admin');
 
         // ✅ Hanya kurir yang DITUGASKAN ke pesanan ini, pemilik kantin, atau admin
         if (!$isOrderCourier && !$isCanteenOwner && !$isAdmin) {
@@ -1163,7 +1163,7 @@ class OrderController extends Controller
 
         $isOrderCourier = ($order->courier_id !== null && $order->courier_id === $user->id);
         $isCanteenOwner = $order->canteen && $order->canteen->user_id === $user->id;
-        $isAdmin = $user->hasRole('admin');
+        $isAdmin = $user->hasRole('admin') || $user->hasRole('super_admin');
 
         // ✅ Hanya kurir yang DITUGASKAN ke pesanan ini, pemilik kantin, atau admin
         if (!$isOrderCourier && !$isCanteenOwner && !$isAdmin) {
@@ -1196,7 +1196,7 @@ class OrderController extends Controller
 
         $isOrderCourier = ($order->courier_id !== null && $order->courier_id === $user->id);
         $isCanteenOwner = $order->canteen && $order->canteen->user_id === $user->id;
-        $isAdmin = $user->hasRole('admin');
+        $isAdmin = $user->hasRole('admin') || $user->hasRole('super_admin');
 
         // ✅ Hanya kurir yang DITUGASKAN ke pesanan ini, pemilik kantin, atau admin
         if (!$isOrderCourier && !$isCanteenOwner && !$isAdmin) {
@@ -1236,7 +1236,7 @@ class OrderController extends Controller
             $isCourier = $user->hasRole('kurir');
             $isOrderCourier = $order->courier_id === $user->id;
 
-            if (!$isCourier && !$isOrderCourier && !$user->hasRole('admin')) {
+            if (!$isCourier && !$isOrderCourier && !$user->hasRole('admin') && !$user->hasRole('super_admin')) {
                 return response()->json(['message' => 'Anda tidak memiliki akses untuk menyelesaikan pesanan ini.'], 403);
             }
 
@@ -1454,7 +1454,7 @@ class OrderController extends Controller
 
         $order = DB::transaction(function () use ($request, $id) {
             $user = $request->user();
-            if ($user->hasRole('admin')) {
+            if ($user->hasRole('admin') || $user->hasRole('super_admin')) {
                 $order = Order::lockForUpdate()->findOrFail($id);
             } else {
                 $order = Order::where('user_id', $user->id)
@@ -1516,7 +1516,7 @@ class OrderController extends Controller
 
         $orders = DB::transaction(function () use ($request, $checkoutId, $user) {
             $query = Order::where('checkout_id', $checkoutId)->lockForUpdate();
-            if (!$user->hasRole('admin')) {
+            if (!$user->hasRole('admin') && !$user->hasRole('super_admin')) {
                 $query->where('user_id', $user->id);
             }
             $orders = $query->get();

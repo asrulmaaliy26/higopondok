@@ -11,7 +11,7 @@ class UpdateCanteenHoursRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return $this->user() && ($this->user()->hasRole('admin') || $this->user()->hasRole('kantin'));
+        return $this->user() && ($this->user()->hasRole('admin') || $this->user()->hasRole('super_admin') || $this->user()->hasRole('kantin'));
     }
 
     /**
