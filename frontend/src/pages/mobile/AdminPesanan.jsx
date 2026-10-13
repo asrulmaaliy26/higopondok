@@ -48,6 +48,7 @@ import {
 import ThermalReceiptModal from '../../components/receipt/ThermalReceiptModal';
 import santriData from '../../data/santri.json';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
+import { renderOrderDateTime } from '../../lib/orderUtils';
 
 function getWeeksInMonth(year, month) {
   const weeks = [];
@@ -283,6 +284,21 @@ export default function AdminPesanan() {
     });
   };
 
+  const handlePrintGroupReceipt = (group) => {
+    if (!group.orders || group.orders.length === 0) return;
+    if (group.orders.length === 1) {
+      handlePrintSingleReceipt(group.orders[0]);
+      return;
+    }
+    setReceiptModalConfig({
+      isOpen: true,
+      mode: 'batch',
+      order: group.orders[0],
+      orders: group.orders,
+      title: `Struk Wadah ${group.checkoutId || 'Pesanan'} (${group.orders.length} Toko)`
+    });
+  };
+
   // Recycle Bin Modal States (Permanent Delete & Empty Trash)
   const [orderToForceDelete, setOrderToForceDelete] = useState(null);
   const [showEmptyTrashModal, setShowEmptyTrashModal] = useState(false);
@@ -452,6 +468,49 @@ export default function AdminPesanan() {
       return (b.id || 0) - (a.id || 0);
     });
   }, [rawOrdersList]);
+
+  // Kelompokkan pesanan dari 1 transaksi/user ke dalam 1 Wadah (Group Card)
+  const orderGroups = React.useMemo(() => {
+    const groups = [];
+    const map = new Map();
+
+    orders.forEach((order) => {
+      // Gunakan checkout_id jika ada, atau fallback ke user_id + tanggal pembuatan
+      const key = order.checkout_id
+        ? `chk_${order.checkout_id}`
+        : `usr_${order.user_id}_${order.created_at ? order.created_at.substring(0, 10) : order.id}`;
+
+      if (!map.has(key)) {
+        const groupObj = {
+          key,
+          checkoutId: order.checkout_id || null,
+          user: order.user,
+          created_at: order.created_at,
+          delivery_location: order.delivery_location,
+          is_priority: order.is_priority || order.order_for === 'guru',
+          order_for: order.order_for,
+          orders: []
+        };
+        map.set(key, groupObj);
+        groups.push(groupObj);
+      }
+      map.get(key).orders.push(order);
+    });
+
+    // Urutkan wadah berdasarkan skor prioritas tertinggi dari pesanan di dalamnya
+    return groups.sort((a, b) => {
+      const scoreA = Math.max(...a.orders.map((o) => getOrderPriorityScore(o)));
+      const scoreB = Math.max(...b.orders.map((o) => getOrderPriorityScore(o)));
+
+      if (scoreA !== scoreB) {
+        return scoreB - scoreA;
+      }
+
+      const maxIdA = Math.max(...a.orders.map((o) => o.id || 0));
+      const maxIdB = Math.max(...b.orders.map((o) => o.id || 0));
+      return maxIdB - maxIdA;
+    });
+  }, [orders]);
 
   // Query Recap Data (Uses the exact same date & courier filter)
   const {
@@ -1019,17 +1078,16 @@ export default function AdminPesanan() {
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-2">
-              {orders.map((order) => {
-                const isPaid = order.payment_status === 'paid';
-                const isWaiting = order.payment_status === 'waiting_confirmation';
-                const isTeacherOrder = order.order_for === 'guru' || (order.is_priority && !order.user?.santri_name);
-                const isPriority = order.is_priority || isTeacherOrder;
-                const santriName = isTeacherOrder ? (order.user?.name || 'Guru / Staff') : (order.user?.santri_name || order.user?.name || 'Santri');
-                const waliName = isTeacherOrder ? 'Guru / Staff Yayasan' : (order.user?.name || 'Wali');
-                let santriClass = isTeacherOrder ? `Unit ${order.user?.teacher_unit || 'Yayasan'}` : (order.user?.santri_class || '');
-                let santriLevel = isTeacherOrder ? (order.user?.niy ? `NIY: ${order.user.niy}` : 'Staff') : (order.user?.santri_level || '');
-                let santriRoom = order.delivery_location || (isTeacherOrder ? `Ruang Guru ${order.user?.teacher_unit || ''}` : (order.user?.santri_room || ''));
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 sm:gap-2.5">
+              {orderGroups.map((group) => {
+                const firstOrder = group.orders[0];
+                const isTeacherOrder = group.order_for === 'guru' || (group.is_priority && !group.user?.santri_name);
+                const isPriority = group.is_priority || isTeacherOrder;
+                const santriName = isTeacherOrder ? (group.user?.name || 'Guru / Staff') : (group.user?.santri_name || group.user?.name || 'Santri');
+                const waliName = isTeacherOrder ? 'Guru / Staff Yayasan' : (group.user?.name || 'Wali');
+                let santriClass = isTeacherOrder ? `Unit ${group.user?.teacher_unit || 'Yayasan'}` : (group.user?.santri_class || '');
+                let santriLevel = isTeacherOrder ? (group.user?.niy ? `NIY: ${group.user.niy}` : 'Staff') : (group.user?.santri_level || '');
+                let santriRoom = group.delivery_location || (isTeacherOrder ? `Ruang Guru ${group.user?.teacher_unit || ''}` : (group.user?.santri_room || ''));
 
                 if (!isTeacherOrder && santriName && santriData?.data) {
                   const sName = santriName.toLowerCase().trim();
@@ -1053,351 +1111,393 @@ export default function AdminPesanan() {
                   }
                 }
 
+                // Perhitungan akumulasi seluruh pesanan di wadah ini
+                const grandTotal = group.orders.reduce((sum, o) => sum + parseFloat(o.total_price || 0), 0);
+                const totalDeliveryFee = group.orders.reduce((sum, o) => sum + parseFloat(o.delivery_fee || 0), 0);
+                const totalItemsCount = group.orders.reduce((sum, o) => sum + (o.items?.length || 1), 0);
+
+                const isAllPaid = group.orders.every(o => o.payment_status === 'paid');
+                const isAnyWaiting = group.orders.some(o => o.payment_status === 'waiting_confirmation');
+
+                // Kumpulkan bukti pembayaran dari wadah
+                const allPaymentProofs = group.orders.flatMap(o => {
+                  if (!o.proof_of_payment) return [];
+                  return Array.isArray(o.proof_of_payment) ? o.proof_of_payment : [o.proof_of_payment];
+                });
+
+                const isMultiStore = group.orders.length > 1;
+
                 return (
                   <div
-                    key={order.id}
-                    className={`bg-white dark:bg-gray-900 rounded-none border shadow-xs transition-all p-2 sm:p-2.5 flex flex-col justify-between gap-1 ${
-                      isPriority 
-                        ? 'border-indigo-500 dark:border-indigo-400 ring-2 ring-indigo-500/30 bg-indigo-50/15 dark:bg-indigo-950/10' 
+                    key={group.key}
+                    className={`bg-white dark:bg-gray-900 rounded-none border shadow-xs transition-all flex flex-col justify-between ${
+                      isPriority
+                        ? 'border-indigo-500 dark:border-indigo-400 ring-2 ring-indigo-500/30 bg-indigo-50/10 dark:bg-indigo-950/10'
+                        : isMultiStore
+                        ? 'border-emerald-300 dark:border-emerald-800/80 hover:border-green-600'
                         : 'border-gray-200 dark:border-gray-800 hover:border-green-500 dark:hover:border-green-600'
                     }`}
                   >
                     {/* Priority Banner for Teacher / Staff */}
                     {isPriority && (
-                      <div className="bg-gradient-to-r from-indigo-700 via-purple-700 to-indigo-800 text-white px-2 py-0.5 rounded-none flex items-center justify-between text-[10px] font-black tracking-tight -mx-2 -mt-2 sm:-mx-2.5 sm:-mt-2.5 mb-1 shadow-xs">
+                      <div className="bg-gradient-to-r from-indigo-700 via-purple-700 to-indigo-800 text-white px-2 py-0.5 rounded-none flex items-center justify-between text-[10px] font-black tracking-tight shadow-xs">
                         <span className="flex items-center gap-1">
                           ⚡ PRIORITAS GURU/STAFF • DIANTAR LANGSUNG
                         </span>
                         <span className="bg-amber-400 text-indigo-950 px-1.5 py-0.2 rounded-none uppercase text-[9px] font-mono font-black">
-                          UNIT {order.user?.teacher_unit || 'YAYASAN'}
+                          UNIT {group.user?.teacher_unit || 'YAYASAN'}
                         </span>
                       </div>
                     )}
-                    {/* 1. Header: Toko, ID, Jam & Status Badges */}
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between gap-1 border-b border-gray-200 dark:border-gray-700/80 pb-1">
-                        <div className="flex items-center gap-1 flex-wrap min-w-0">
-                          <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-none bg-blue-50 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200 dark:border-blue-800 truncate max-w-[130px]">
-                            🏪 {order.canteen?.name || `Kantin #${order.canteen_id}`}
-                          </span>
-                          <span className="text-[11px] font-bold text-gray-800 dark:text-gray-200">
-                            #{order.id}
-                          </span>
-                          <span className="text-[10px] text-gray-400">
-                            • {new Date(order.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </div>
 
-                        {/* Status Badges (Clickable) */}
-                        <div className="flex items-center gap-1 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenChangeStatusModal(order)}
-                            title="Klik untuk ubah status pembayaran / pesanan"
-                            className={`px-1.5 py-0.5 rounded-none text-[10px] font-bold transition-all hover:scale-105 active:scale-95 cursor-pointer ${
-                              isPaid
-                                ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
-                                : isWaiting
-                                ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 ring-1 ring-amber-300 animate-pulse'
-                                : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
-                            }`}
-                          >
-                            {isPaid ? 'Lunas' : isWaiting ? 'Verifikasi' : 'Belum Bayar'}
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => handleOpenChangeStatusModal(order)}
-                            title="Klik untuk ubah status pesanan"
-                            className={`px-1.5 py-0.5 rounded-none text-[10px] font-bold transition-all hover:scale-105 active:scale-95 cursor-pointer ${
-                              order.status === 'completed'
-                                ? 'bg-green-50 text-green-800 dark:bg-green-950/60 dark:text-green-300 border border-green-200 dark:border-green-800'
-                                : order.status === 'processing'
-                                ? 'bg-blue-50 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
-                                : order.status === 'cancelled'
-                                ? 'bg-red-50 text-red-800 dark:bg-red-950/60 dark:text-red-300 border border-red-200 dark:border-red-800'
-                                : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 border border-gray-200 dark:border-gray-700'
-                            }`}
-                          >
-                            {order.status === 'completed'
-                              ? 'Selesai'
-                              : order.status === 'processing'
-                              ? 'Proses'
-                              : order.status === 'cancelled'
-                              ? 'Batal'
-                              : 'Pending'}
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* 2. Customer & Room Info (Compact 1-2 lines) */}
-                      <div className="text-xs space-y-0.5">
-                        {isTeacherOrder ? (
-                          <>
-                            <div className="flex items-center justify-between gap-1">
-                              <span className="font-bold text-indigo-950 dark:text-indigo-100 truncate flex items-center gap-1">
-                                <span className="text-sm">🎓</span>
-                                <span className="truncate">{santriName}</span>
-                              </span>
-                              <span className="text-[11px] font-extrabold text-indigo-900 dark:text-indigo-200 bg-indigo-100 dark:bg-indigo-950/60 px-1.5 py-0.2 border border-indigo-300 dark:border-indigo-700 shrink-0">
-                                📍 {santriRoom || '-'}
-                              </span>
-                            </div>
-                            <div className="flex items-center justify-between text-[10px] pt-0.5 flex-wrap gap-1">
-                              <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-                                <span className="font-mono text-purple-700 dark:text-purple-300 font-bold bg-purple-50 dark:bg-purple-950/50 px-1 py-0.2 border border-purple-200 dark:border-purple-800">
-                                  {santriLevel}
-                                </span>
-                                <span className="inline-flex items-center px-1.5 py-0.2 rounded-none bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-[10px] font-bold">
-                                  {santriClass}
-                                </span>
-                              </div>
-                              {order.courier?.name ? (
-                                <span className="text-green-700 dark:text-green-400 font-bold flex items-center gap-1 shrink-0 bg-green-50 dark:bg-green-950/50 px-1.5 py-0.5 rounded-none border border-green-200 dark:border-green-800 text-[10px]">
-                                  <Truck className="w-3 h-3 text-green-600 dark:text-green-400" /> {order.courier.name}
-                                </span>
-                              ) : (
-                                <span className="text-gray-400 dark:text-gray-500 font-medium flex items-center gap-0.5 shrink-0 text-[10px]">
-                                  🚫 Tanpa Kurir
-                                </span>
-                              )}
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            <div className="flex items-center justify-between gap-1">
-                              <span className="font-bold text-gray-900 dark:text-white truncate flex items-center gap-1">
-                                <User className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                                <span className="truncate">{santriName}</span>
-                              </span>
-                              <span className="text-[11px] text-gray-600 dark:text-gray-300 font-semibold shrink-0">
-                                📍 {santriRoom || '-'}
-                              </span>
-                            </div>
-                            <div className="flex items-center justify-between text-[10px] text-gray-500 dark:text-gray-400 pt-0.5 flex-wrap gap-1">
-                              <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-                                <span className="truncate">Wali: {waliName}</span>
-                                {(santriLevel || santriClass) && (
-                                  <span className="inline-flex items-center px-1.5 py-0.2 rounded-none bg-green-50 dark:bg-green-950/60 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800 text-[10px] font-bold">
-                                    🎓 {santriLevel ? `${santriLevel} ` : ''}{santriClass ? `Kelas ${santriClass}` : ''}
-                                  </span>
-                                )}
-                              </div>
-                              {order.courier?.name ? (
-                                <span className="text-green-700 dark:text-green-400 font-bold flex items-center gap-1 shrink-0 bg-green-50 dark:bg-green-950/50 px-1.5 py-0.5 rounded-none border border-green-200 dark:border-green-800 text-[10px]">
-                                  <Truck className="w-3 h-3 text-green-600 dark:text-green-400" /> {order.courier.name}
-                                </span>
-                              ) : (
-                                <span className="text-gray-400 dark:text-gray-500 font-medium flex items-center gap-0.5 shrink-0 text-[10px]">
-                                  🚫 Tanpa Kurir
-                                </span>
-                              )}
-                            </div>
-                          </>
-                        )}
-                      </div>
-
-
-                      {/* 3. Items List Box (Minimalist & Clean) */}
-                      <div className="bg-gray-50 dark:bg-gray-800/50 rounded-none p-1.5 space-y-0.5 text-xs border border-gray-200 dark:border-gray-700">
-                        {order.custom_notes && (
-                          <div className="text-[11px] font-medium text-purple-800 dark:text-purple-300 pb-0.5 border-b border-purple-100 dark:border-purple-900/40">
-                            ✨ {order.custom_notes}
+                    <div className="p-2 sm:p-2.5 space-y-2">
+                      {/* 1. Header Wadah Pemesan (1 User dalam 1 Wadah) */}
+                      <div className="border-b border-gray-200 dark:border-gray-700/80 pb-1.5">
+                        <div className="flex items-center justify-between gap-1 flex-wrap">
+                          <div className="flex items-center gap-1 flex-wrap min-w-0">
+                            <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-none bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200 border border-gray-300 dark:border-gray-700">
+                              {group.checkoutId ? `🔖 ${group.checkoutId}` : `#ORD-${firstOrder.id}`}
+                            </span>
+                            <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-none border ${
+                              isMultiStore
+                                ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700'
+                                : 'bg-blue-50 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
+                            }`}>
+                              {isMultiStore ? `🏬 ${group.orders.length} Toko (Gabungan)` : `🏪 1 Toko`}
+                            </span>
+                            {renderOrderDateTime(firstOrder)}
                           </div>
-                        )}
-                        {order.items && order.items.length > 0 ? (
-                          order.items.map((item) => (
-                            <div key={item.id} className="flex justify-between items-center text-[11px]">
-                              <span className="text-gray-700 dark:text-gray-300 truncate pr-2">
-                                <strong className="text-gray-900 dark:text-white font-bold">{item.quantity}x</strong> {item.product?.name || 'Produk'}
-                                {item.notes && <span className="text-gray-400 italic text-[10px]"> ({item.notes})</span>}
-                              </span>
-                              <span className="font-bold text-gray-900 dark:text-white shrink-0">
-                                Rp {parseFloat(item.subtotal).toLocaleString('id-ID')}
-                              </span>
-                            </div>
-                          ))
-                        ) : (
-                          <div className="flex justify-between items-center text-[11px] text-gray-500">
-                            <span>1x Pesanan Khusus</span>
-                            <span className="font-bold text-gray-900 dark:text-white">
-                              Rp {parseFloat(order.total_price || 0).toLocaleString('id-ID')}
+
+                          {/* Status Bayar Wadah */}
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenChangeStatusModal(firstOrder)}
+                              title="Klik untuk ubah status pembayaran wadah"
+                              className={`px-1.5 py-0.5 rounded-none text-[10px] font-bold transition-all hover:scale-105 active:scale-95 cursor-pointer ${
+                                isAllPaid
+                                  ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
+                                  : isAnyWaiting
+                                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 ring-1 ring-amber-300 animate-pulse'
+                                  : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                              }`}
+                            >
+                              {isAllPaid ? '💳 Lunas' : isAnyWaiting ? '⏳ Verifikasi Bayar' : '⚠️ Belum Bayar'}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Customer / Santri Info Box (Tampil 1 kali di atas wadah) */}
+                        <div className="mt-1.5 pt-1 border-t border-dashed border-gray-100 dark:border-gray-800 text-xs space-y-0.5">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="font-bold text-gray-900 dark:text-white truncate flex items-center gap-1">
+                              <User className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                              <span className="truncate">{santriName}</span>
+                            </span>
+                            <span className="text-[11px] font-bold text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.2 border border-gray-300 dark:border-gray-700 shrink-0">
+                              📍 {santriRoom || '-'}
                             </span>
                           </div>
-                        )}
+                          <div className="flex items-center justify-between text-[10px] text-gray-500 dark:text-gray-400 pt-0.5 flex-wrap gap-1">
+                            <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                              <span className="truncate">Wali: {waliName}</span>
+                              {(santriLevel || santriClass) && (
+                                <span className="inline-flex items-center px-1.5 py-0.2 rounded-none bg-green-50 dark:bg-green-950/60 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800 text-[10px] font-bold">
+                                  🎓 {santriLevel ? `${santriLevel} ` : ''}{santriClass ? `Kelas ${santriClass}` : ''}
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-1">
+                              {/* Bukti Transfer Wadah */}
+                              {allPaymentProofs.length > 0 ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedProofs(allPaymentProofs.map(p => getStorageUrl(p)))}
+                                  className="px-1.5 py-0.5 bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 hover:bg-indigo-100 rounded-none text-[10px] font-semibold flex items-center gap-1 border border-indigo-200 dark:border-indigo-800 cursor-pointer"
+                                >
+                                  <ImageIcon className="w-3 h-3" /> Bukti ({allPaymentProofs.length})
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenUploadPaymentModal(firstOrder)}
+                                  className="px-1.5 py-0.5 bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300 hover:bg-green-100 rounded-none text-[10px] font-semibold flex items-center gap-0.5 border border-green-200 dark:border-green-800 cursor-pointer"
+                                >
+                                  <UploadCloud className="w-3 h-3 text-green-600 dark:text-green-400" /> + Bukti
+                                </button>
+                              )}
+
+                              {/* Cetak Struk Gabungan Wadah */}
+                              {isMultiStore && (
+                                <button
+                                  type="button"
+                                  onClick={() => handlePrintGroupReceipt(group)}
+                                  className="px-1.5 py-0.5 bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 hover:bg-amber-100 rounded-none text-[10px] font-bold flex items-center gap-1 border border-amber-300 dark:border-amber-800 cursor-pointer"
+                                  title="Cetak struk gabungan seluruh toko dalam wadah ini"
+                                >
+                                  <Printer className="w-3 h-3 text-amber-600 dark:text-amber-400" /> Struk Wadah
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
                       </div>
 
-                      {/* 4. Proof Buttons (Only if available - compact chips) & Quick Upload */}
-                      <div className="flex gap-1 flex-wrap items-center pt-0.5">
-                        {order.proof_of_payment && order.proof_of_payment.length > 0 ? (
-                          <div className="inline-flex items-center gap-1">
-                            <button
-                              onClick={() => {
-                                const proofs = Array.isArray(order.proof_of_payment)
-                                  ? order.proof_of_payment.map((p) => getStorageUrl(p))
-                                  : [getStorageUrl(order.proof_of_payment)];
-                                setSelectedProofs(proofs);
-                              }}
-                              className="px-1.5 py-0.5 bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 hover:bg-indigo-100 rounded-none text-[10px] font-semibold flex items-center gap-1 transition-colors border border-indigo-200 dark:border-indigo-800 cursor-pointer"
-                            >
-                              <ImageIcon className="w-3 h-3" /> Bayar ({Array.isArray(order.proof_of_payment) ? order.proof_of_payment.length : 1})
-                            </button>
-                            <button
-                              onClick={() => handleOpenUploadPaymentModal(order)}
-                              title="Tambah / ganti bukti transfer santri"
-                              className="px-1.5 py-0.5 bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300 hover:bg-green-100 rounded-none text-[10px] font-bold flex items-center gap-0.5 transition-colors border border-green-200 dark:border-green-800 cursor-pointer"
-                            >
-                              <Plus className="w-2.5 h-2.5" /> Bukti
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => handleOpenUploadPaymentModal(order)}
-                            className="px-1.5 py-0.5 bg-green-50 hover:bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-300 rounded-none text-[10px] font-semibold flex items-center gap-1 transition-colors border border-green-200 dark:border-green-800 cursor-pointer"
-                            title="Unggah bukti pembayaran santri"
-                          >
-                            <UploadCloud className="w-3 h-3 text-green-600 dark:text-green-400" />
-                            <span>+ Bukti Transfer</span>
-                          </button>
-                        )}
+                      {/* 2. Daftar Pesanan Tiap Toko (Bisa diedit masing-masing) */}
+                      <div className="space-y-1.5">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 flex items-center justify-between">
+                          <span>Rincian Pesanan Toko:</span>
+                          <span className="font-mono text-gray-500">{group.orders.length} Toko</span>
+                        </div>
 
-                        {order.proof_of_purchase && order.proof_of_purchase.length > 0 && (
-                          <button
-                            onClick={() => {
-                              const proofs = Array.isArray(order.proof_of_purchase)
-                                ? order.proof_of_purchase.map((p) => getStorageUrl(p))
-                                : [getStorageUrl(order.proof_of_purchase)];
-                              setSelectedProofs(proofs);
-                            }}
-                            className="px-1.5 py-0.5 bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 hover:bg-purple-100 rounded-none text-[10px] font-semibold flex items-center gap-1 transition-colors border border-purple-200 dark:border-purple-800 cursor-pointer"
-                          >
-                            <ImageIcon className="w-3 h-3" /> Struk
-                          </button>
-                        )}
+                        {group.orders.map((order) => {
+                          return (
+                            <div
+                              key={order.id}
+                              className="bg-gray-50/80 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700/80 rounded-none p-2 space-y-1.5 shadow-2xs"
+                            >
+                              {/* Header Toko & Status */}
+                              <div className="flex items-center justify-between gap-1 flex-wrap pb-1 border-b border-gray-200 dark:border-gray-700/60">
+                                <div className="flex items-center gap-1 min-w-0">
+                                  <span className="text-[11px] font-bold text-gray-900 dark:text-white truncate">
+                                    🏪 {order.canteen?.name || `Kantin #${order.canteen_id}`}
+                                  </span>
+                                  <span className="text-[10px] font-mono text-gray-500 dark:text-gray-400">
+                                    #{order.id}
+                                  </span>
+                                  {order.courier?.name ? (
+                                    <span className="text-green-700 dark:text-green-400 font-bold flex items-center gap-0.5 text-[9.5px] bg-green-50 dark:bg-green-950/50 px-1 py-0.2 border border-green-200 dark:border-green-800">
+                                      <Truck className="w-2.5 h-2.5 text-green-600" /> {order.courier.name}
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-400 text-[9.5px]">🚫 Tanpa Kurir</span>
+                                  )}
+                                </div>
 
-                        {order.proof_of_delivery && order.proof_of_delivery.length > 0 && (
-                          <button
-                            onClick={() => {
-                              const proofs = Array.isArray(order.proof_of_delivery)
-                                ? order.proof_of_delivery.map((p) => getStorageUrl(p))
-                                : [getStorageUrl(order.proof_of_delivery)];
-                              setSelectedProofs(proofs);
-                            }}
-                            className="px-1.5 py-0.5 bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 hover:bg-blue-100 rounded-none text-[10px] font-semibold flex items-center gap-1 transition-colors border border-blue-200 dark:border-blue-800 cursor-pointer"
-                          >
-                            <ImageIcon className="w-3 h-3" /> Antar
-                          </button>
-                        )}
+                                {/* Badge Status Toko (Clickable untuk Edit) */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenChangeStatusModal(order)}
+                                  title="Klik untuk ubah status pesanan toko ini"
+                                  className={`px-1.5 py-0.5 rounded-none text-[10px] font-bold transition-all hover:scale-105 active:scale-95 cursor-pointer ${
+                                    order.status === 'completed'
+                                      ? 'bg-green-100 text-green-800 dark:bg-green-950/60 dark:text-green-300 border border-green-200 dark:border-green-800'
+                                      : order.status === 'processing'
+                                      ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
+                                      : order.status === 'cancelled'
+                                      ? 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300 border border-red-200 dark:border-red-800'
+                                      : 'bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600'
+                                  }`}
+                                >
+                                  {order.status === 'completed'
+                                    ? '✅ Selesai'
+                                    : order.status === 'processing'
+                                    ? '🚚 Proses'
+                                    : order.status === 'cancelled'
+                                    ? '❌ Batal'
+                                    : '⏳ Pending'}
+                                </button>
+                              </div>
+
+                              {/* Items List Toko */}
+                              <div className="bg-white dark:bg-gray-900 rounded-none p-1.5 space-y-0.5 text-xs border border-gray-200/80 dark:border-gray-700/80">
+                                {order.custom_notes && (
+                                  <div className="text-[10px] font-medium text-purple-800 dark:text-purple-300 pb-0.5 border-b border-purple-100 dark:border-purple-900/40">
+                                    ✨ {order.custom_notes}
+                                  </div>
+                                )}
+                                {order.items && order.items.length > 0 ? (
+                                  order.items.map((item) => (
+                                    <div key={item.id} className="flex justify-between items-center text-[10.5px]">
+                                      <span className="text-gray-700 dark:text-gray-300 truncate pr-2">
+                                        <strong className="text-gray-900 dark:text-white font-bold">{item.quantity}x</strong> {item.product?.name || 'Produk'}
+                                        {item.notes && <span className="text-gray-400 italic text-[10px]"> ({item.notes})</span>}
+                                      </span>
+                                      <span className="font-bold text-gray-900 dark:text-white shrink-0 font-mono">
+                                        Rp {parseFloat(item.subtotal).toLocaleString('id-ID')}
+                                      </span>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <div className="flex justify-between items-center text-[10.5px] text-gray-500">
+                                    <span>1x Pesanan Khusus</span>
+                                    <span className="font-bold text-gray-900 dark:text-white font-mono">
+                                      Rp {parseFloat(order.total_price || 0).toLocaleString('id-ID')}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Bukti Khusus Toko Ini (Struk & Antar) */}
+                              <div className="flex gap-1 flex-wrap items-center">
+                                {order.proof_of_purchase && order.proof_of_purchase.length > 0 && (
+                                  <button
+                                    onClick={() => {
+                                      const proofs = Array.isArray(order.proof_of_purchase)
+                                        ? order.proof_of_purchase.map((p) => getStorageUrl(p))
+                                        : [getStorageUrl(order.proof_of_purchase)];
+                                      setSelectedProofs(proofs);
+                                    }}
+                                    className="px-1.5 py-0.5 bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 hover:bg-purple-100 rounded-none text-[9.5px] font-semibold flex items-center gap-1 border border-purple-200 dark:border-purple-800 cursor-pointer"
+                                  >
+                                    <ImageIcon className="w-2.5 h-2.5" /> Struk Toko
+                                  </button>
+                                )}
+                                {order.proof_of_delivery && order.proof_of_delivery.length > 0 && (
+                                  <button
+                                    onClick={() => {
+                                      const proofs = Array.isArray(order.proof_of_delivery)
+                                        ? order.proof_of_delivery.map((p) => getStorageUrl(p))
+                                        : [getStorageUrl(order.proof_of_delivery)];
+                                      setSelectedProofs(proofs);
+                                    }}
+                                    className="px-1.5 py-0.5 bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 hover:bg-blue-100 rounded-none text-[9.5px] font-semibold flex items-center gap-1 border border-blue-200 dark:border-blue-800 cursor-pointer"
+                                  >
+                                    <ImageIcon className="w-2.5 h-2.5" /> Bukti Antar
+                                  </button>
+                                )}
+                              </div>
+
+                              {/* Subtotal Toko & Bar Tombol Edit Khusus Toko Ini */}
+                              <div className="pt-1 border-t border-gray-200 dark:border-gray-700/60 space-y-1">
+                                <div className="flex items-baseline justify-between gap-1">
+                                  <div className="flex items-baseline gap-1">
+                                    <span className="text-xs font-black text-green-700 dark:text-green-400 font-mono">
+                                      Rp {parseFloat(order.total_price || 0).toLocaleString('id-ID')}
+                                    </span>
+                                    <span className="text-[9.5px] text-gray-500 dark:text-gray-400">
+                                      • Ongkir Rp {parseFloat(order.delivery_fee || 0).toLocaleString('id-ID')}
+                                    </span>
+                                  </div>
+                                  <span className="text-[9.5px] text-gray-400 font-mono">
+                                    {order.items?.length || 0} Item
+                                  </span>
+                                </div>
+
+                                {/* Tombol Aksi Lengkap untuk Mengedit Toko Ini */}
+                                <div className="flex items-center gap-1 w-full pt-0.5">
+                                  {order.status !== 'cancelled' ? (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setOrderToCancel(order);
+                                          setCancelReason('');
+                                        }}
+                                        className="h-6.5 w-6.5 flex items-center justify-center bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300 rounded-none text-xs font-bold transition-colors border border-red-200 dark:border-red-800 shrink-0 cursor-pointer"
+                                        title="Batalkan pesanan toko ini"
+                                      >
+                                        <X className="w-3 h-3" />
+                                      </button>
+                                      {order.status === 'pending' && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleOpenChangeStatusModal(order, 'processing', 'tomorrow')}
+                                          disabled={updateStatusMutation.isPending}
+                                          className="h-6.5 px-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-300 dark:border-amber-800 rounded-none text-[10px] font-bold transition-colors flex items-center gap-0.5 shadow-2xs cursor-pointer shrink-0"
+                                          title="Jadwalkan pesanan toko ini ke Besok"
+                                        >
+                                          <Calendar className="w-2.5 h-2.5 text-amber-600 dark:text-amber-400" />
+                                          <span>Besok</span>
+                                        </button>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleContinueOrder(order)}
+                                        disabled={updateStatusMutation.isPending}
+                                        className="h-6.5 px-1.5 bg-green-50 hover:bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-300 border border-green-300 dark:border-green-800 rounded-none text-[10px] font-bold transition-colors flex items-center gap-0.5 shadow-2xs cursor-pointer shrink-0"
+                                        title="Lanjutkan pesanan toko ini (Kurir Toko)"
+                                      >
+                                        <Truck className="w-3 h-3 text-green-600 dark:text-green-400" />
+                                        <span>Lanjutkan</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenChangeStatusModal(order, 'processing', 'tomorrow')}
+                                        disabled={updateStatusMutation.isPending}
+                                        className="h-6.5 px-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-300 dark:border-amber-800 rounded-none text-[10px] font-bold transition-colors flex items-center gap-0.5 shadow-2xs cursor-pointer shrink-0"
+                                        title="Jadwalkan pesanan toko ini ke Besok"
+                                      >
+                                        <Calendar className="w-2.5 h-2.5 text-amber-600 dark:text-amber-400" />
+                                        <span>Besok</span>
+                                      </button>
+                                    </>
+                                  )}
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenUploadPaymentModal(order)}
+                                    className="h-6.5 w-6.5 flex items-center justify-center bg-emerald-50 hover:bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-none text-xs font-bold transition-colors shrink-0 cursor-pointer"
+                                    title="Unggah / Tambah Bukti Transfer untuk toko ini"
+                                  >
+                                    <UploadCloud className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenChangeStatusModal(order)}
+                                    className="flex-1 min-w-0 h-6.5 px-1.5 bg-blue-50 hover:bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-none text-[10px] font-bold transition-colors flex items-center justify-center gap-1 shadow-2xs cursor-pointer"
+                                    title="Edit Status / Kurir / Jadwal Pesanan Toko Ini"
+                                  >
+                                    <RotateCcw className="w-2.5 h-2.5 shrink-0" />
+                                    <span className="truncate">Edit Status</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handlePrintSingleReceipt(order)}
+                                    className="h-6.5 w-6.5 flex items-center justify-center bg-amber-50 hover:bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800 rounded-none text-xs font-bold transition-colors shrink-0 cursor-pointer"
+                                    title="Cetak Struk Toko Ini"
+                                  >
+                                    <Printer className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => setOrderToDelete(order)}
+                                    className="h-6.5 w-6.5 flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-gray-600 dark:bg-gray-800 dark:text-gray-400 hover:text-red-600 rounded-none text-xs font-bold transition-colors border border-gray-200 dark:border-gray-700 shrink-0 cursor-pointer"
+                                    title="Hapus / Pindahkan pesanan toko ini ke Kotak Sampah"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
 
-                    {/* 5. Footer: Total Price (Row 1) & Minimalist Actions (Row 2) */}
-                    <div className="pt-1.5 border-t border-gray-200 dark:border-gray-700/80 space-y-1.5">
-                      {/* Row 1: Total Price & Ongkir */}
-                      <div className="flex items-baseline justify-between gap-1 min-w-0">
-                        <div className="flex items-baseline gap-1.5 min-w-0">
-                          <span className="text-sm sm:text-base font-black text-green-700 dark:text-green-400 font-mono leading-none">
-                            Rp {parseFloat(order.total_price || 0).toLocaleString('id-ID')}
+                    {/* 3. Footer Wadah: Ringkasan Total Semua Toko Dalam Wadah */}
+                    <div className="p-2 sm:p-2.5 bg-gray-100/70 dark:bg-gray-800/60 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between gap-1">
+                      <div>
+                        <span className="text-[10px] text-gray-500 dark:text-gray-400 font-semibold block leading-none">
+                          Grand Total ({group.orders.length} Toko • {totalItemsCount} Item):
+                        </span>
+                        <div className="flex items-baseline gap-1 mt-0.5">
+                          <span className="text-sm font-black text-green-700 dark:text-green-400 font-mono">
+                            Rp {grandTotal.toLocaleString('id-ID')}
                           </span>
-                          <span className="text-[10px] text-gray-500 dark:text-gray-400 font-medium truncate">
-                            • Ongkir Rp {parseFloat(order.delivery_fee || 0).toLocaleString('id-ID')}
+                          <span className="text-[9.5px] text-gray-400 font-medium">
+                            (Total Ongkir Rp {totalDeliveryFee.toLocaleString('id-ID')})
                           </span>
                         </div>
-                        <span className="text-[10px] font-bold text-gray-400 font-mono shrink-0">
-                          {order.items?.length || 0} Item
-                        </span>
                       </div>
 
-                      {/* Row 2: Full-width Action Buttons Bar */}
-                      <div className="flex items-center gap-1 w-full">
-                        {order.status !== 'cancelled' ? (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setOrderToCancel(order);
-                                setCancelReason('');
-                              }}
-                              className="h-7 w-7 flex items-center justify-center bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300 rounded-none text-xs font-bold transition-colors border border-red-200 dark:border-red-800 shrink-0 cursor-pointer"
-                              title={order.status === 'completed' ? 'Batalkan pesanan yang sudah selesai' : 'Batalkan Pesanan'}
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                            {order.status === 'pending' && (
-                              <button
-                                type="button"
-                                onClick={() => handleOpenChangeStatusModal(order, 'processing', 'tomorrow')}
-                                disabled={updateStatusMutation.isPending}
-                                className="h-7 px-2 bg-amber-50 hover:bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-300 dark:border-amber-800 rounded-none text-[10.5px] font-bold transition-colors flex items-center gap-1 shadow-2xs cursor-pointer shrink-0"
-                                title="Jadwalkan pesanan ke Besok"
-                              >
-                                <Calendar className="w-3 h-3 text-amber-600 dark:text-amber-400" />
-                                <span>Besok</span>
-                              </button>
-                            )}
-                          </>
-                        ) : (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => handleContinueOrder(order)}
-                              disabled={updateStatusMutation.isPending}
-                              className="h-7 px-2 bg-green-50 hover:bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-300 border border-green-300 dark:border-green-800 rounded-none text-[11px] font-bold transition-colors flex items-center gap-1 shadow-2xs cursor-pointer shrink-0"
-                              title="Lanjutkan Pesanan (Otomatis ditugaskan ke Kurir Toko)"
-                            >
-                              <Truck className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
-                              <span>Lanjutkan</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleOpenChangeStatusModal(order, 'processing', 'tomorrow')}
-                              disabled={updateStatusMutation.isPending}
-                              className="h-7 px-2 bg-amber-50 hover:bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-300 dark:border-amber-800 rounded-none text-[10.5px] font-bold transition-colors flex items-center gap-1 shadow-2xs cursor-pointer shrink-0"
-                              title="Lanjutkan dan Jadwalkan pesanan ke Besok"
-                            >
-                              <Calendar className="w-3 h-3 text-amber-600 dark:text-amber-400" />
-                              <span>Besok</span>
-                            </button>
-                          </>
-                        )}
-
+                      {isMultiStore && (
                         <button
                           type="button"
-                          onClick={() => handleOpenUploadPaymentModal(order)}
-                          className="h-7 w-7 flex items-center justify-center bg-emerald-50 hover:bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-none text-xs font-bold transition-colors shrink-0 cursor-pointer"
-                          title="Unggah / Tambah Bukti Transfer Santri"
+                          onClick={() => handlePrintGroupReceipt(group)}
+                          className="px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded-none text-[10.5px] font-bold flex items-center gap-1 transition-colors shadow-2xs cursor-pointer"
+                          title="Cetak struk gabungan semua toko dalam wadah ini"
                         >
-                          <UploadCloud className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                          <Printer className="w-3 h-3" /> Struk Wadah
                         </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleOpenChangeStatusModal(order)}
-                          className="flex-1 min-w-0 h-7 px-2 bg-blue-50 hover:bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-none text-[11px] font-bold transition-colors flex items-center justify-center gap-1 shadow-2xs cursor-pointer"
-                          title="Ubah Status Pesanan"
-                        >
-                          <RotateCcw className="w-3 h-3 shrink-0" />
-                          <span className="truncate">Status</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handlePrintSingleReceipt(order)}
-                          className="h-7 w-7 flex items-center justify-center bg-amber-50 hover:bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800 rounded-none text-xs font-bold transition-colors shrink-0 cursor-pointer"
-                          title="Cetak Struk Thermal / A4"
-                        >
-                          <Printer className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setOrderToDelete(order)}
-                          className="h-7 w-7 flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-gray-600 dark:bg-gray-800 dark:text-gray-400 hover:text-red-600 rounded-none text-xs font-bold transition-colors border border-gray-200 dark:border-gray-700 shrink-0 cursor-pointer"
-                          title="Hapus / Pindahkan ke Kotak Sampah"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                      )}
                     </div>
                   </div>
                 );

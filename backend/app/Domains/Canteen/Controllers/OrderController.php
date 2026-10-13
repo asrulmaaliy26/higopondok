@@ -1462,6 +1462,20 @@ class OrderController extends Controller
                     ->findOrFail($id);
             }
 
+            if ($order->status === 'cancelled' && !$user->hasRole('admin') && !$user->hasRole('super_admin')) {
+                abort(422, 'Tidak dapat mengunggah bukti pembayaran karena pesanan ini sudah dibatalkan.');
+            }
+
+            // Cegah upload jika toko sedang tutup (kecuali Admin/Super Admin)
+            if (!$user->hasRole('admin') && !$user->hasRole('super_admin')) {
+                $canteen = $order->canteen;
+                if ($canteen && !$canteen->is_open) {
+                    $openTime = $canteen->open_time ? substr($canteen->open_time, 0, 5) : '07:00';
+                    $closeTime = $canteen->close_time ? substr($canteen->close_time, 0, 5) : '17:00';
+                    abort(422, "Toko '{$canteen->name}' saat ini sedang tutup. Mohon unggah bukti pembayaran besok sesuai jam operasional toko buka ({$openTime} - {$closeTime} WIB).");
+                }
+            }
+
             $targetUser = $order->user ?: $user;
 
             $paths = [];
@@ -1523,6 +1537,26 @@ class OrderController extends Controller
 
             if ($orders->isEmpty()) {
                 throw new \Exception("Pesanan dengan Kode Checkout {$checkoutId} tidak ditemukan.");
+            }
+
+            if ($orders->every(fn($o) => $o->status === 'cancelled') && !$user->hasRole('admin') && !$user->hasRole('super_admin')) {
+                abort(422, 'Tidak dapat mengunggah bukti pembayaran karena pesanan ini sudah dibatalkan.');
+            }
+
+            // Cegah upload jika ada toko yang sedang tutup (kecuali Admin/Super Admin)
+            if (!$user->hasRole('admin') && !$user->hasRole('super_admin')) {
+                $closedCanteens = [];
+                foreach ($orders as $o) {
+                    if ($o->canteen && !$o->canteen->is_open) {
+                        $openTime = $o->canteen->open_time ? substr($o->canteen->open_time, 0, 5) : '07:00';
+                        $closeTime = $o->canteen->close_time ? substr($o->canteen->close_time, 0, 5) : '17:00';
+                        $closedCanteens[] = "{$o->canteen->name} (Buka: {$openTime} - {$closeTime} WIB)";
+                    }
+                }
+                if (!empty($closedCanteens)) {
+                    $list = implode(', ', array_unique($closedCanteens));
+                    abort(422, "Toko saat ini sedang tutup: {$list}. Mohon unggah bukti pembayaran besok sesuai jam operasional toko buka.");
+                }
             }
 
             $targetUser = $orders->first()->user ?: $user;

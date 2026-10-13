@@ -168,8 +168,12 @@ export default function Pembayaran() {
   };
 
   const isPaymentTime = (order) => {
+    // Jika backend mengirimkan atribut boolean is_open, prioritaskan itu
+    if (order?.canteen?.is_open !== undefined) {
+      return Boolean(order.canteen.is_open);
+    }
+
     if (!order?.canteen?.open_time || !order?.canteen?.close_time) {
-      // Default fallback jika data jam buka/tutup tidak tersedia
       const hour = new Date().getHours();
       return hour >= 9 && hour < 17;
     }
@@ -179,15 +183,29 @@ export default function Pembayaran() {
     const currentMinute = now.getMinutes();
     const currentTime = currentHour * 60 + currentMinute;
     
-    // Parse open_time (e.g. "09:00:00" atau "09:00")
     const openParts = order.canteen.open_time.split(':');
     const openTime = parseInt(openParts[0]) * 60 + parseInt(openParts[1]);
     
-    // Parse close_time (e.g. "17:00:00" atau "17:00")
     const closeParts = order.canteen.close_time.split(':');
     const closeTime = parseInt(closeParts[0]) * 60 + parseInt(closeParts[1]);
     
-    return currentTime >= openTime && currentTime <= closeTime;
+    if (openTime <= closeTime) {
+      return currentTime >= openTime && currentTime <= closeTime;
+    } else {
+      return currentTime >= openTime || currentTime <= closeTime;
+    }
+  };
+
+  const getClosedCanteensInfo = (orders) => {
+    const closed = (orders || []).filter(o => !isPaymentTime(o));
+    if (closed.length === 0) return null;
+    return closed.map(o => {
+      const c = o.canteen;
+      const name = c?.name || 'Toko';
+      const open = c?.open_time ? c.open_time.slice(0, 5) : '07:00';
+      const close = c?.close_time ? c.close_time.slice(0, 5) : '17:00';
+      return `${name} (Buka: ${open} - ${close} WIB)`;
+    });
   };
 
   const queryClient = useQueryClient();
@@ -1028,24 +1046,38 @@ export default function Pembayaran() {
                                   Lihat <Eye className="w-3 h-3" />
                                 </span>
                                 {group.overallStatus !== 'cancelled' && group.payment_status !== 'paid' && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setActiveOrderForPaymentProof({
-                                        id: singleOrder.id,
-                                        checkoutId: group.checkoutId,
-                                        total_price: group.grandTotal,
-                                        displayId: group.checkoutId || `#${singleOrder.id}`,
-                                        canteenCount: group.orders.length
-                                      });
-                                      setShowPaymentProofModal(true);
-                                    }}
-                                    className="px-1.5 py-0.5 bg-green-600 text-white rounded-none text-[10px] font-bold hover:bg-green-700 transition-colors"
-                                    title="Tambah bukti transfer"
-                                  >
-                                    +
-                                  </button>
+                                  (() => {
+                                    const closedCanteens = getClosedCanteensInfo(group.orders);
+                                    const isAllOpen = closedCanteens.length === 0;
+                                    return (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (!isAllOpen) {
+                                            toast.error(`Toko sedang tutup. Silakan upload bukti pembayaran besok saat toko buka (${closedCanteens.map(c => `${c.name}: ${c.hours}`).join(', ')})`);
+                                            return;
+                                          }
+                                          setActiveOrderForPaymentProof({
+                                            id: singleOrder.id,
+                                            checkoutId: group.checkoutId,
+                                            total_price: group.grandTotal,
+                                            displayId: group.checkoutId || `#${singleOrder.id}`,
+                                            canteenCount: group.orders.length
+                                          });
+                                          setShowPaymentProofModal(true);
+                                        }}
+                                        className={`px-1.5 py-0.5 rounded-none text-[10px] font-bold transition-colors ${
+                                          isAllOpen 
+                                            ? 'bg-green-600 text-white hover:bg-green-700' 
+                                            : 'bg-gray-300 dark:bg-gray-700 text-gray-500 cursor-not-allowed'
+                                        }`}
+                                        title={isAllOpen ? "Tambah bukti transfer" : "Toko tutup (upload besok)"}
+                                      >
+                                        +
+                                      </button>
+                                    );
+                                  })()
                                 )}
                               </div>
                             </div>
@@ -1055,39 +1087,66 @@ export default function Pembayaran() {
 
                       {/* 4. Compact Upload Bar (Jika belum bayar dan belum upload bukti) */}
                       {group.overallStatus !== 'cancelled' && group.payment_status === 'unpaid' && !group.proof_of_payment && (
-                        <div className="space-y-1 pt-1">
-                          <button 
-                            type="button"
-                            onClick={() => {
-                              setActiveOrderForPaymentProof({
-                                id: singleOrder.id,
-                                checkoutId: group.checkoutId,
-                                total_price: group.grandTotal,
-                                displayId: group.checkoutId || `#${singleOrder.id}`,
-                                canteenCount: group.orders.length
-                              });
-                              setShowPaymentProofModal(true);
-                            }}
-                            className="w-full flex items-center justify-between py-2 px-2.5 bg-green-600 hover:bg-green-700 text-white rounded-none transition-all font-bold text-xs shadow-xs active:scale-[0.99] cursor-pointer"
-                          >
-                            <span className="flex items-center gap-1.5 truncate">
-                              <Camera className="w-3.5 h-3.5 shrink-0" />
-                              <span className="truncate">
-                                {isMulti ? `Upload Bukti Pembayaran (${group.orders.length} Toko)` : 'Upload Bukti Pembayaran'}
-                              </span>
-                            </span>
-                            <span className="font-mono text-[11px] font-black shrink-0 ml-2">
-                              Rp {Math.round(group.grandTotal).toLocaleString('id-ID')} ➔
-                            </span>
-                          </button>
+                        (() => {
+                          const closedCanteens = getClosedCanteensInfo(group.orders);
+                          const isAllOpen = closedCanteens.length === 0;
 
-                          {!group.orders.every(o => isPaymentTime(o)) && (
-                            <p className="text-[10px] text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-2 py-1 rounded-none border border-amber-200 dark:border-amber-800/60 flex items-center gap-1.5">
-                              <Clock className="w-3 h-3 shrink-0 text-amber-600" />
-                              <span>Ada toko sedang tutup. Bukti transfer tetap dapat diunggah dan diverifikasi saat buka.</span>
-                            </p>
-                          )}
-                        </div>
+                          return (
+                            <div className="space-y-1.5 pt-1">
+                              {isAllOpen ? (
+                                <button 
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveOrderForPaymentProof({
+                                      id: singleOrder.id,
+                                      checkoutId: group.checkoutId,
+                                      total_price: group.grandTotal,
+                                      displayId: group.checkoutId || `#${singleOrder.id}`,
+                                      canteenCount: group.orders.length
+                                    });
+                                    setShowPaymentProofModal(true);
+                                  }}
+                                  className="w-full flex items-center justify-between py-2 px-2.5 bg-green-600 hover:bg-green-700 text-white rounded-none transition-all font-bold text-xs shadow-xs active:scale-[0.99] cursor-pointer"
+                                >
+                                  <span className="flex items-center gap-1.5 truncate">
+                                    <Camera className="w-3.5 h-3.5 shrink-0" />
+                                    <span className="truncate">
+                                      {isMulti ? `Upload Bukti Pembayaran (${group.orders.length} Toko)` : 'Upload Bukti Pembayaran'}
+                                    </span>
+                                  </span>
+                                  <span className="font-mono text-[11px] font-black shrink-0 ml-2">
+                                    Rp {Math.round(group.grandTotal).toLocaleString('id-ID')} ➔
+                                  </span>
+                                </button>
+                              ) : (
+                                <div className="p-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800/80 rounded-none text-left space-y-1.5">
+                                  <div className="flex items-center gap-1.5 text-amber-800 dark:text-amber-300 font-bold text-xs">
+                                    <Clock className="w-3.5 h-3.5 shrink-0 text-amber-600" />
+                                    <span>Toko Sedang Tutup</span>
+                                  </div>
+                                  <p className="text-[11px] text-amber-800 dark:text-amber-300 leading-snug">
+                                    Upload bukti pembayaran ditutup saat malam / di luar jam buka. Silakan upload besok saat toko sudah buka kembali:
+                                  </p>
+                                  <div className="bg-white/90 dark:bg-black/40 p-1.5 border border-amber-200 dark:border-amber-900/60 rounded-none space-y-1 text-[10px] font-mono text-amber-900 dark:text-amber-200">
+                                    {closedCanteens.map((c, i) => (
+                                      <div key={i} className="flex justify-between items-center">
+                                        <span className="font-semibold truncate mr-2">• {c.name}</span>
+                                        <span className="shrink-0 font-bold">{c.hours}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                  <button
+                                    type="button"
+                                    disabled
+                                    className="w-full py-1.5 bg-gray-200 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded-none text-xs font-bold cursor-not-allowed text-center"
+                                  >
+                                    Upload Ditutup (Buka Besok)
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()
                       )}
                     </div>
                   )}
@@ -1550,6 +1609,20 @@ export default function Pembayaran() {
             </div>
             
             <div className="p-6 overflow-y-auto">
+              {activeOrderForPaymentProof?.orders && !activeOrderForPaymentProof.orders.every(o => isPaymentTime(o)) && (
+                <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200 text-xs rounded-none">
+                  <div className="flex items-center gap-1.5 font-bold mb-1 text-amber-800 dark:text-amber-300">
+                    <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                    <span>Toko Sedang Tutup — Upload Ditangguhkan</span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed text-amber-800/90 dark:text-amber-300/90">
+                    {getClosedCanteensInfo(activeOrderForPaymentProof.orders)?.join('; ')}
+                    <br />
+                    Silakan unggah bukti pembayaran besok saat toko sudah buka kembali sesuai jam operasional di atas.
+                  </p>
+                </div>
+              )}
+
               <div className="mb-6 text-center">
                 <p className="text-sm text-gray-600 dark:text-gray-300 mb-1">
                   Silakan scan QRIS di bawah ini untuk membayar sebesar
@@ -1710,8 +1783,17 @@ export default function Pembayaran() {
               </button>
               <button 
                 type="button"
-                disabled={paymentProofFiles.length === 0 || uploadPaymentProofMutation.isPending || isCompressing}
+                disabled={
+                  paymentProofFiles.length === 0 || 
+                  uploadPaymentProofMutation.isPending || 
+                  isCompressing || 
+                  Boolean(activeOrderForPaymentProof?.orders && !activeOrderForPaymentProof.orders.every(o => isPaymentTime(o)))
+                }
                 onClick={() => {
+                  if (activeOrderForPaymentProof?.orders && !activeOrderForPaymentProof.orders.every(o => isPaymentTime(o))) {
+                    toast.error("Toko sedang tutup. Silakan upload bukti pembayaran besok saat toko buka.");
+                    return;
+                  }
                   const formData = new FormData();
                   paymentProofFiles.forEach((file) => {
                     formData.append('proof_of_payment[]', file);
@@ -1733,6 +1815,11 @@ export default function Pembayaran() {
                   <span className="flex items-center gap-2">
                     <span className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent inline-block"></span>
                     <span>Mengompresi...</span>
+                  </span>
+                ) : (activeOrderForPaymentProof?.orders && !activeOrderForPaymentProof.orders.every(o => isPaymentTime(o))) ? (
+                  <span className="flex items-center gap-2 text-amber-200">
+                    <Clock className="w-4 h-4" />
+                    <span>Toko Tutup (Upload Besok)</span>
                   </span>
                 ) : (
                   <span className="flex items-center gap-2">

@@ -14,6 +14,7 @@ import AdminAccountingModal from '../../components/modals/AdminAccountingModal';
 import santriData from '../../data/santri.json';
 import { PRICING_CONFIG } from '../../config/pricing';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
+import { renderOrderDateTime } from '../../lib/orderUtils';
 
 function getWeeksInMonth(year, month) {
   // month is 0-indexed
@@ -1281,9 +1282,7 @@ ${itemsListText}
             <span className="text-xs sm:text-sm font-bold text-gray-800 dark:text-gray-200 font-mono">
               #{order.id}
             </span>
-            <span className="text-[10px] sm:text-xs text-gray-400">
-              • {new Date(order.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
-            </span>
+            {renderOrderDateTime(order)}
           </div>
 
           {/* Status Badges */}
@@ -1783,9 +1782,7 @@ ${itemsListText}
             <span className="text-xs sm:text-sm font-bold text-gray-800 dark:text-gray-200 font-mono">
               #{group.orders.map(o => o.id).join(', #')}
             </span>
-            <span className="text-[10px] text-gray-400">
-              • {new Date(group.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
-            </span>
+            {renderOrderDateTime(group)}
           </div>
 
           {/* Status Badges */}

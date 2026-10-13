@@ -15,6 +15,7 @@ import santriData from '../../data/santri.json';
 import { getFileType, isImageFile, isHeifFile, isPdfFile, formatFileSize, getFileNameFromPath, compressImageFiles } from '../../lib/fileUtils';
 import ThermalReceiptModal from '../../components/receipt/ThermalReceiptModal';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
+import { renderOrderDateTime } from '../../lib/orderUtils';
 
 function getSantriGender(santriName = '', santriRoom = '') {
   const sName = (santriName || '').toLowerCase().trim();
@@ -1487,9 +1488,7 @@ export default function TugasKurir() {
                             <span className="text-[11px] font-bold text-gray-800 dark:text-gray-200">
                               #{order.id}
                             </span>
-                            <span className="text-[10px] text-gray-400">
-                              • {new Date(order.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
-                            </span>
+                            {renderOrderDateTime(order)}
                           </div>
 
                           {/* Status Badges */}
