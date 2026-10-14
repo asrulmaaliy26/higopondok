@@ -987,7 +987,7 @@ class OrderController extends Controller
         $status = $request->query('status');
 
         $query = Order::where('user_id', $user->id)
-            ->with(['canteen', 'items.product', 'courier', 'voucher'])
+            ->with(['canteen.user:id,name,phone,email', 'items.product', 'courier', 'voucher'])
             ->orderBy('created_at', 'desc');
 
         if ($startDate && $endDate) {

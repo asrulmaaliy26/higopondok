@@ -1233,16 +1233,42 @@ export default function Pembayaran() {
                         <span>Struk</span>
                       </button>
 
-                      {!isMulti && singleOrder.canteen?.whatsapp_number && (
-                        <a 
-                          href={formatPhoneWA(singleOrder.canteen.whatsapp_number) + `?text=${encodeURIComponent(buildOrderWAText(singleOrder))}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex-1 min-w-[85px] flex items-center justify-center gap-1 py-1.5 px-2 bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-950/40 dark:text-green-300 dark:hover:bg-green-900/50 border border-green-200 dark:border-green-800 rounded-none text-xs font-bold transition-all active:scale-[0.98]"
-                        >
-                          <MessageCircle className="w-3.5 h-3.5 text-green-600 dark:text-green-400" /> 
-                          <span>Chat Toko</span>
-                        </a>
+                      {/* Chat Toko (Tampil untuk single toko maupun multi toko) */}
+                      {!isMulti ? (
+                        (() => {
+                          const phone = singleOrder.canteen?.whatsapp_number || singleOrder.canteen?.user?.phone;
+                          if (!phone) return null;
+                          return (
+                            <a 
+                              href={formatPhoneWA(phone) + `?text=${encodeURIComponent(buildOrderWAText(singleOrder))}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex-1 min-w-[85px] flex items-center justify-center gap-1 py-1.5 px-2 bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-950/40 dark:text-green-300 dark:hover:bg-green-900/50 border border-green-200 dark:border-green-800 rounded-none text-xs font-bold transition-all active:scale-[0.98]"
+                            >
+                              <MessageCircle className="w-3.5 h-3.5 text-green-600 dark:text-green-400" /> 
+                              <span>Chat Toko</span>
+                            </a>
+                          );
+                        })()
+                      ) : (
+                        group.orders.map(order => {
+                          const phone = order.canteen?.whatsapp_number || order.canteen?.user?.phone;
+                          if (!phone) return null;
+                          const cName = order.canteen?.name || 'Toko';
+                          return (
+                            <a 
+                              key={`chat-canteen-${order.id}`}
+                              href={formatPhoneWA(phone) + `?text=${encodeURIComponent(buildOrderWAText(order))}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex-1 min-w-[95px] flex items-center justify-center gap-1 py-1.5 px-2 bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-950/40 dark:text-green-300 dark:hover:bg-green-900/50 border border-green-200 dark:border-green-800 rounded-none text-[11px] font-bold transition-all active:scale-[0.98] truncate"
+                              title={`Chat WhatsApp ke ${cName}`}
+                            >
+                              <MessageCircle className="w-3.5 h-3.5 text-green-600 dark:text-green-400 shrink-0" /> 
+                              <span className="truncate">Chat {cName}</span>
+                            </a>
+                          );
+                        })
                       )}
                       {(() => {
                         const courierOrder = group.orders.find(o => o.courier?.phone);

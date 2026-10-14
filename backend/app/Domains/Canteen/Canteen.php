@@ -118,6 +118,14 @@ class Canteen extends Model
         }
     }
 
+    public function getWhatsappNumberAttribute($value)
+    {
+        if (!empty($value)) {
+            return $value;
+        }
+        return $this->user?->phone;
+    }
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
