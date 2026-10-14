@@ -176,10 +176,15 @@ class AdminController extends Controller
         $openTime = strlen($request->open_time) === 5 ? $request->open_time . ':00' : $request->open_time;
         $closeTime = strlen($request->close_time) === 5 ? $request->close_time . ':00' : $request->close_time;
         
-        $canteen->update([
+        $updateData = [
             'open_time' => $openTime,
             'close_time' => $closeTime,
-        ]);
+        ];
+        if ($request->has('closed_days')) {
+            $updateData['closed_days'] = $request->closed_days;
+        }
+
+        $canteen->update($updateData);
 
         // Hapus force close cache jika ada
         Cache::forget('canteen_force_closed_' . $canteen->id);
@@ -216,9 +221,10 @@ class AdminController extends Controller
         }
 
         $categoryLabel = match($request->category) {
+            'all', null, '' => 'Semua Toko',
             'kauman' => 'Zona Kauman',
             'kota' => 'Zona Kota',
-            default => 'Semua Toko'
+            default => 'Zona ' . ucfirst($request->category)
         };
 
         return response()->json([

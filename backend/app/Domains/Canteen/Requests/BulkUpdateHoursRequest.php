@@ -24,7 +24,7 @@ class BulkUpdateHoursRequest extends FormRequest
         return [
             'open_time' => ['required', 'regex:/^\d{1,2}:\d{2}(:\d{2})?$/'],
             'close_time' => ['required', 'regex:/^\d{1,2}:\d{2}(:\d{2})?$/'],
-            'category' => 'nullable|string|in:all,kauman,kota',
+            'category' => 'nullable|string|max:50',
             'reopen_force_closed' => 'nullable|boolean'
         ];
     }

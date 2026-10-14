@@ -138,6 +138,11 @@ export default function DetailKantin() {
   const otherStoresItemsCount = Math.max(0, allTotalItems - canteenItemsCount);
 
   const handleAddToCart = (product) => {
+    if (!canteen?.is_open) {
+      toast.error(canteen?.is_closed_today ? 'Toko sedang libur rutin hari ini' : 'Toko sedang tutup');
+      return;
+    }
+
     if (hasVariants(product)) {
       setSelectedVariantProduct(product);
       setIsVariantModalOpen(true);
@@ -156,6 +161,10 @@ export default function DetailKantin() {
 
   const handleConfirmVariant = ({ quantity, options, notes, extraPrice, variantKey }) => {
     if (!selectedVariantProduct) return;
+    if (!canteen?.is_open) {
+      toast.error(canteen?.is_closed_today ? 'Toko sedang libur rutin hari ini' : 'Toko sedang tutup');
+      return;
+    }
     addItem(canteen, selectedVariantProduct, quantity, { variantKey, extraPrice, labels: options }, notes);
     toast.success(`${selectedVariantProduct.name} dimasukkan ke keranjang`);
     setIsVariantModalOpen(false);
@@ -259,7 +268,7 @@ export default function DetailKantin() {
                 canteen.is_open ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
               }`}
             >
-              {canteen.is_open ? '● BUKA' : '● TUTUP'}
+              {canteen.is_open ? '● BUKA' : (canteen.is_closed_today ? '● LIBUR HARI INI' : '● TUTUP')}
             </span>
             <span className="text-xs text-green-300 font-bold flex items-center gap-0.5">
               <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
@@ -290,8 +299,26 @@ export default function DetailKantin() {
           <div className="flex items-center gap-1 text-[11px] text-gray-500 font-medium">
             <Clock className="w-3 h-3 text-gray-400" />
             <span>{canteen.open_time ? `${canteen.open_time.substring(0, 5)} - ${canteen.close_time?.substring(0, 5)}` : '08:00 - 21:00'}</span>
+            {canteen.closed_days && canteen.closed_days.length > 0 && (
+              <span className="text-red-500 font-semibold ml-1">
+                (Libur: {canteen.closed_days.map(d => d.charAt(0).toUpperCase() + d.slice(1)).join(', ')})
+              </span>
+            )}
           </div>
         </div>
+
+        {/* Banner Libur Rutin */}
+        {canteen.is_closed_today && (
+          <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 p-2.5 flex items-center gap-2 text-xs text-red-800 dark:text-red-300">
+            <span className="text-base">📅</span>
+            <div>
+              <p className="font-bold leading-tight">Toko Sedang Libur Rutin Hari Ini</p>
+              <p className="text-[10px] text-red-600 dark:text-red-400 mt-0.5">
+                Toko ini memiliki jadwal libur rutin hari ini. Pemesanan tidak dapat dilakukan sampai jadwal buka berikutnya.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* 2.1 PROMO VOUCHER BANNER (Gojek / GoFood Promo Ribbon) */}
         <div 
@@ -524,7 +551,15 @@ export default function DetailKantin() {
                       {/* Tombol Aksi Tambah / Qty ala GoFood */}
                       {isAvailable && (
                         <div className="w-full">
-                          {productHasVariants ? (
+                          {!canteen?.is_open ? (
+                            <button
+                              type="button"
+                              disabled
+                              className="w-full py-1 bg-gray-100 dark:bg-gray-800 text-gray-400 font-bold text-[10px] uppercase tracking-wider rounded-none cursor-not-allowed border border-gray-200 dark:border-gray-700"
+                            >
+                              {canteen?.is_closed_today ? 'Libur Hari Ini' : 'Toko Tutup'}
+                            </button>
+                          ) : productHasVariants ? (
                             <button
                               type="button"
                               onClick={() => handleAddToCart(product)}

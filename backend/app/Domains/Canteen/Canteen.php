@@ -25,6 +25,7 @@ class Canteen extends Model
         'status',
         'open_time',
         'close_time',
+        'closed_days',
         'delivery_fee',
         'delivery_rates',
         'admin_fee',
@@ -52,11 +53,12 @@ class Canteen extends Model
             'longitude' => 'float',
             'rating' => 'float',
             'sold_count' => 'integer',
-            'rating_count' => 'integer'
+            'rating_count' => 'integer',
+            'closed_days' => 'array'
         ];
     }
 
-    protected $appends = ['is_open', 'is_force_closed'];
+    protected $appends = ['is_open', 'is_force_closed', 'is_closed_today'];
 
     public function getIsForceClosedAttribute(): bool
     {
@@ -66,10 +68,41 @@ class Canteen extends Model
         return (bool) Cache::get('canteen_force_closed_' . $this->id, false);
     }
 
+    public function getIsClosedTodayAttribute(): bool
+    {
+        if (empty($this->closed_days) || !is_array($this->closed_days)) {
+            return false;
+        }
+
+        $now = now('Asia/Jakarta');
+        $dayOfWeek = $now->dayOfWeek; // 0 = Minggu, 1 = Senin, ..., 6 = Sabtu
+        $dayMap = [
+            0 => 'minggu',
+            1 => 'senin',
+            2 => 'selasa',
+            3 => 'rabu',
+            4 => 'kamis',
+            5 => 'jumat',
+            6 => 'sabtu',
+        ];
+        $todayName = $dayMap[$dayOfWeek] ?? '';
+        $todayEnglish = strtolower($now->format('l'));
+
+        $closedDaysNormalized = array_map(function($d) {
+            return is_string($d) ? strtolower(trim($d)) : $d;
+        }, $this->closed_days);
+
+        return in_array($todayName, $closedDaysNormalized, true)
+            || in_array($todayEnglish, $closedDaysNormalized, true)
+            || in_array($dayOfWeek, $closedDaysNormalized, true)
+            || in_array((string)$dayOfWeek, $closedDaysNormalized, true);
+    }
+
     public function getIsOpenAttribute()
     {
         if ($this->status !== 'approved') return false;
         if ($this->is_force_closed) return false;
+        if ($this->is_closed_today) return false;
         
         $now = now('Asia/Jakarta')->format('H:i:s');
         $open = $this->open_time ?? '09:00:00';
@@ -126,19 +159,38 @@ class Canteen extends Model
             return $query->whereRaw('1 = 0');
         }
 
-        $now = now('Asia/Jakarta')->format('H:i:s');
-        
+        $now = now('Asia/Jakarta');
+        $timeNow = $now->format('H:i:s');
+        $dayMap = [
+            0 => 'minggu',
+            1 => 'senin',
+            2 => 'selasa',
+            3 => 'rabu',
+            4 => 'kamis',
+            5 => 'jumat',
+            6 => 'sabtu',
+        ];
+        $todayName = $dayMap[$now->dayOfWeek] ?? '';
+        $todayEnglish = strtolower($now->format('l'));
+
         return $query->where('status', 'approved')
-            ->where(function($q) use ($now) {
-                $q->where(function($q1) use ($now) {
+            ->where(function($q) use ($todayName, $todayEnglish) {
+                $q->whereNull('closed_days')
+                  ->orWhere(function($sub) use ($todayName, $todayEnglish) {
+                      $sub->whereJsonDoesntContain('closed_days', $todayName)
+                          ->whereJsonDoesntContain('closed_days', $todayEnglish);
+                  });
+            })
+            ->where(function($q) use ($timeNow) {
+                $q->where(function($q1) use ($timeNow) {
                     $q1->whereRaw('open_time < close_time')
-                       ->whereTime('open_time', '<=', $now)
-                       ->whereTime('close_time', '>=', $now);
-                })->orWhere(function($q2) use ($now) {
+                       ->whereTime('open_time', '<=', $timeNow)
+                       ->whereTime('close_time', '>=', $timeNow);
+                })->orWhere(function($q2) use ($timeNow) {
                     $q2->whereRaw('open_time > close_time')
-                       ->where(function($q3) use ($now) {
-                           $q3->whereTime('open_time', '<=', $now)
-                              ->orWhereTime('close_time', '>=', $now);
+                       ->where(function($q3) use ($timeNow) {
+                           $q3->whereTime('open_time', '<=', $timeNow)
+                              ->orWhereTime('close_time', '>=', $timeNow);
                        });
                 });
             });

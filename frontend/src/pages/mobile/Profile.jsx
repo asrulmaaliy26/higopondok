@@ -11,8 +11,7 @@ import api, { getStorageUrl } from '../../lib/axios';
 import santriData from '../../data/santri.json';
 import AdminAccountingModal from '../../components/modals/AdminAccountingModal';
 import ThemeToggle from '../../components/ui/ThemeToggle';
-import LoadingSpinner from '../../components/common/LoadingSpinner';
-import { PRICING_CONFIG, formatRupiah } from '../../config/pricing';
+import { PRICING_CONFIG, CANTEEN_ZONES, getCanteenZone, formatRupiah } from '../../config/pricing';
 
 const uniqueJenjang = [...new Set(santriData.data.filter(r => r.length > 5 && r[4]).map(r => r[4]))].sort();
 const uniqueAsrama = [...new Set(santriData.data.filter(r => r.length > 10 && r[10]).map(r => r[10]))].sort();
@@ -113,6 +112,7 @@ export default function Profile() {
     description: '',
     open_time: '09:00',
     close_time: '17:00',
+    closed_days: [],
     image: null,
     whatsapp_number: '',
     delivery_fee: 0
@@ -263,6 +263,11 @@ export default function Profile() {
     
     formData.append('open_time', profileData.open_time);
     formData.append('close_time', profileData.close_time);
+    if (profileData.closed_days && profileData.closed_days.length > 0) {
+      profileData.closed_days.forEach(day => formData.append('closed_days[]', day));
+    } else {
+      formData.append('closed_days', JSON.stringify([]));
+    }
     formData.append('delivery_fee', autoDeliveryFee);
     formData.append('category', category);
     if (profileData.whatsapp_number) {
@@ -286,6 +291,7 @@ export default function Profile() {
       description: canteen.description || '',
       open_time: canteen.open_time?.substring(0,5) || '09:00',
       close_time: canteen.close_time?.substring(0,5) || '17:00',
+      closed_days: Array.isArray(canteen.closed_days) ? canteen.closed_days : [],
       image: canteen.image || null,
       whatsapp_number: canteen.whatsapp_number || '',
       delivery_fee: canteen.delivery_fee || 0
@@ -838,6 +844,63 @@ export default function Profile() {
                       <input type="time" id="close_time" required value={profileData.close_time} onChange={e => setProfileData({...profileData, close_time: e.target.value})} className="mt-1 block w-full rounded-none border border-gray-200 dark:border-gray-700 py-2 px-3 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-800 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors" />
                     </div>
                   </div>
+
+                  {/* Hari Libur Rutin */}
+                  <div className="pt-1">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">
+                        Hari Libur Rutin (Tutup Otomatis)
+                      </label>
+                      <span className="text-[10px] font-mono font-bold text-gray-500 dark:text-gray-400">
+                        {profileData.closed_days?.length > 0
+                          ? `${profileData.closed_days.length} hari libur`
+                          : 'Buka setiap hari'}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-gray-400 mb-1.5 leading-snug">
+                      Klik pada hari di bawah untuk mengatur toko otomatis tutup:
+                    </p>
+                    <div className="grid grid-cols-7 gap-1">
+                      {[
+                        { id: 'senin', label: 'Sen' },
+                        { id: 'selasa', label: 'Sel' },
+                        { id: 'rabu', label: 'Rab' },
+                        { id: 'kamis', label: 'Kam' },
+                        { id: 'jumat', label: 'Jum' },
+                        { id: 'sabtu', label: 'Sab' },
+                        { id: 'minggu', label: 'Min' },
+                      ].map((day) => {
+                        const isClosed = profileData.closed_days?.includes(day.id);
+                        return (
+                          <button
+                            key={day.id}
+                            type="button"
+                            onClick={() => {
+                              const curr = profileData.closed_days || [];
+                              const next = curr.includes(day.id)
+                                ? curr.filter((d) => d !== day.id)
+                                : [...curr, day.id];
+                              setProfileData({ ...profileData, closed_days: next });
+                            }}
+                            className={`py-1.5 px-0.5 text-center transition-colors rounded-none border cursor-pointer ${
+                              isClosed
+                                ? 'bg-red-600 text-white border-red-700'
+                                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-700 hover:border-gray-400'
+                            }`}
+                          >
+                            <span className="block text-[11px] font-bold leading-none">{day.label}</span>
+                            <span
+                              className={`block text-[8px] uppercase tracking-tighter mt-1 font-mono ${
+                                isClosed ? 'text-red-100 font-extrabold' : 'text-gray-400 font-normal'
+                              }`}
+                            >
+                              {isClosed ? 'Tutup' : 'Buka'}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
                   <div>
@@ -864,29 +927,42 @@ export default function Profile() {
                       onChange={e => setProfileData({
                         ...profileData, 
                         category: e.target.value,
-                        delivery_fee: PRICING_CONFIG.BASE_DELIVERY_FEE
+                        delivery_fee: getCanteenZone(e.target.value)?.deliveryFee || PRICING_CONFIG.BASE_DELIVERY_FEE
                       })}
                       className="w-full mt-1 p-2.5 border border-gray-200 dark:border-gray-700 rounded-none text-sm bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 font-medium"
                     >
-                      <option value="kauman">Kauman / Sekitar Pondok</option>
-                      <option value="kota">Area Kota / Luar</option>
+                      {CANTEEN_ZONES.map(z => (
+                        <option key={z.id} value={z.id}>
+                          {z.label} (Total {formatRupiah(z.deliveryFee + z.adminFee)})
+                        </option>
+                      ))}
                     </select>
                   </div>
 
-                  <div className="bg-gray-50 dark:bg-gray-800/60 p-3 rounded-none border border-gray-200 dark:border-gray-700/60 space-y-1.5">
-                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Rincian Tarif Layanan Terpadu</label>
-                    <div className="flex flex-wrap items-center gap-2 text-xs font-bold pt-0.5">
-                      <span className="bg-green-50 dark:bg-green-950/40 text-green-800 dark:text-green-300 border border-green-200 dark:border-green-800 px-2.5 py-1 rounded-none font-mono">
-                        🛵 Ongkir Kurir: {formatRupiah(PRICING_CONFIG.BASE_DELIVERY_FEE)}
-                      </span>
-                      <span className="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 px-2.5 py-1 rounded-none font-mono">
-                        🛡️ Biaya Layanan: {formatRupiah(PRICING_CONFIG.BASE_ADMIN_FEE)}
-                      </span>
-                    </div>
-                    <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-1 leading-relaxed">
-                      *Tarif dasar berlaku untuk 1–5 item. Setiap kelipatan 5 item berikutnya dikenakan tambahan penyesuaian beban pesanan.
-                    </p>
-                  </div>
+                  {(() => {
+                    const currentZone = getCanteenZone(profileData.category || 'kauman');
+                    return (
+                      <div className="bg-gray-50 dark:bg-gray-800/60 p-2.5 rounded-none border border-gray-200 dark:border-gray-700/60 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <label className="block text-[11px] font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Rincian Tarif Layanan</label>
+                          <span className="text-[11px] font-mono font-bold text-green-700 dark:text-green-400">Total {formatRupiah(currentZone.deliveryFee + currentZone.adminFee)}</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1.5 text-xs font-bold pt-0.5 font-mono">
+                          <div className="bg-white dark:bg-gray-800 p-1.5 border border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                            <span className="text-gray-500 dark:text-gray-400 text-[10px] font-sans font-semibold">🛵 Kurir</span>
+                            <span className="text-gray-900 dark:text-white">{formatRupiah(currentZone.deliveryFee)}</span>
+                          </div>
+                          <div className="bg-white dark:bg-gray-800 p-1.5 border border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                            <span className="text-gray-500 dark:text-gray-400 text-[10px] font-sans font-semibold">🛡️ Kas Admin</span>
+                            <span className="text-emerald-600 dark:text-emerald-400">{formatRupiah(currentZone.adminFee)}</span>
+                          </div>
+                        </div>
+                        <p className="text-[10px] text-gray-500 dark:text-gray-400 pt-0.5 leading-relaxed">
+                          *Tarif dasar berlaku untuk 1–5 item. Setiap kelipatan 5 item berikutnya dikenakan tambahan penyesuaian beban pesanan.
+                        </p>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
               <div className="px-4 py-4 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3 mt-4">

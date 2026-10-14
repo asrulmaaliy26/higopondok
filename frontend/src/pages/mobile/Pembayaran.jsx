@@ -198,13 +198,20 @@ export default function Pembayaran() {
 
   const getClosedCanteensInfo = (orders) => {
     const closed = (orders || []).filter(o => !isPaymentTime(o));
-    if (closed.length === 0) return null;
+    if (!closed || closed.length === 0) return [];
     return closed.map(o => {
       const c = o.canteen;
       const name = c?.name || 'Toko';
       const open = c?.open_time ? c.open_time.slice(0, 5) : '07:00';
       const close = c?.close_time ? c.close_time.slice(0, 5) : '17:00';
-      return `${name} (Buka: ${open} - ${close} WIB)`;
+      const hours = `${open} - ${close} WIB`;
+      return {
+        name,
+        hours,
+        toString() {
+          return `${this.name} (Buka: ${this.hours})`;
+        }
+      };
     });
   };
 
@@ -1047,7 +1054,7 @@ export default function Pembayaran() {
                                 </span>
                                 {group.overallStatus !== 'cancelled' && group.payment_status !== 'paid' && (
                                   (() => {
-                                    const closedCanteens = getClosedCanteensInfo(group.orders);
+                                    const closedCanteens = getClosedCanteensInfo(group.orders) || [];
                                     const isAllOpen = closedCanteens.length === 0;
                                     return (
                                       <button
@@ -1088,7 +1095,7 @@ export default function Pembayaran() {
                       {/* 4. Compact Upload Bar (Jika belum bayar dan belum upload bukti) */}
                       {group.overallStatus !== 'cancelled' && group.payment_status === 'unpaid' && !group.proof_of_payment && (
                         (() => {
-                          const closedCanteens = getClosedCanteensInfo(group.orders);
+                          const closedCanteens = getClosedCanteensInfo(group.orders) || [];
                           const isAllOpen = closedCanteens.length === 0;
 
                           return (
@@ -1616,7 +1623,7 @@ export default function Pembayaran() {
                     <span>Toko Sedang Tutup — Upload Ditangguhkan</span>
                   </div>
                   <p className="text-[11px] leading-relaxed text-amber-800/90 dark:text-amber-300/90">
-                    {getClosedCanteensInfo(activeOrderForPaymentProof.orders)?.join('; ')}
+                    {getClosedCanteensInfo(activeOrderForPaymentProof.orders)?.map(c => c.toString()).join('; ')}
                     <br />
                     Silakan unggah bukti pembayaran besok saat toko sudah buka kembali sesuai jam operasional di atas.
                   </p>

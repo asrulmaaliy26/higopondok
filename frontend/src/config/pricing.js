@@ -29,6 +29,20 @@ export const PRICING_CONFIG = {
 };
 
 /**
+ * =====================================================================
+ * DAFTAR ZONA TOKO TERPUSAT (Single Source of Truth)
+ * Tambahkan atau ubah zona di sini untuk menambah opsi zona baru
+ * secara dinamis di seluruh sistem aplikasi Higo Pondok.
+ * =====================================================================
+ */
+export const CANTEEN_ZONES = [
+  { id: 'kauman', label: 'Zona Kauman', deliveryFee: 2000, adminFee: 1000 },
+  { id: 'kota',   label: 'Zona Kota',   deliveryFee: PRICING_CONFIG.BASE_DELIVERY_FEE, adminFee: PRICING_CONFIG.BASE_ADMIN_FEE },
+];
+
+export const getCanteenZone = (id) => CANTEEN_ZONES.find(z => z.id === id) ?? CANTEEN_ZONES[0];
+
+/**
  * Format angka ke Rupiah (Rp X.XXX)
  */
 export function formatRupiah(amount) {

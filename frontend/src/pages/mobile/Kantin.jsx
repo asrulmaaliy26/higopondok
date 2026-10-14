@@ -481,7 +481,7 @@ export default function Kantin() {
                                 : 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300 border border-red-300 dark:border-red-800'
                             }`}
                           >
-                            {canteen.is_open ? 'Buka' : 'Tutup'}
+                            {canteen.is_open ? 'Buka' : (canteen.is_closed_today ? 'Libur Hari Ini' : 'Tutup')}
                           </span>
                         </div>
 
@@ -555,7 +555,7 @@ export default function Kantin() {
                             <ChevronRight className="w-3.5 h-3.5" />
                           </Link>
                           <span className="text-[10px] text-gray-400 font-mono">
-                            {canteen.is_open ? 'Siap Dipesan' : 'Buka Jam ' + (canteen.open_time?.substring(0, 5) || '09:00')}
+                            {canteen.is_open ? 'Siap Dipesan' : (canteen.is_closed_today ? 'Libur Rutin Hari Ini' : 'Buka Jam ' + (canteen.open_time?.substring(0, 5) || '09:00'))}
                           </span>
                         </div>
                       </div>

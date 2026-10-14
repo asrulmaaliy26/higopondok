@@ -14,6 +14,16 @@ class UpdateCanteenRequest extends FormRequest
         return true; // Auth is handled by middleware
     }
 
+    protected function prepareForValidation()
+    {
+        if ($this->has('closed_days') && is_string($this->closed_days)) {
+            $decoded = json_decode($this->closed_days, true);
+            if (json_last_error() === JSON_ERROR_NONE) {
+                $this->merge(['closed_days' => $decoded]);
+            }
+        }
+    }
+
     /**
      * Get the validation rules that apply to the request.
      *
@@ -23,10 +33,12 @@ class UpdateCanteenRequest extends FormRequest
     {
         return [
             'name' => 'required|string|max:255',
-            'category' => 'nullable|string|in:kauman,kota',
+            'category' => 'nullable|string|max:50',
             'description' => 'nullable|string',
             'open_time' => 'nullable|string',
             'close_time' => 'nullable|string',
+            'closed_days' => 'nullable|array',
+            'closed_days.*' => 'nullable|string',
             'image' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:2048', // Maks 2MB
             'whatsapp_number' => 'nullable|string|max:20',
             'delivery_fee' => 'nullable|numeric|min:0',

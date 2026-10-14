@@ -36,35 +36,20 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import AppImage from '../../components/common/AppImage';
-import { PRICING_CONFIG } from '../../config/pricing';
+import { PRICING_CONFIG, CANTEEN_ZONES, getCanteenZone } from '../../config/pricing';
 import { useAuthStore } from '../../store/authStore';
 import { ROLES } from '../../config/roles';
 import { ProductFormModal } from '../../components/modals/ProductFormModal';
 import { hasVariants, getAvailableVariantPills } from '../../lib/variantUtils';
 
-/**
- * =====================================================
- * KONFIGURASI ZONA TOKO — Ubah di sini untuk menambah
- * atau mengurangi zona. Semua tampilan zona di halaman
- * ini akan otomatis menyesuaikan.
- *
- * Format setiap zona:
- *   id          : nilai yang disimpan di database (string, lowercase)
- *   label       : nama tampilan
- *   deliveryFee : ongkir kurir (dalam rupiah)
- *   adminFee    : biaya admin (dalam rupiah)
- * =====================================================
- */
-export const CANTEEN_ZONES = [
-  { id: 'kauman', label: 'Zona Kauman', deliveryFee: 2000, adminFee: 1000 },
-  { id: 'kota',   label: 'Zona Kota',   deliveryFee: PRICING_CONFIG.BASE_DELIVERY_FEE, adminFee: PRICING_CONFIG.BASE_ADMIN_FEE },
-];
+// Re-export untuk kompatibilitas
+export { CANTEEN_ZONES };
 
 /** Helper: cari objek zona berdasarkan id */
-const getZone = (id) => CANTEEN_ZONES.find(z => z.id === id) ?? CANTEEN_ZONES[0];
+const getZone = getCanteenZone;
 
 /** Format angka ke Rp X.XXX */
-const rp = (n) => `Rp ${n.toLocaleString('id-ID')}`;
+const rp = (n) => `Rp ${(n || 0).toLocaleString('id-ID')}`;
 
 export default function Pertokoan() {
   const queryClient = useQueryClient();
@@ -85,6 +70,7 @@ export default function Pertokoan() {
   const [quickHoursCanteen, setQuickHoursCanteen] = useState(null);
   const [quickOpenTime, setQuickOpenTime] = useState('08:00');
   const [quickCloseTime, setQuickCloseTime] = useState('22:00');
+  const [quickClosedDays, setQuickClosedDays] = useState([]);
 
   // Quick Courier Assignment modal for a single canteen
   const [courierModalCanteen, setCourierModalCanteen] = useState(null);
@@ -106,6 +92,7 @@ export default function Pertokoan() {
   const [withdrawalNotes, setWithdrawalNotes] = useState('');
   const [detailOpenTime, setDetailOpenTime] = useState('');
   const [detailCloseTime, setDetailCloseTime] = useState('');
+  const [detailClosedDays, setDetailClosedDays] = useState([]);
   const [detailCategory, setDetailCategory] = useState('kauman');
 
   // Detail Modal Tab & Menu Listing states
@@ -230,8 +217,8 @@ export default function Pertokoan() {
 
   // Update Single Canteen Operating Hours
   const updateHoursMutation = useMutation({
-    mutationFn: async ({ id, open_time, close_time }) => {
-      const res = await axios.put(`/admin/canteens/${id}/hours`, { open_time, close_time });
+    mutationFn: async ({ id, open_time, close_time, closed_days }) => {
+      const res = await axios.put(`/admin/canteens/${id}/hours`, { open_time, close_time, closed_days });
       return res.data;
     },
     onSuccess: (data) => {
@@ -587,6 +574,7 @@ export default function Pertokoan() {
     setDetailCategory(canteen.category || 'kauman');
     setDetailOpenTime(canteen.open_time?.substring(0, 5) || '08:00');
     setDetailCloseTime(canteen.close_time?.substring(0, 5) || '22:00');
+    setDetailClosedDays(Array.isArray(canteen.closed_days) ? canteen.closed_days : []);
     setWithdrawalAmount('');
     setWithdrawalNotes('');
     setNewBannerTitle('');
@@ -599,6 +587,7 @@ export default function Pertokoan() {
     setQuickHoursCanteen(canteen);
     setQuickOpenTime(canteen.open_time?.substring(0, 5) || '08:00');
     setQuickCloseTime(canteen.close_time?.substring(0, 5) || '22:00');
+    setQuickClosedDays(Array.isArray(canteen.closed_days) ? canteen.closed_days : []);
   };
 
   const handleOpenCourierModal = (e, canteen) => {
@@ -979,11 +968,11 @@ export default function Pertokoan() {
                               {canteen.name}
                             </h3>
                             <span className={`px-1 py-0.2 text-[8px] font-bold rounded-none border shrink-0 ${
-                              isKota 
+                              canteen.category === 'kota' 
                                 ? 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/60 dark:text-purple-300 dark:border-purple-800' 
                                 : 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800'
                             }`}>
-                              {isKota ? 'Kota' : 'Kauman'}
+                              {getZone(canteen.category)?.label?.replace('Zona ', '') || (canteen.category || 'Kauman')}
                             </span>
                           </div>
                           
@@ -1285,7 +1274,8 @@ export default function Pertokoan() {
                 updateHoursMutation.mutate({
                   id: quickHoursCanteen.id,
                   open_time: quickOpenTime,
-                  close_time: quickCloseTime
+                  close_time: quickCloseTime,
+                  closed_days: quickClosedDays
                 });
               }}
               className="space-y-3 text-xs"
@@ -1316,6 +1306,49 @@ export default function Pertokoan() {
                     required
                     className="w-full rounded-none border border-gray-300 dark:border-gray-700 dark:bg-gray-800 p-1.5 font-bold text-gray-900 dark:text-white focus:ring-1 focus:ring-green-500 text-center text-xs font-mono"
                   />
+                </div>
+              </div>
+
+              {/* Selector Hari Tutup */}
+              <div className="bg-gray-50 dark:bg-gray-800/50 p-2 rounded-none border border-gray-200 dark:border-gray-700">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-semibold text-gray-700 dark:text-gray-300 text-[10px]">
+                    Hari Libur Rutin
+                  </label>
+                  <span className="text-[9px] font-mono text-gray-400">
+                    {quickClosedDays.length > 0 ? `${quickClosedDays.length} hari` : 'Buka tiap hari'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-7 gap-1">
+                  {[
+                    { id: 'senin', label: 'Sen' },
+                    { id: 'selasa', label: 'Sel' },
+                    { id: 'rabu', label: 'Rab' },
+                    { id: 'kamis', label: 'Kam' },
+                    { id: 'jumat', label: 'Jum' },
+                    { id: 'sabtu', label: 'Sab' },
+                    { id: 'minggu', label: 'Min' }
+                  ].map((day) => {
+                    const isClosed = quickClosedDays.includes(day.id);
+                    return (
+                      <button
+                        key={day.id}
+                        type="button"
+                        onClick={() => {
+                          setQuickClosedDays(prev => 
+                            prev.includes(day.id) ? prev.filter(d => d !== day.id) : [...prev, day.id]
+                          );
+                        }}
+                        className={`py-1 text-center rounded-none border text-[10px] cursor-pointer ${
+                          isClosed 
+                            ? 'bg-red-600 text-white border-red-700 font-bold' 
+                            : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-700'
+                        }`}
+                      >
+                        {day.label}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -1855,7 +1888,7 @@ export default function Pertokoan() {
 
             {/* Grid 3 Kolom: Zona Lokasi, Jam Operasional, & Kurir Pengantar Berdampingan */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-1.5">
-              {/* Card A: Zona Lokasi & Tarif Layanan (Ramping) */}
+              {/* Card A: Zona Lokasi & Tarif Layanan (Ramping & Jelas) */}
               <div className="bg-white dark:bg-gray-900 p-2 sm:p-2.5 rounded-none border border-gray-200 dark:border-gray-800 shadow-xs space-y-1.5 flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between gap-1 mb-1">
@@ -1876,7 +1909,7 @@ export default function Pertokoan() {
                     >
                       {CANTEEN_ZONES.map(z => (
                         <option key={z.id} value={z.id}>
-                          {z.label} ({rp(z.deliveryFee + z.adminFee)})
+                          {z.label} (Total {rp(z.deliveryFee + z.adminFee)})
                         </option>
                       ))}
                     </select>
@@ -1897,9 +1930,17 @@ export default function Pertokoan() {
                   </div>
                 </div>
 
-                <p className="text-[9.5px] text-gray-500 dark:text-gray-400 pt-0.5 leading-tight truncate">
-                  🛵 Ongkir {rp(getZone(detailCategory).deliveryFee)} • 🛡️ Biaya Layanan {rp(getZone(detailCategory).adminFee)}
-                </p>
+                {/* Rincian Komponen Tarif (Jelas & Kompak) */}
+                <div className="pt-1.5 mt-1 border-t border-gray-100 dark:border-gray-800 grid grid-cols-2 gap-1 text-[10px] font-mono">
+                  <div className="bg-gray-50 dark:bg-gray-800/70 px-1.5 py-1 border border-gray-200 dark:border-gray-700/60 flex items-center justify-between">
+                    <span className="text-gray-500 dark:text-gray-400 text-[9px] font-sans font-semibold">🛵 Kurir:</span>
+                    <span className="font-bold text-gray-900 dark:text-white">{rp(getZone(detailCategory).deliveryFee)}</span>
+                  </div>
+                  <div className="bg-gray-50 dark:bg-gray-800/70 px-1.5 py-1 border border-gray-200 dark:border-gray-700/60 flex items-center justify-between">
+                    <span className="text-gray-500 dark:text-gray-400 text-[9px] font-sans font-semibold">🛡️ Kas Admin:</span>
+                    <span className="font-bold text-emerald-600 dark:text-emerald-400">{rp(getZone(detailCategory).adminFee)}</span>
+                  </div>
+                </div>
               </div>
 
               {/* Card B: Jam Operasional Toko (Ramping) */}
@@ -1921,38 +1962,84 @@ export default function Pertokoan() {
                       updateHoursMutation.mutate({
                         id: selectedCanteen.id,
                         open_time: detailOpenTime,
-                        close_time: detailCloseTime
+                        close_time: detailCloseTime,
+                        closed_days: detailClosedDays
                       });
                     }}
-                    className="flex items-center gap-1.5 w-full"
+                    className="space-y-2 w-full"
                   >
-                    <div className="flex items-center gap-1 flex-1 min-w-0 w-0">
-                      <input
-                        type="time"
-                        lang="id-ID"
-                        value={detailOpenTime}
-                        onChange={(e) => setDetailOpenTime(e.target.value)}
-                        className="flex-1 min-w-0 w-0 rounded-none border border-gray-300 dark:border-gray-700 dark:bg-gray-800 text-gray-900 dark:text-white font-bold p-1 text-center text-xs font-mono h-[29px]"
-                        required
-                      />
-                      <span className="text-[10px] text-gray-400 font-bold shrink-0">s/d</span>
-                      <input
-                        type="time"
-                        lang="id-ID"
-                        value={detailCloseTime}
-                        onChange={(e) => setDetailCloseTime(e.target.value)}
-                        className="flex-1 min-w-0 w-0 rounded-none border border-gray-300 dark:border-gray-700 dark:bg-gray-800 text-gray-900 dark:text-white font-bold p-1 text-center text-xs font-mono h-[29px]"
-                        required
-                      />
+                    <div className="flex items-center gap-1.5 w-full">
+                      <div className="flex items-center gap-1 flex-1 min-w-0 w-0">
+                        <input
+                          type="time"
+                          lang="id-ID"
+                          value={detailOpenTime}
+                          onChange={(e) => setDetailOpenTime(e.target.value)}
+                          className="flex-1 min-w-0 w-0 rounded-none border border-gray-300 dark:border-gray-700 dark:bg-gray-800 text-gray-900 dark:text-white font-bold p-1 text-center text-xs font-mono h-[29px]"
+                          required
+                        />
+                        <span className="text-[10px] text-gray-400 font-bold shrink-0">s/d</span>
+                        <input
+                          type="time"
+                          lang="id-ID"
+                          value={detailCloseTime}
+                          onChange={(e) => setDetailCloseTime(e.target.value)}
+                          className="flex-1 min-w-0 w-0 rounded-none border border-gray-300 dark:border-gray-700 dark:bg-gray-800 text-gray-900 dark:text-white font-bold p-1 text-center text-xs font-mono h-[29px]"
+                          required
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={updateHoursMutation.isPending}
+                        className="px-2.5 sm:px-3 bg-green-600 hover:bg-green-700 active:scale-98 text-white rounded-none font-bold text-xs transition-all disabled:opacity-50 flex items-center justify-center gap-1 shadow-xs h-[29px] shrink-0 cursor-pointer whitespace-nowrap"
+                      >
+                        <Save size={12} className="shrink-0" />
+                        <span className="whitespace-nowrap">{updateHoursMutation.isPending ? '...' : 'Simpan'}</span>
+                      </button>
                     </div>
-                    <button
-                      type="submit"
-                      disabled={updateHoursMutation.isPending}
-                      className="px-2.5 sm:px-3 bg-green-600 hover:bg-green-700 active:scale-98 text-white rounded-none font-bold text-xs transition-all disabled:opacity-50 flex items-center justify-center gap-1 shadow-xs h-[29px] shrink-0 cursor-pointer whitespace-nowrap"
-                    >
-                      <Save size={12} className="shrink-0" />
-                      <span className="whitespace-nowrap">{updateHoursMutation.isPending ? '...' : 'Simpan'}</span>
-                    </button>
+
+                    {/* Hari Libur Rutin */}
+                    <div className="pt-1">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] font-semibold text-gray-600 dark:text-gray-300">
+                          Hari Libur Rutin:
+                        </span>
+                        <span className="text-[9px] font-mono text-gray-400">
+                          {detailClosedDays.length > 0 ? `${detailClosedDays.length} hari libur` : 'Buka setiap hari'}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-7 gap-1">
+                        {[
+                          { id: 'senin', label: 'Sen' },
+                          { id: 'selasa', label: 'Sel' },
+                          { id: 'rabu', label: 'Rab' },
+                          { id: 'kamis', label: 'Kam' },
+                          { id: 'jumat', label: 'Jum' },
+                          { id: 'sabtu', label: 'Sab' },
+                          { id: 'minggu', label: 'Min' }
+                        ].map((day) => {
+                          const isClosed = detailClosedDays.includes(day.id);
+                          return (
+                            <button
+                              key={day.id}
+                              type="button"
+                              onClick={() => {
+                                setDetailClosedDays(prev => 
+                                  prev.includes(day.id) ? prev.filter(d => d !== day.id) : [...prev, day.id]
+                                );
+                              }}
+                              className={`py-1 text-center rounded-none border text-[10px] cursor-pointer ${
+                                isClosed 
+                                  ? 'bg-red-600 text-white border-red-700 font-bold' 
+                                  : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-700'
+                              }`}
+                            >
+                              {day.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </form>
                 </div>
                 <p className="text-[9.5px] text-gray-500 dark:text-gray-400 pt-0.5 leading-tight">

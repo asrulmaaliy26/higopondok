@@ -53,6 +53,8 @@ class CanteenResource extends JsonResource
             'status' => $this->status,
             'is_open' => $this->is_open,
             'is_force_closed' => (bool) $this->is_force_closed,
+            'is_closed_today' => (bool) $this->is_closed_today,
+            'closed_days' => $this->closed_days ?? [],
             'open_time' => $this->open_time,
             'close_time' => $this->close_time,
             'rating' => $this->rating,

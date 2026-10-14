@@ -54,6 +54,7 @@ class UserSeeder extends Seeder
                 'status' => 'approved',
                 'open_time' => '07:00:00',
                 'close_time' => '21:00:00',
+                'closed_days' => ['minggu'],
                 'delivery_fee' => 5000,
                 'admin_fee' => 2000,
                 'sold_count' => 1250,
