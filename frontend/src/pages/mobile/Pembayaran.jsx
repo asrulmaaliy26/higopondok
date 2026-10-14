@@ -1627,7 +1627,7 @@ export default function Pembayaran() {
       {/* UPLOAD PAYMENT PROOF MODAL */}
       {showPaymentProofModal && activeOrderForPaymentProof && createPortal(
         <div className="fixed inset-0 z-[100] bg-black/60 flex flex-col justify-end animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-gray-900 w-full rounded-t-3xl overflow-hidden flex flex-col max-h-[90vh] animate-in slide-in-from-bottom-8 duration-300">
+          <div className="bg-white dark:bg-gray-900 w-full rounded-none overflow-hidden flex flex-col max-h-[90vh] animate-in slide-in-from-bottom-8 duration-300">
             <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center sticky top-0 bg-white dark:bg-gray-900 z-10">
               <div>
                 <h3 className="font-bold text-gray-900 dark:text-white text-lg">Upload Bukti Transfer</h3>
