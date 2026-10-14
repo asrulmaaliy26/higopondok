@@ -1659,32 +1659,7 @@ ${itemsListText}
               </>
             )}
 
-            {/* Cancelled Actions: Lanjutkan / Jadwalkan kembali */}
-            {order.status === 'cancelled' && (
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => handleOpenScheduleModal(order, 'tomorrow')}
-                  disabled={updateStatusMutation.isPending}
-                  className="py-1 px-1.5 sm:px-2 bg-amber-50 hover:bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-300 dark:border-amber-800 rounded-none text-[10px] sm:text-[11px] font-bold transition-colors flex items-center gap-0.5 shadow-2xs cursor-pointer"
-                  title="Jadwalkan pesanan batal ini ke Besok"
-                >
-                  <Calendar className="w-3 h-3 text-amber-600 dark:text-amber-400" />
-                  <span>Jadwalkan</span>
-                </button>
-                <button
-                  type="button"
-                  disabled={updateStatusMutation.isPending}
-                  onClick={() => {
-                    updateStatusMutation.mutate({ id: order.id, status: 'processing', canteen_id: order.canteen_id });
-                  }}
-                  className="py-1 px-2 bg-green-600 hover:bg-green-700 text-white rounded-none text-[10px] sm:text-[11px] font-bold transition-colors flex items-center gap-1 disabled:opacity-50 cursor-pointer"
-                  title="Lanjutkan kembali pesanan yang dibatalkan"
-                >
-                  <RotateCcw className="w-3 h-3" /> Lanjutkan
-                </button>
-              </div>
-            )}
+            {/* Cancelled Orders: No continue/schedule action available */}
 
             {/* Processing Actions */}
             {isProcessing && (
@@ -2147,36 +2122,7 @@ ${itemsListText}
               </>
             )}
 
-            {/* Cancelled Bundled Actions: Lanjutkan / Jadwalkan kembali */}
-            {isCancelled && (
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => handleOpenScheduleModal(group, 'tomorrow')}
-                  disabled={batchUpdateStatusMutation.isPending}
-                  className="py-1 px-1.5 sm:px-2 bg-amber-50 hover:bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-300 dark:border-amber-800 rounded-none text-[10px] sm:text-[11px] font-bold transition-colors flex items-center gap-0.5 shadow-2xs cursor-pointer"
-                  title="Jadwalkan paket pesanan yang dibatalkan ke Besok"
-                >
-                  <Calendar className="w-3 h-3 text-amber-600 dark:text-amber-400" />
-                  <span>Jadwalkan</span>
-                </button>
-                <button
-                  type="button"
-                  disabled={batchUpdateStatusMutation.isPending}
-                  onClick={() => {
-                    batchUpdateStatusMutation.mutate({ 
-                      order_ids: group.orders.map(o => o.id), 
-                      status: 'processing', 
-                      canteen_id: selectedCanteenFilter !== 'all' ? selectedCanteenFilter : undefined 
-                    });
-                  }}
-                  className="py-1 px-2 bg-green-600 hover:bg-green-700 text-white rounded-none text-[10px] sm:text-[11px] font-bold transition-colors flex items-center gap-1 disabled:opacity-50 cursor-pointer"
-                  title="Lanjutkan kembali semua pesanan yang dibatalkan"
-                >
-                  <RotateCcw className="w-3 h-3" /> Lanjutkan
-                </button>
-              </div>
-            )}
+            {/* Cancelled Bundled Orders: No continue/schedule action available */}
 
             {/* Processing Actions */}
             {(isProcessing || isPartial) && (

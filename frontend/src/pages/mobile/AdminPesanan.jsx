@@ -1403,30 +1403,7 @@ export default function AdminPesanan() {
                                         </button>
                                       )}
                                     </>
-                                  ) : (
-                                    <>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleContinueOrder(order)}
-                                        disabled={updateStatusMutation.isPending}
-                                        className="h-6.5 px-1.5 bg-green-50 hover:bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-300 border border-green-300 dark:border-green-800 rounded-none text-[10px] font-bold transition-colors flex items-center gap-0.5 shadow-2xs cursor-pointer shrink-0"
-                                        title="Lanjutkan pesanan toko ini (Kurir Toko)"
-                                      >
-                                        <Truck className="w-3 h-3 text-green-600 dark:text-green-400" />
-                                        <span>Lanjutkan</span>
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleOpenChangeStatusModal(order, 'processing', 'tomorrow')}
-                                        disabled={updateStatusMutation.isPending}
-                                        className="h-6.5 px-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-300 dark:border-amber-800 rounded-none text-[10px] font-bold transition-colors flex items-center gap-0.5 shadow-2xs cursor-pointer shrink-0"
-                                        title="Jadwalkan pesanan toko ini ke Besok"
-                                      >
-                                        <Calendar className="w-2.5 h-2.5 text-amber-600 dark:text-amber-400" />
-                                        <span>Besok</span>
-                                      </button>
-                                    </>
-                                  )}
+                                  ) : null}
 
                                   <button
                                     type="button"

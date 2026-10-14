@@ -202,14 +202,27 @@ export default function Pembayaran() {
     return closed.map(o => {
       const c = o.canteen;
       const name = c?.name || 'Toko';
+      const isClosedToday = Boolean(c?.is_closed_today);
+      const isForceClosed = Boolean(c?.is_force_closed);
       const open = c?.open_time ? c.open_time.slice(0, 5) : '07:00';
       const close = c?.close_time ? c.close_time.slice(0, 5) : '17:00';
       const hours = `${open} - ${close} WIB`;
+      
+      let reason = `Buka: ${hours}`;
+      if (isClosedToday) {
+        reason = 'Libur Hari Ini';
+      } else if (isForceClosed) {
+        reason = 'Tutup Sementara';
+      }
+
       return {
         name,
         hours,
+        reason,
+        isClosedToday,
+        isForceClosed,
         toString() {
-          return `${this.name} (Buka: ${this.hours})`;
+          return `${this.name} (${this.reason})`;
         }
       };
     });
@@ -1129,32 +1142,63 @@ export default function Pembayaran() {
                                 <div className="p-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800/80 rounded-none text-left space-y-1.5">
                                   <div className="flex items-center gap-1.5 text-amber-800 dark:text-amber-300 font-bold text-xs">
                                     <Clock className="w-3.5 h-3.5 shrink-0 text-amber-600" />
-                                    <span>Toko Sedang Tutup</span>
+                                    <span>Toko Sedang Tutup / Libur</span>
                                   </div>
                                   <p className="text-[11px] text-amber-800 dark:text-amber-300 leading-snug">
-                                    Upload bukti pembayaran ditutup saat malam / di luar jam buka. Silakan upload besok saat toko sudah buka kembali:
+                                    {closedCanteens.some(c => c.isClosedToday || c.isForceClosed)
+                                      ? 'Terdapat toko yang sedang libur/tutup hari ini dalam pesanan ini. Pembayaran tidak dapat dilanjutkan. Silakan lakukan Checkout Baru untuk memesan dari toko yang buka saja.'
+                                      : 'Upload bukti pembayaran ditutup saat malam / di luar jam operasional toko buka. Silakan upload besok saat toko sudah buka kembali:'}
                                   </p>
                                   <div className="bg-white/90 dark:bg-black/40 p-1.5 border border-amber-200 dark:border-amber-900/60 rounded-none space-y-1 text-[10px] font-mono text-amber-900 dark:text-amber-200">
                                     {closedCanteens.map((c, i) => (
                                       <div key={i} className="flex justify-between items-center">
                                         <span className="font-semibold truncate mr-2">• {c.name}</span>
-                                        <span className="shrink-0 font-bold">{c.hours}</span>
+                                        <span className="shrink-0 font-bold">{c.reason || c.hours}</span>
                                       </div>
                                     ))}
                                   </div>
-                                  <button
-                                    type="button"
-                                    disabled
-                                    className="w-full py-1.5 bg-gray-200 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded-none text-xs font-bold cursor-not-allowed text-center"
-                                  >
-                                    Upload Ditutup (Buka Besok)
-                                  </button>
+                                  <div className="space-y-1 pt-0.5">
+                                    <button
+                                      type="button"
+                                      disabled
+                                      className="w-full py-1.5 bg-gray-200 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded-none text-xs font-bold cursor-not-allowed text-center"
+                                    >
+                                      Upload Ditutup ({closedCanteens.some(c => c.isClosedToday) ? 'Ada Toko Libur' : 'Buka Besok'})
+                                    </button>
+                                    <Link
+                                      to="/dashboard/kantin"
+                                      className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-none text-xs font-bold transition-all shadow-2xs text-center"
+                                    >
+                                      <ShoppingBag className="w-3.5 h-3.5" />
+                                      <span>Checkout Baru (Pesan Toko Buka) ➔</span>
+                                    </Link>
+                                  </div>
                                 </div>
                               )}
                             </div>
                           );
                         })()
                       )}
+                    </div>
+                  )}
+
+                  {/* 5. Status Dibatalkan Notice & CTA Checkout Baru */}
+                  {group.overallStatus === 'cancelled' && (
+                    <div className="p-2.5 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 rounded-none text-left space-y-1.5">
+                      <div className="flex items-center gap-1.5 text-red-700 dark:text-red-400 font-bold text-xs">
+                        <XCircle className="w-3.5 h-3.5 shrink-0" />
+                        <span>Pesanan Telah Dibatalkan</span>
+                      </div>
+                      <p className="text-[11px] text-red-600 dark:text-red-300 leading-snug">
+                        Pesanan ini sudah dibatalkan dan tidak dapat dilanjutkan pembayarannya. Silakan buat <strong>Checkout Baru</strong> untuk memesan ulang produk yang tersedia.
+                      </p>
+                      <Link
+                        to="/dashboard/kantin"
+                        className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-none text-xs font-bold transition-all shadow-2xs"
+                      >
+                        <ShoppingBag className="w-3.5 h-3.5" />
+                        <span>Pesan Ulang (Checkout Baru) ➔</span>
+                      </Link>
                     </div>
                   )}
 

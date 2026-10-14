@@ -1017,14 +1017,7 @@ class OrderController extends Controller
         $startDate = $request->query('start_date');
         $endDate = $request->query('end_date');
 
-        if (!$user->hasRole('admin') && !$user->hasRole('super_admin')) {
-            $assignedCanteenIds = $user->assignedCanteens()->pluck('canteens.id')->toArray();
-            if (empty($assignedCanteenIds)) {
-                return response()->json([]);
-            }
-        }
-
-        // Hanya muat relasi yang benar-benar dipakai di UI kurir (hapus voucher yang tidak diperlukan)
+        // Hanya muat relasi yang benar-benar dipakai di UI kurir
         $query = Order::with(['canteen:id,name,category,whatsapp_number', 'user:id,name,santri_name,santri_room,santri_class,santri_level,phone,niy,teacher_unit,is_teacher', 'items.product:id,name,price,hpp,category,image', 'courier:id,name,phone'])
             ->orderByRaw("CASE 
                 WHEN status = 'processing' THEN 1 
@@ -1037,8 +1030,20 @@ class OrderController extends Controller
             ->orderBy('created_at', 'desc');
 
         if (!$user->hasRole('admin') && !$user->hasRole('super_admin')) {
-            $query->whereIn('canteen_id', $assignedCanteenIds)
-                  ->where('courier_id', $courierId);
+            $assignedCanteenIds = $user->assignedCanteens()->pluck('canteens.id')->toArray();
+
+            $query->where(function ($q) use ($courierId, $assignedCanteenIds) {
+                // 1. Semua pesanan yang secara spesifik ditugaskan ke kurir ini wajib masuk ke akun kurir
+                $q->where('courier_id', $courierId);
+
+                // 2. ATAU pesanan dari kantin yang ditugaskan ke kurir ini jika belum diambil kurir lain (unassigned)
+                if (!empty($assignedCanteenIds)) {
+                    $q->orWhere(function ($subQ) use ($assignedCanteenIds) {
+                        $subQ->whereIn('canteen_id', $assignedCanteenIds)
+                             ->whereNull('courier_id');
+                    });
+                }
+            });
         }
 
         if ($scope === 'assigned') {
