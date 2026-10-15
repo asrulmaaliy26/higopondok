@@ -2,16 +2,16 @@ import { create } from 'zustand';
 
 function checkIsStandalone() {
   if (typeof window === 'undefined') return false;
-  return (
-    window.matchMedia('(display-mode: standalone)').matches ||
+  return Boolean(
+    window.matchMedia?.('(display-mode: standalone)')?.matches ||
     window.navigator?.standalone === true ||
-    document.referrer.includes('android-app://')
+    (typeof document !== 'undefined' && document.referrer?.includes?.('android-app://'))
   );
 }
 
 function checkIsIOS() {
   if (typeof window === 'undefined') return false;
-  const ua = window.navigator.userAgent.toLowerCase();
+  const ua = (window.navigator?.userAgent || (typeof navigator !== 'undefined' ? navigator.userAgent : '') || '').toLowerCase();
   return /iphone|ipad|ipod/.test(ua) && !window.MSStream;
 }
 

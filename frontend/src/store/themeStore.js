@@ -36,7 +36,7 @@ if (typeof window !== 'undefined') {
 export const useThemeStore = create(
   persist(
     (set, get) => ({
-      theme: (typeof window !== 'undefined' && document.documentElement.classList.contains('dark')) ? 'dark' : 'light',
+      theme: (typeof window !== 'undefined' && document.documentElement?.classList?.contains('dark')) ? 'dark' : 'light',
       toggleTheme: () => set((state) => {
         const nextTheme = state.theme === 'dark' ? 'light' : 'dark';
         applyThemeToDOM(nextTheme);
