@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   ShoppingBag, ChevronLeft, CheckCircle, Clock, Store, MessageCircle, 
   Image as ImageIcon, X, XCircle, FileText, Download, ExternalLink, 
-  Trash2, Camera, Receipt, Eye, Sparkles, Filter, Calendar, ChevronDown, RefreshCw 
+  Trash2, Camera, Receipt, Eye, Sparkles, Filter, Calendar, ChevronDown, RefreshCw, Lock 
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api, { getStorageUrl, getPublicUrl } from '../../lib/axios';
@@ -245,7 +245,12 @@ export default function Pembayaran() {
     }
   });
 
-  const handleCancelOrder = (orderId) => {
+  const handleCancelOrder = (order) => {
+    if (order && !isPaymentTime(order)) {
+      toast.error(`Toko '${order.canteen?.name || 'Toko'}' saat ini sedang tutup. Anda tidak dapat membatalkan pesanan di luar jam buka toko.`);
+      return;
+    }
+    const orderId = typeof order === 'object' ? order.id : order;
     if (window.confirm('Apakah Anda yakin ingin membatalkan pesanan ini?')) {
       cancelMutation.mutate(orderId);
     }
@@ -254,12 +259,22 @@ export default function Pembayaran() {
   const handleCancelGroup = async (orders) => {
     const pendingOrders = orders.filter(o => o.status === 'pending');
     if (pendingOrders.length === 0) return;
+
+    // Cegah pembatalan jika ada toko yang tutup / di luar jam operasional
+    const closedCanteens = getClosedCanteensInfo(pendingOrders) || [];
+    if (closedCanteens.length > 0) {
+      const names = closedCanteens.map(c => c.name).join(', ');
+      toast.error(`Toko (${names}) saat ini sedang tutup. Anda tidak dapat membatalkan pesanan di luar jam operasional toko buka.`);
+      return;
+    }
+
     if (window.confirm(`Apakah Anda yakin ingin membatalkan pesanan ${pendingOrders.length > 1 ? `seluruh (${pendingOrders.length}) toko ini` : 'ini'}?`)) {
       for (const o of pendingOrders) {
         try {
           await api.put(`/orders/${o.id}/cancel`);
         } catch (e) {
-          // continue
+          toast.error(e.response?.data?.message || 'Gagal membatalkan pesanan');
+          return;
         }
       }
       queryClient.invalidateQueries(['user_orders']);
@@ -492,8 +507,6 @@ export default function Pembayaran() {
     const subtotal = order.is_custom 
       ? Math.max(0, parseFloat(order.total_price) - parseFloat(order.delivery_fee || 0) - parseFloat(order.admin_fee || 0))
       : (order.items?.reduce((sum, item) => sum + parseFloat(item.subtotal), 0) || 0);
-    const ongkir = parseFloat(order.delivery_fee || 0);
-    const admin = parseFloat(order.admin_fee || 0);
 
     const santriName = user?.santri_name || user?.name || '-';
     let santriClass = user?.santri_class || '';
@@ -520,27 +533,27 @@ export default function Pembayaran() {
       }
     }
 
-    let text = `Assalamu'alaikum Warahmatullahi Wabarakatuh, ${order.canteen?.name || 'Kantin'}.\n`;
-    text += `Saya ingin mengonfirmasi pesanan saya:\n`;
-    text += `*ID Pesanan*: #${order.id}\n\n`;
-    text += `*Data Penerima*:\n`;
-    text += `👤 Santri: ${santriName}\n`;
-    text += `📚 Kelas/Jenjang: ${santriClass || '-'} / ${santriLevel || '-'}\n`;
-    if (santriRoom) text += `🏠 Lokasi: ${santriRoom}\n`;
-    text += `\n*Rincian Pesanan*:\n`;
+    const classInfo = [santriClass, santriLevel].filter(Boolean).join(' / ');
+    const detailPenerima = [classInfo, santriRoom].filter(Boolean).join(' | ');
+
+    let text = `Assalamu'alaikum Warahmatullahi Wabarakatuh, ${order.canteen?.name || 'Toko'}.\n`;
+    text += `Konfirmasi Pesanan *#${order.id}*\n`;
+    text += `👤 Santri: *${santriName}*${detailPenerima ? ` (${detailPenerima})` : ''}\n\n`;
+    text += `*Menu Pesanan:*\n`;
     if (order.is_custom) {
-      text += `🔸 1x Pesanan Khusus (${order.custom_notes || 'Titipan'})\n`;
+      text += `• 1x Pesanan Khusus: ${order.custom_notes || 'Titipan'}\n`;
     } else {
       order.items?.forEach(item => {
-        text += `🔸 ${item.quantity}x ${item.product?.name} @ Rp ${Math.round(parseFloat(item.price_per_item || (parseFloat(item.subtotal)/item.quantity))).toLocaleString('id-ID')}\n`;
+        const itemSubtotal = parseFloat(item.subtotal || (item.price_per_item * item.quantity));
+        text += `• ${item.quantity}x ${item.product?.name} (Rp ${Math.round(itemSubtotal).toLocaleString('id-ID')})\n`;
+        if (item.notes) {
+          text += `  Catatan: ${item.notes}\n`;
+        }
       });
     }
-    text += `\n*Ringkasan Biaya*:`;
-    text += `\n- Subtotal: Rp ${Math.round(subtotal).toLocaleString('id-ID')}`;
-    if (ongkir > 0) text += `\n- Ongkos Kirim: Rp ${Math.round(ongkir).toLocaleString('id-ID')}`;
-    if (admin > 0) text += `\n- Biaya Admin: Rp ${Math.round(admin).toLocaleString('id-ID')}`;
-    text += `\n\n*Total Tagihan: Rp ${Math.round(parseFloat(order.total_price)).toLocaleString('id-ID')}*\n\n`;
-    text += `Mohon segera diproses ya, Syukron Jazakumullah Khairan. 🙏`;
+    const totalOrder = parseFloat(order.total_price) || subtotal;
+    text += `\n*Total Pesanan: Rp ${Math.round(totalOrder).toLocaleString('id-ID')}*\n`;
+    text += `Mohon segera diproses nggih, Syukron Jazakumullah Khairan. 🙏`;
     return text;
   };
 
@@ -1222,19 +1235,11 @@ export default function Pembayaran() {
                             Rp {Math.round(group.totalProductSubtotal).toLocaleString('id-ID')}
                           </span>
                         </div>
-                        {group.totalDeliveryFee > 0 && (
+                        {(group.totalDeliveryFee + group.totalAdminFee) > 0 && (
                           <div className="flex justify-between">
-                            <span>Ongkos Kirim {isMulti ? `(${group.orders.length} Toko)` : '(Kurir)'}</span>
+                            <span>Ongkos Kirim & Biaya Layanan {isMulti ? `(${group.orders.length} Toko)` : ''}</span>
                             <span className="font-semibold font-mono text-gray-900 dark:text-white">
-                              Rp {Math.round(group.totalDeliveryFee).toLocaleString('id-ID')}
-                            </span>
-                          </div>
-                        )}
-                        {group.totalAdminFee > 0 && (
-                          <div className="flex justify-between">
-                            <span>Biaya Layanan & Admin {isMulti ? `(${group.orders.length} Toko)` : ''}</span>
-                            <span className="font-semibold font-mono text-gray-900 dark:text-white">
-                              Rp {Math.round(group.totalAdminFee).toLocaleString('id-ID')}
+                              Rp {Math.round(group.totalDeliveryFee + group.totalAdminFee).toLocaleString('id-ID')}
                             </span>
                           </div>
                         )}
@@ -1336,14 +1341,35 @@ export default function Pembayaran() {
                     {/* Cancel Button */}
                     {allPending && (
                       <div className="pt-1">
-                        <button 
-                          onClick={() => handleCancelGroup(group.orders)}
-                          disabled={cancelMutation.isPending}
-                          className="w-full flex items-center justify-center gap-1 py-1.5 px-2 bg-red-50 text-red-700 hover:bg-red-100 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-900/50 border border-red-200 dark:border-red-800 rounded-none text-xs font-bold transition-colors disabled:opacity-50"
-                        >
-                          <XCircle className="w-3.5 h-3.5" /> 
-                          {cancelMutation.isPending ? 'Membatalkan...' : `Batalkan Pesanan ${isMulti ? `(${group.orders.length} Toko)` : ''}`}
-                        </button>
+                        {(() => {
+                          const closedCanteens = getClosedCanteensInfo(group.orders) || [];
+                          const isAllOpen = closedCanteens.length === 0;
+
+                          if (!isAllOpen) {
+                            return (
+                              <div className="p-2 bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700/80 text-center rounded-none space-y-0.5">
+                                <p className="text-[11px] font-bold text-gray-700 dark:text-gray-300 flex items-center justify-center gap-1.5">
+                                  <Lock className="w-3.5 h-3.5 text-amber-500" />
+                                  <span>Toko Sedang Tutup</span>
+                                </p>
+                                <p className="text-[10px] text-gray-500 dark:text-gray-400 leading-snug">
+                                  Pesanan tidak dapat dibatalkan di luar jam operasional toko buka ({closedCanteens.map(c => `${c.name}: ${c.openTime || c.hours}-${c.closeTime || ''} WIB`).join(', ')}).
+                                </p>
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <button 
+                              onClick={() => handleCancelGroup(group.orders)}
+                              disabled={cancelMutation.isPending}
+                              className="w-full flex items-center justify-center gap-1 py-1.5 px-2 bg-red-50 text-red-700 hover:bg-red-100 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-900/50 border border-red-200 dark:border-red-800 rounded-none text-xs font-bold transition-colors disabled:opacity-50 cursor-pointer"
+                            >
+                              <XCircle className="w-3.5 h-3.5" /> 
+                              {cancelMutation.isPending ? 'Membatalkan...' : `Batalkan Pesanan ${isMulti ? `(${group.orders.length} Toko)` : ''}`}
+                            </button>
+                          );
+                        })()}
                       </div>
                     )}
                   </div>

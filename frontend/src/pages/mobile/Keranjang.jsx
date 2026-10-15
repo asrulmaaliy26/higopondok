@@ -153,6 +153,14 @@ export default function Keranjang() {
       return;
     }
 
+    // 3. Validasi Toko Tutup (Wali tidak bisa membuat pesanan ketika toko tutup)
+    const closedCanteens = canteenSummaries.filter(({ canteen }) => !canteen.is_open);
+    if (closedCanteens.length > 0) {
+      const names = closedCanteens.map(({ canteen }) => canteen.name).join(', ');
+      toast.error(`Maaf, toko (${names}) saat ini sedang tutup. Pemesanan tidak dapat diproses di luar jam buka toko.`);
+      return;
+    }
+
     setIsProcessing(true);
 
     try {
@@ -616,12 +624,8 @@ export default function Keranjang() {
               <span className="font-mono text-gray-800 dark:text-gray-200">Rp {totalSubtotal.toLocaleString('id-ID')}</span>
             </div>
             <div className="flex justify-between">
-              <span>Total Biaya Ongkir ({canteenEntries.length} toko)</span>
-              <span className="font-mono text-gray-800 dark:text-gray-200">Rp {totalDeliveryFee.toLocaleString('id-ID')}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Total Biaya Layanan & Admin</span>
-              <span className="font-mono text-gray-800 dark:text-gray-200">Rp {totalAdminFee.toLocaleString('id-ID')}</span>
+              <span>Total Ongkos Kirim & Layanan ({canteenEntries.length} toko)</span>
+              <span className="font-mono text-gray-800 dark:text-gray-200">Rp {(totalDeliveryFee + totalAdminFee).toLocaleString('id-ID')}</span>
             </div>
             {voucherDiscount > 0 && (
               <div className="flex justify-between text-green-700 dark:text-green-400 font-bold">

@@ -28,8 +28,12 @@ class OrderController extends Controller
 
         $canteen = Canteen::findOrFail($request->canteen_id);
         $isCustom = (bool) $request->is_custom;
-        if (!$canteen->is_open && !$isCustom) {
-            return response()->json(['message' => 'Maaf, Kantin sedang tutup. Tidak dapat memesan.'], 400);
+        if (!$canteen->is_open) {
+            $openTime = $canteen->open_time ? substr($canteen->open_time, 0, 5) : '07:00';
+            $closeTime = $canteen->close_time ? substr($canteen->close_time, 0, 5) : '17:00';
+            return response()->json([
+                'message' => "Maaf, Toko '{$canteen->name}' saat ini sedang tutup. Pemesanan hanya dapat dilakukan saat jam operasional toko buka ({$openTime} - {$closeTime} WIB)."
+            ], 400);
         }
 
         $user = $request->user();
@@ -1417,10 +1421,20 @@ class OrderController extends Controller
     public function userCancelOrder(Request $request, $id)
     {
         return DB::transaction(function () use ($id, $request) {
-            $order = Order::with('items.product')->where('id', $id)->where('user_id', $request->user()->id)->lockForUpdate()->firstOrFail();
+            $order = Order::with(['items.product', 'canteen'])->where('id', $id)->where('user_id', $request->user()->id)->lockForUpdate()->firstOrFail();
             
             if ($order->status !== 'pending') {
                 return response()->json(['message' => 'Pesanan tidak bisa dibatalkan karena sudah diproses'], 400);
+            }
+
+            // Cegah pembatalan jika toko sedang tutup / di luar jam operasional buka
+            $canteen = $order->canteen;
+            if ($canteen && !$canteen->is_open) {
+                $openTime = $canteen->open_time ? substr($canteen->open_time, 0, 5) : '07:00';
+                $closeTime = $canteen->close_time ? substr($canteen->close_time, 0, 5) : '17:00';
+                return response()->json([
+                    'message' => "Toko '{$canteen->name}' saat ini sedang tutup. Anda tidak dapat membatalkan pesanan di luar jam buka toko ({$openTime} - {$closeTime} WIB)."
+                ], 422);
             }
 
             $order->status = 'cancelled';
