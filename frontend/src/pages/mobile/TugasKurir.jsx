@@ -15,6 +15,7 @@ import { getFileType, isImageFile, isHeifFile, isPdfFile, formatFileSize, getFil
 import ThermalReceiptModal, { cleanItemNotes } from '../../components/receipt/ThermalReceiptModal';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { renderOrderDateTime } from '../../lib/orderUtils';
+import santriData from '../../data/santri.json';
 
 function getSantriGender(santriName = '', santriRoom = '') {
   const sName = (santriName || '').toLowerCase().trim();
