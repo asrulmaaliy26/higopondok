@@ -361,8 +361,9 @@ export const ProductOptionModal = ({
       }
     });
 
+    const userCustomNote = customNotes.trim();
     const prefix = labels.length > 0 ? `[${labels.join(' | ')}]` : '';
-    const finalNotes = customNotes.trim() ? `${prefix} • ${customNotes.trim()}` : prefix;
+    const finalNotes = userCustomNote ? (prefix ? `${prefix} • ${userCustomNote}` : userCustomNote) : prefix;
     const variantKey = keyParts.join('_') || 'default';
 
     const payload = {
@@ -371,7 +372,8 @@ export const ProductOptionModal = ({
       quantity,
       options: labels,
       labels,
-      notes: finalNotes,
+      notes: userCustomNote,
+      finalNotes,
       extraPrice,
       unitPrice,
       variantKey
@@ -380,7 +382,7 @@ export const ProductOptionModal = ({
     if (onConfirm) {
       onConfirm(payload);
     } else if (onAddToCart) {
-      onAddToCart(canteen, product, quantity, { variantKey, labels, extraPrice, unitPrice }, finalNotes);
+      onAddToCart(canteen, product, quantity, { variantKey, labels, extraPrice, unitPrice }, userCustomNote);
     }
 
     onClose();

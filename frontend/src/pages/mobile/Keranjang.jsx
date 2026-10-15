@@ -173,12 +173,18 @@ export default function Keranjang() {
           custom_notes: canteenNotes[canteen.id] || '',
           items: itemList.map(i => {
             const variantNote = (i.options && i.options.length > 0) ? `[${i.options.join(' | ')}]` : '';
-            const combinedNotes = [variantNote, i.notes].filter(Boolean).join(' • ');
+            let userNote = (i.notes || '').trim();
+            // Cegah duplikasi jika userNote sudah diawali atau memuat variantNote yang sama
+            if (variantNote && userNote.startsWith(variantNote)) {
+              userNote = userNote.slice(variantNote.length).replace(/^(\s*•\s*)+/, '').trim();
+            }
+            const parts = [variantNote, userNote].filter(Boolean);
+            const combinedNotes = Array.from(new Set(parts)).join(' • ');
             return {
               product_id: i.product.id,
               quantity: i.quantity,
               extra_price: i.extraPrice || 0,
-              notes: combinedNotes
+              notes: combinedNotes || null
             };
           })
         }))

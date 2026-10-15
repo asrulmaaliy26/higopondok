@@ -453,13 +453,21 @@ export default function Pembayaran() {
 
   const handleOpenReceipt = (group) => {
     if (group.isMultiStore || (group.orders && group.orders.length > 1)) {
-      setSelectedReceiptOrders(group.orders);
-      setSelectedReceiptOrder(group.orders[0]);
-      setReceiptModalMode('batch');
+      const resolvedOrders = group.orders.map(o => ({
+        ...o,
+        user: o.user || group.user
+      }));
+      setSelectedReceiptOrders(resolvedOrders);
+      setSelectedReceiptOrder(resolvedOrders[0]);
+      setReceiptModalMode('bundle');
     } else {
       const ord = group.orders ? group.orders[0] : group;
-      setSelectedReceiptOrder(ord);
-      setSelectedReceiptOrders([ord]);
+      const resolvedOrd = {
+        ...ord,
+        user: ord?.user || group.user
+      };
+      setSelectedReceiptOrder(resolvedOrd);
+      setSelectedReceiptOrders([resolvedOrd]);
       setReceiptModalMode('single');
     }
     setReceiptModalOpen(true);
@@ -553,6 +561,71 @@ export default function Pembayaran() {
     }
     const totalOrder = parseFloat(order.total_price) || subtotal;
     text += `\n*Total Pesanan: Rp ${Math.round(totalOrder).toLocaleString('id-ID')}*\n`;
+    text += `Mohon segera diproses nggih, Syukron Jazakumullah Khairan. 🙏`;
+    return text;
+  };
+
+  const buildGroupCanteenWAText = (ordersList, canteenTitle) => {
+    if (!ordersList || ordersList.length === 0) return '';
+    if (ordersList.length === 1) return buildOrderWAText(ordersList[0]);
+
+    const isTeacher = ordersList.some(o => o.order_for === 'guru');
+    const santriName = isTeacher ? `Guru / Staff (${user?.name})` : (user?.santri_name || user?.name || '-');
+    let santriClass = user?.santri_class || '';
+    let santriLevel = user?.santri_level || '';
+    let santriRoom = ordersList[0].delivery_location || (isTeacher ? `Ruang Guru / Kantor ${user?.teacher_unit || ''}` : user?.santri_room || '');
+
+    if (!isTeacher && santriName && santriData?.data) {
+      const sName = santriName.toLowerCase().trim();
+      const match = santriData.data.find(r => {
+        if (!r || !r[1]) return false;
+        const rawName = r[1].toLowerCase().replace(/\s+(laki-laki|perempuan)$/i, '').trim();
+        return rawName === sName || sName.includes(rawName) || rawName.includes(sName);
+      });
+      if (match) {
+        if (!santriLevel && match[4]) santriLevel = match[4];
+        const tingkat = match[5] || '';
+        const rombel = match[6] || '';
+        const program = match[7] && match[7] !== '-' ? match[7] : '';
+        const fullClass = [tingkat, rombel, program].filter(Boolean).join(' ');
+        if (!santriClass || santriClass === tingkat) {
+          santriClass = fullClass || santriClass;
+        }
+        if (!santriRoom && match[10]) santriRoom = match[10];
+      }
+    }
+
+    const classInfo = [santriClass, santriLevel].filter(Boolean).join(' / ');
+    const detailPenerima = [classInfo, santriRoom].filter(Boolean).join(' | ');
+
+    const orderCodes = ordersList.map(o => `#${o.id}`).join(', ');
+    const checkoutCode = ordersList[0].checkout_id ? ` (Checkout #${ordersList[0].checkout_id})` : '';
+
+    let text = `Assalamu'alaikum Warahmatullahi Wabarakatuh, ${canteenTitle || 'Kantin'}.\n`;
+    text += `Konfirmasi Pesanan *${orderCodes}*${checkoutCode}\n`;
+    text += `👤 Pemesan: *${santriName}*${detailPenerima ? ` (${detailPenerima})` : ''}\n\n`;
+
+    let totalAll = 0;
+    ordersList.forEach((order) => {
+      const storeName = order.canteen?.name || 'Toko';
+      text += `*🏬 ${storeName} (#${order.id}):*\n`;
+      if (order.is_custom) {
+        text += `• 1x Pesanan Khusus: ${order.custom_notes || 'Titipan'}\n`;
+      } else {
+        order.items?.forEach(item => {
+          const itemSubtotal = parseFloat(item.subtotal || (item.price_per_item * item.quantity));
+          text += `• ${item.quantity}x ${item.product?.name} (Rp ${Math.round(itemSubtotal).toLocaleString('id-ID')})\n`;
+          if (item.notes) {
+            text += `  Catatan: ${item.notes}\n`;
+          }
+        });
+      }
+      const totalOrder = parseFloat(order.total_price) || 0;
+      totalAll += totalOrder;
+      text += `Subtotal Toko: Rp ${Math.round(totalOrder).toLocaleString('id-ID')}\n\n`;
+    });
+
+    text += `*Total Semua Pesanan: Rp ${Math.round(totalAll).toLocaleString('id-ID')}*\n`;
     text += `Mohon segera diproses nggih, Syukron Jazakumullah Khairan. 🙏`;
     return text;
   };
@@ -1282,32 +1355,54 @@ export default function Pembayaran() {
                         <span>Struk</span>
                       </button>
 
-                      {/* Chat Toko (Tampil untuk single toko maupun multi toko) */}
-                      {!isMulti ? (
-                        (() => {
-                          const phone = singleOrder.canteen?.whatsapp_number || singleOrder.canteen?.user?.phone;
-                          if (!phone) return null;
+                      {/* Chat Toko / Kantin (Deduplikasi cerdas berdasarkan nomor WA pemilik) */}
+                      {(() => {
+                        const canteenMap = new Map();
+                        group.orders.forEach(order => {
+                          const rawPhone = order.canteen?.whatsapp_number || order.canteen?.user?.phone || '';
+                          const cleanPhone = rawPhone.replace(/\D/g, '');
+                          const merchantKey = cleanPhone || (order.canteen?.user_id ? `user_${order.canteen.user_id}` : `canteen_${order.canteen_id || order.id}`);
+
+                          if (!canteenMap.has(merchantKey)) {
+                            canteenMap.set(merchantKey, {
+                              phone: rawPhone,
+                              canteenName: order.canteen?.name || 'Kantin',
+                              orders: []
+                            });
+                          }
+                          canteenMap.get(merchantKey).orders.push(order);
+                        });
+
+                        const uniqueCanteenChats = Array.from(canteenMap.values()).filter(g => Boolean(g.phone));
+                        if (uniqueCanteenChats.length === 0) return null;
+
+                        // Jika semua toko dalam pesanan dikelola oleh 1 kontak WA / 1 kantin yang sama
+                        if (uniqueCanteenChats.length === 1) {
+                          const chatGroup = uniqueCanteenChats[0];
+                          const label = isMulti ? 'Chat Kantin' : 'Chat Toko';
                           return (
                             <a 
-                              href={formatPhoneWA(phone) + `?text=${encodeURIComponent(buildOrderWAText(singleOrder))}`}
+                              href={formatPhoneWA(chatGroup.phone) + `?text=${encodeURIComponent(buildGroupCanteenWAText(chatGroup.orders, chatGroup.canteenName))}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="flex-1 min-w-[85px] flex items-center justify-center gap-1 py-1.5 px-2 bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-950/40 dark:text-green-300 dark:hover:bg-green-900/50 border border-green-200 dark:border-green-800 rounded-none text-xs font-bold transition-all active:scale-[0.98]"
+                              title={`Chat WhatsApp ke ${chatGroup.canteenName}`}
                             >
                               <MessageCircle className="w-3.5 h-3.5 text-green-600 dark:text-green-400" /> 
-                              <span>Chat Toko</span>
+                              <span>{label}</span>
                             </a>
                           );
-                        })()
-                      ) : (
-                        group.orders.map(order => {
-                          const phone = order.canteen?.whatsapp_number || order.canteen?.user?.phone;
-                          if (!phone) return null;
-                          const cName = order.canteen?.name || 'Toko';
+                        }
+
+                        // Jika pesanan berasal dari beberapa penjual dengan nomor WA berbeda
+                        return uniqueCanteenChats.map((chatGroup, idx) => {
+                          const cName = chatGroup.orders.length === 1 
+                            ? (chatGroup.orders[0].canteen?.name || 'Toko') 
+                            : chatGroup.canteenName;
                           return (
                             <a 
-                              key={`chat-canteen-${order.id}`}
-                              href={formatPhoneWA(phone) + `?text=${encodeURIComponent(buildOrderWAText(order))}`}
+                              key={`chat-canteen-group-${idx}`}
+                              href={formatPhoneWA(chatGroup.phone) + `?text=${encodeURIComponent(buildGroupCanteenWAText(chatGroup.orders, cName))}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="flex-1 min-w-[95px] flex items-center justify-center gap-1 py-1.5 px-2 bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-950/40 dark:text-green-300 dark:hover:bg-green-900/50 border border-green-200 dark:border-green-800 rounded-none text-[11px] font-bold transition-all active:scale-[0.98] truncate"
@@ -1317,8 +1412,8 @@ export default function Pembayaran() {
                               <span className="truncate">Chat {cName}</span>
                             </a>
                           );
-                        })
-                      )}
+                        });
+                      })()}
                       {(() => {
                         const courierOrder = group.orders.find(o => o.courier?.phone);
                         if (courierOrder && group.overallStatus !== 'cancelled') {

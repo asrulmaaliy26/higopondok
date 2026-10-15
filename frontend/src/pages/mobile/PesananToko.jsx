@@ -7,9 +7,8 @@ import toast from 'react-hot-toast';
 import api, { getStorageUrl } from '../../lib/axios';
 import { useCanteenStore } from '../../store/canteenStore';
 import { useAuthStore } from '../../store/authStore';
-import { ROLES } from '../../config/roles';
 import { getFileType, isImageFile, isHeifFile, isPdfFile, formatFileSize, getFileNameFromPath, compressImageFiles } from '../../lib/fileUtils';
-import ThermalReceiptModal from '../../components/receipt/ThermalReceiptModal';
+import ThermalReceiptModal, { cleanItemNotes } from '../../components/receipt/ThermalReceiptModal';
 import AdminAccountingModal from '../../components/modals/AdminAccountingModal';
 import santriData from '../../data/santri.json';
 import { PRICING_CONFIG } from '../../config/pricing';
@@ -1541,7 +1540,7 @@ ${itemsListText}
                       )}
                       <span className="truncate">
                         <strong className="text-gray-900 dark:text-white font-bold">{item.quantity}x</strong> {item.product?.name || 'Produk'}
-                        {item.notes && <span className="text-gray-400 italic text-[10px]"> ({item.notes})</span>}
+                        {item.notes && <span className="text-gray-400 italic text-[10px]"> ({cleanItemNotes(item.notes)})</span>}
                       </span>
                     </span>
                     <span className="font-bold text-gray-900 dark:text-white shrink-0 font-mono text-[11px] sm:text-xs">
@@ -1977,7 +1976,7 @@ ${itemsListText}
                     <div key={item.id} className="flex justify-between items-center text-[11px] sm:text-xs py-0.5 border-b border-gray-200/40 dark:border-gray-700/40 last:border-b-0">
                       <span className="text-gray-800 dark:text-gray-200 truncate pr-2">
                         <strong className="text-gray-900 dark:text-white font-bold">{item.quantity}x</strong> {item.product?.name || 'Produk'}
-                        {item.notes && <span className="text-gray-400 italic text-[10px]"> ({item.notes})</span>}
+                        {item.notes && <span className="text-gray-400 italic text-[10px]"> ({cleanItemNotes(item.notes)})</span>}
                       </span>
                       <span className="font-bold text-gray-900 dark:text-white shrink-0 font-mono text-[11px] sm:text-xs">
                         Rp {formatRupiah(item.subtotal || (parseFloat(item.price) * item.quantity))}
@@ -2037,15 +2036,19 @@ ${itemsListText}
           </div>
 
           <div className="flex items-center gap-1 flex-wrap">
-            {/* Tombol Cetak Struk Batch */}
+            {/* Tombol Cetak Struk Wadah */}
             <button 
               onClick={() => {
+                const resolvedOrders = group.orders.map(o => ({
+                  ...o,
+                  user: o.user || group.user
+                }));
                 setReceiptModalConfig({
                   isOpen: true,
-                  mode: 'batch',
-                  order: null,
-                  orders: group.orders,
-                  title: `Struk Paket Checkout (${group.orders.length} Toko)`
+                  mode: 'bundle',
+                  order: resolvedOrders[0],
+                  orders: resolvedOrders,
+                  title: `Struk Wadah Checkout (${group.orders.length} Toko)`
                 });
               }}
               className="py-1 px-1.5 sm:px-2 bg-amber-50 hover:bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800 rounded-none text-[10px] sm:text-[11px] font-bold transition-colors flex items-center gap-0.5 cursor-pointer"

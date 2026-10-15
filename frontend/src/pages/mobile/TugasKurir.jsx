@@ -11,9 +11,8 @@ import {
 import toast from 'react-hot-toast';
 import api, { getStorageUrl } from '../../lib/axios';
 import { useAuthStore } from '../../store/authStore';
-import santriData from '../../data/santri.json';
 import { getFileType, isImageFile, isHeifFile, isPdfFile, formatFileSize, getFileNameFromPath, compressImageFiles } from '../../lib/fileUtils';
-import ThermalReceiptModal from '../../components/receipt/ThermalReceiptModal';
+import ThermalReceiptModal, { cleanItemNotes } from '../../components/receipt/ThermalReceiptModal';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { renderOrderDateTime } from '../../lib/orderUtils';
 
@@ -1613,7 +1612,7 @@ export default function TugasKurir() {
                                   )}
                                   <span className="truncate">
                                     <strong className="text-gray-900 dark:text-white font-bold">{item.quantity}x</strong> {item.product?.name || 'Produk'}
-                                    {item.notes && <span className="text-gray-400 italic text-[10px]"> ({item.notes})</span>}
+                                    {item.notes && <span className="text-gray-400 italic text-[10px]"> ({cleanItemNotes(item.notes)})</span>}
                                   </span>
                                 </span>
                                 <span className="font-bold text-gray-900 dark:text-white shrink-0">

@@ -45,7 +45,7 @@ import {
   isPdfFile,
   isHeifFile
 } from '../../lib/fileUtils';
-import ThermalReceiptModal from '../../components/receipt/ThermalReceiptModal';
+import ThermalReceiptModal, { cleanItemNotes } from '../../components/receipt/ThermalReceiptModal';
 import santriData from '../../data/santri.json';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { renderOrderDateTime } from '../../lib/orderUtils';
@@ -239,16 +239,63 @@ export default function AdminPesanan() {
     setSelectedOrderCustomDate('');
   };
 
-  const handleContinueOrder = (order) => {
-    const couriers = order.canteen?.couriers || [];
-    if (couriers.length === 0) {
-      toast.error(`Toko "${order.canteen?.name || 'ini'}" belum ada kurirnya! Silakan tugaskan kurir ke toko ini terlebih dahulu.`);
-      return;
+  // State konfirmasi lanjutkan pesanan belum lunas
+  const [unpaidProceedOrder, setUnpaidProceedOrder] = useState(null);
+
+  // Helper cepat Lunas / Batal Lunas seluruh pesanan di wadah
+  const handleTogglePaymentStatus = (firstOrder, group, makePaid = true) => {
+    if (!makePaid) {
+      if (!window.confirm('Batalkan status lunas untuk wadah/paket pesanan ini dan kembalikan ke Belum Bayar?')) {
+        return;
+      }
     }
     updateStatusMutation.mutate({
-      id: order.id,
-      status: 'processing'
+      id: firstOrder.id,
+      payment_status: makePaid ? 'paid' : 'unpaid'
     });
+  };
+
+  // Helper cepat Lanjutkan 1 pesanan toko
+  const handleProceedOrder = (order) => {
+    if (order.payment_status !== 'paid') {
+      setUnpaidProceedOrder({
+        ...order,
+        _groupOrders: [order],
+        _groupGrandTotal: parseFloat(order.total_price || 0)
+      });
+    } else {
+      updateStatusMutation.mutate({
+        id: order.id,
+        status: 'processing'
+      });
+    }
+  };
+
+  // Helper cepat Lanjutkan semua pesanan pending dalam 1 wadah
+  const handleProceedGroup = (group) => {
+    const pendingOrders = group.orders.filter(o => o.status === 'pending');
+    if (pendingOrders.length === 0) return;
+
+    const isAllPaid = group.orders.every(o => o.payment_status === 'paid');
+    if (!isAllPaid) {
+      setUnpaidProceedOrder({
+        ...group.orders[0],
+        _groupOrders: group.orders,
+        _groupGrandTotal: group.orders.reduce((sum, o) => sum + parseFloat(o.total_price || 0), 0)
+      });
+    } else {
+      if (pendingOrders.length === 1) {
+        updateStatusMutation.mutate({
+          id: pendingOrders[0].id,
+          status: 'processing'
+        });
+      } else {
+        batchUpdateStatusMutation.mutate({
+          order_ids: pendingOrders.map(o => o.id),
+          status: 'processing'
+        });
+      }
+    }
   };
 
   // Receipt Modal State for Admin
@@ -290,11 +337,15 @@ export default function AdminPesanan() {
       handlePrintSingleReceipt(group.orders[0]);
       return;
     }
+    const resolvedOrders = group.orders.map(o => ({
+      ...o,
+      user: o.user || group.user
+    }));
     setReceiptModalConfig({
       isOpen: true,
-      mode: 'batch',
-      order: group.orders[0],
-      orders: group.orders,
+      mode: 'bundle',
+      order: resolvedOrders[0],
+      orders: resolvedOrders,
       title: `Struk Wadah ${group.checkoutId || 'Pesanan'} (${group.orders.length} Toko)`
     });
   };
@@ -728,6 +779,27 @@ export default function AdminPesanan() {
     }
   });
 
+  // Mutation Batch Update Order Status (Lanjutkan semua pesanan pending di wadah)
+  const batchUpdateStatusMutation = useMutation({
+    mutationFn: async ({ order_ids, status, target_date }) => {
+      const res = await api.put('/canteen/orders/batch-status', { order_ids, status, target_date });
+      return res.data;
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.message || 'Gagal memperbarui status pesanan');
+    },
+    onSuccess: (data) => {
+      toast.success(data.message || 'Status pesanan berhasil diperbarui');
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin_orders'] });
+      queryClient.invalidateQueries({ queryKey: ['admin_orders_recap'] });
+      queryClient.invalidateQueries({ queryKey: ['admin_stats'] });
+      queryClient.invalidateQueries({ queryKey: ['courier_orders'] });
+      queryClient.invalidateQueries({ queryKey: ['canteen_orders'] });
+    }
+  });
+
   // Mutation Upload Payment Proof by Admin
   const uploadPaymentProofMutation = useMutation({
     mutationFn: async ({ id, formData }) => {
@@ -778,7 +850,7 @@ export default function AdminPesanan() {
   };
 
   return (
-    <div className="space-y-1.5 pb-16 animate-fade-in-up font-sans max-w-7xl mx-auto px-1 sm:px-2">
+    <div className="space-y-1.5 pb-28 sm:pb-32 animate-fade-in-up font-sans max-w-7xl mx-auto px-1 sm:px-2">
       {/* GOJEK / GOBIZ STYLE UNIFIED TOP PANEL */}
       <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-none shadow-xs">
         
@@ -1114,16 +1186,20 @@ export default function AdminPesanan() {
                 // Perhitungan akumulasi seluruh pesanan di wadah ini
                 const grandTotal = group.orders.reduce((sum, o) => sum + parseFloat(o.total_price || 0), 0);
                 const totalDeliveryFee = group.orders.reduce((sum, o) => sum + parseFloat(o.delivery_fee || 0), 0);
+                const totalAdminFee = group.orders.reduce((sum, o) => sum + parseFloat(o.admin_fee || 0), 0);
+                const totalProducts = group.orders.reduce((sum, o) => sum + Math.max(0, parseFloat(o.total_price || 0) - parseFloat(o.delivery_fee || 0) - parseFloat(o.admin_fee || 0)), 0);
                 const totalItemsCount = group.orders.reduce((sum, o) => sum + (o.items?.length || 1), 0);
 
                 const isAllPaid = group.orders.every(o => o.payment_status === 'paid');
                 const isAnyWaiting = group.orders.some(o => o.payment_status === 'waiting_confirmation');
 
-                // Kumpulkan bukti pembayaran dari wadah
-                const allPaymentProofs = group.orders.flatMap(o => {
-                  if (!o.proof_of_payment) return [];
-                  return Array.isArray(o.proof_of_payment) ? o.proof_of_payment : [o.proof_of_payment];
-                });
+                // Kumpulkan bukti pembayaran dari wadah (deduplikasi agar file sama dari multi-toko tidak terhitung ganda)
+                const allPaymentProofs = Array.from(new Set(
+                  group.orders.flatMap(o => {
+                    if (!o.proof_of_payment) return [];
+                    return Array.isArray(o.proof_of_payment) ? o.proof_of_payment : [o.proof_of_payment];
+                  }).filter(Boolean)
+                ));
 
                 const isMultiStore = group.orders.length > 1;
 
@@ -1168,12 +1244,34 @@ export default function AdminPesanan() {
                             {renderOrderDateTime(firstOrder)}
                           </div>
 
-                          {/* Status Bayar Wadah */}
+                          {/* Status Bayar Wadah & Tombol Cepat Lunas Superadmin */}
                           <div className="flex items-center gap-1 shrink-0">
+                            {!isAllPaid ? (
+                              <button
+                                type="button"
+                                onClick={() => handleTogglePaymentStatus(firstOrder, group, true)}
+                                disabled={updateStatusMutation.isPending}
+                                className="px-2 py-0.5 bg-green-600 hover:bg-green-700 active:scale-95 text-white rounded-none text-[10px] font-bold flex items-center gap-1 shadow-2xs transition-all cursor-pointer disabled:opacity-50"
+                                title="Tandai seluruh pesanan di wadah ini LUNAS"
+                              >
+                                <CheckCircle className="w-2.5 h-2.5" /> Lunas
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleTogglePaymentStatus(firstOrder, group, false)}
+                                disabled={updateStatusMutation.isPending}
+                                className="px-1.5 py-0.5 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 text-gray-700 rounded-none text-[9.5px] font-semibold flex items-center gap-0.5 transition-all cursor-pointer disabled:opacity-50"
+                                title="Batalkan status lunas dan kembalikan ke Belum Bayar"
+                              >
+                                <X className="w-2.5 h-2.5" /> Batal
+                              </button>
+                            )}
+
                             <button
                               type="button"
                               onClick={() => handleOpenChangeStatusModal(firstOrder)}
-                              title="Klik untuk ubah status pembayaran wadah"
+                              title="Klik untuk ubah status pembayaran wadah secara manual"
                               className={`px-1.5 py-0.5 rounded-none text-[10px] font-bold transition-all hover:scale-105 active:scale-95 cursor-pointer ${
                                 isAllPaid
                                   ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
@@ -1252,6 +1350,10 @@ export default function AdminPesanan() {
                         </div>
 
                         {group.orders.map((order) => {
+                          const orderTotal = parseFloat(order.total_price || 0);
+                          const deliveryFee = parseFloat(order.delivery_fee || 0);
+                          const adminFee = parseFloat(order.admin_fee || 0);
+                          const productSubtotal = Math.max(0, orderTotal - deliveryFee - adminFee);
                           return (
                             <div
                               key={order.id}
@@ -1312,7 +1414,7 @@ export default function AdminPesanan() {
                                     <div key={item.id} className="flex justify-between items-center text-[10.5px]">
                                       <span className="text-gray-700 dark:text-gray-300 truncate pr-2">
                                         <strong className="text-gray-900 dark:text-white font-bold">{item.quantity}x</strong> {item.product?.name || 'Produk'}
-                                        {item.notes && <span className="text-gray-400 italic text-[10px]"> ({item.notes})</span>}
+                                        {item.notes && <span className="text-gray-400 italic text-[10px]"> ({cleanItemNotes(item.notes)})</span>}
                                       </span>
                                       <span className="font-bold text-gray-900 dark:text-white shrink-0 font-mono">
                                         Rp {parseFloat(item.subtotal).toLocaleString('id-ID')}
@@ -1359,17 +1461,25 @@ export default function AdminPesanan() {
                                 )}
                               </div>
 
-                              {/* Subtotal Toko & Bar Tombol Edit Khusus Toko Ini */}
-                              <div className="pt-1 border-t border-gray-200 dark:border-gray-700/60 space-y-1">
-                                <div className="flex items-baseline justify-between gap-1">
+                              {/* Subtotal Toko & Rincian Lengkap untuk Superadmin */}
+                              <div className="pt-1.5 border-t border-gray-200 dark:border-gray-700/60 space-y-1">
+                                <div className="bg-white/90 dark:bg-gray-900/80 p-1.5 border border-gray-200 dark:border-gray-700 rounded-none text-[10.5px] flex items-center justify-between flex-wrap gap-1">
+                                  <div className="flex items-center gap-1.5 flex-wrap text-gray-600 dark:text-gray-300">
+                                    <span>Produk: <strong className="text-gray-900 dark:text-white font-mono font-bold">Rp {productSubtotal.toLocaleString('id-ID')}</strong></span>
+                                    <span className="text-gray-300 dark:text-gray-600">•</span>
+                                    <span>Ongkir: <strong className="text-blue-600 dark:text-blue-400 font-mono font-bold">Rp {deliveryFee.toLocaleString('id-ID')}</strong></span>
+                                    <span className="text-gray-300 dark:text-gray-600">•</span>
+                                    <span>Admin: <strong className="text-purple-600 dark:text-purple-400 font-mono font-bold">Rp {adminFee.toLocaleString('id-ID')}</strong></span>
+                                  </div>
                                   <div className="flex items-baseline gap-1">
+                                    <span className="text-[10px] text-gray-500 font-medium">Subtotal Toko:</span>
                                     <span className="text-xs font-black text-green-700 dark:text-green-400 font-mono">
-                                      Rp {parseFloat(order.total_price || 0).toLocaleString('id-ID')}
+                                      Rp {orderTotal.toLocaleString('id-ID')}
+                                    </span>
+                                    <span className="text-[9px] text-gray-400 font-mono">
+                                      ({order.items?.length || 0} Item)
                                     </span>
                                   </div>
-                                  <span className="text-[9.5px] text-gray-400 font-mono">
-                                    {order.items?.length || 0} Item
-                                  </span>
                                 </div>
 
                                 {/* Tombol Aksi Lengkap untuk Mengedit Toko Ini */}
@@ -1388,16 +1498,28 @@ export default function AdminPesanan() {
                                         <X className="w-3 h-3" />
                                       </button>
                                       {order.status === 'pending' && (
-                                        <button
-                                          type="button"
-                                          onClick={() => handleOpenChangeStatusModal(order, 'processing', 'tomorrow')}
-                                          disabled={updateStatusMutation.isPending}
-                                          className="h-6.5 px-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-300 dark:border-amber-800 rounded-none text-[10px] font-bold transition-colors flex items-center gap-0.5 shadow-2xs cursor-pointer shrink-0"
-                                          title="Jadwalkan pesanan toko ini ke Besok"
-                                        >
-                                          <Calendar className="w-2.5 h-2.5 text-amber-600 dark:text-amber-400" />
-                                          <span>Besok</span>
-                                        </button>
+                                        <>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleProceedOrder(order)}
+                                            disabled={updateStatusMutation.isPending || batchUpdateStatusMutation.isPending}
+                                            className="h-6.5 px-2 bg-green-600 hover:bg-green-700 active:scale-95 text-white rounded-none text-[10px] font-bold transition-all flex items-center gap-1 shadow-2xs shrink-0 cursor-pointer disabled:opacity-50"
+                                            title="Lanjutkan pesanan toko ini ke proses pengantaran kurir"
+                                          >
+                                            <CheckCircle className="w-2.5 h-2.5" />
+                                            <span>Lanjutkan</span>
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleOpenChangeStatusModal(order, 'processing', 'tomorrow')}
+                                            disabled={updateStatusMutation.isPending}
+                                            className="h-6.5 px-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-300 dark:border-amber-800 rounded-none text-[10px] font-bold transition-colors flex items-center gap-0.5 shadow-2xs cursor-pointer shrink-0"
+                                            title="Jadwalkan pesanan toko ini ke Besok"
+                                          >
+                                            <Calendar className="w-2.5 h-2.5 text-amber-600 dark:text-amber-400" />
+                                            <span>Besok</span>
+                                          </button>
+                                        </>
                                       )}
                                     </>
                                   ) : null}
@@ -1446,32 +1568,54 @@ export default function AdminPesanan() {
                       </div>
                     </div>
 
-                    {/* 3. Footer Wadah: Ringkasan Total Semua Toko Dalam Wadah */}
-                    <div className="p-2 sm:p-2.5 bg-gray-100/70 dark:bg-gray-800/60 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between gap-1">
-                      <div>
-                        <span className="text-[10px] text-gray-500 dark:text-gray-400 font-semibold block leading-none">
-                          Grand Total ({group.orders.length} Toko • {totalItemsCount} Item):
-                        </span>
-                        <div className="flex items-baseline gap-1 mt-0.5">
-                          <span className="text-sm font-black text-green-700 dark:text-green-400 font-mono">
-                            Rp {grandTotal.toLocaleString('id-ID')}
+                    {/* 3. Footer Wadah: Ringkasan Total Rinci Superadmin */}
+                    <div className="p-2 sm:p-2.5 bg-gray-100/70 dark:bg-gray-800/60 border-t border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          <span>Akumulasi Wadah ({group.orders.length} Toko • {totalItemsCount} Item):</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
+                          <span className="bg-white dark:bg-gray-900 px-1.5 py-0.5 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300">
+                            Produk: <strong className="font-mono text-gray-900 dark:text-white font-bold">Rp {totalProducts.toLocaleString('id-ID')}</strong>
                           </span>
-                          <span className="text-[9.5px] text-gray-400 font-medium">
-                            (Total Ongkir Rp {totalDeliveryFee.toLocaleString('id-ID')})
+                          <span className="bg-blue-50 dark:bg-blue-950/40 px-1.5 py-0.5 border border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-300">
+                            Ongkir: <strong className="font-mono font-bold">Rp {totalDeliveryFee.toLocaleString('id-ID')}</strong>
+                          </span>
+                          <span className="bg-purple-50 dark:bg-purple-950/40 px-1.5 py-0.5 border border-purple-200 dark:border-purple-800 text-purple-800 dark:text-purple-300">
+                            Admin: <strong className="font-mono font-bold">Rp {totalAdminFee.toLocaleString('id-ID')}</strong>
+                          </span>
+                          <span className="bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 border border-emerald-300 dark:border-emerald-700 text-green-900 dark:text-green-300 font-bold">
+                            Grand Total: <strong className="font-mono text-xs sm:text-sm font-black text-green-700 dark:text-green-400">Rp {grandTotal.toLocaleString('id-ID')}</strong>
                           </span>
                         </div>
                       </div>
 
-                      {isMultiStore && (
-                        <button
-                          type="button"
-                          onClick={() => handlePrintGroupReceipt(group)}
-                          className="px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded-none text-[10.5px] font-bold flex items-center gap-1 transition-colors shadow-2xs cursor-pointer"
-                          title="Cetak struk gabungan semua toko dalam wadah ini"
-                        >
-                          <Printer className="w-3 h-3" /> Struk Wadah
-                        </button>
-                      )}
+                      {/* Tombol Aksi Footer Wadah */}
+                      <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto flex-wrap">
+                        {group.orders.some(o => o.status === 'pending') && (
+                          <button
+                            type="button"
+                            onClick={() => handleProceedGroup(group)}
+                            disabled={batchUpdateStatusMutation.isPending || updateStatusMutation.isPending}
+                            className="px-2.5 py-1.5 bg-green-600 hover:bg-green-700 active:scale-95 text-white rounded-none text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer disabled:opacity-50"
+                            title="Lanjutkan semua pesanan pending dalam wadah ini ke kurir"
+                          >
+                            <CheckCircle className="w-3.5 h-3.5" />
+                            <span>{isMultiStore ? 'Lanjutkan Semua' : 'Lanjutkan'}</span>
+                          </button>
+                        )}
+
+                        {isMultiStore && (
+                          <button
+                            type="button"
+                            onClick={() => handlePrintGroupReceipt(group)}
+                            className="px-2.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-none text-xs font-bold flex items-center justify-center gap-1.5 transition-colors shadow-2xs cursor-pointer shrink-0"
+                            title="Cetak struk gabungan semua toko dalam wadah ini"
+                          >
+                            <Printer className="w-3.5 h-3.5" /> Struk Wadah
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -3073,6 +3217,142 @@ export default function AdminPesanan() {
         courierName={receiptModalConfig.order?.courier?.name || 'Administrator'}
         title={receiptModalConfig.title}
       />
+
+      {/* MODAL KONFIRMASI LANJUTKAN PESANAN BELUM LUNAS UNTUK SUPERADMIN */}
+      {unpaidProceedOrder && createPortal(
+        <div className="fixed inset-0 z-[110] bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-gray-900 rounded-none w-full max-w-md overflow-hidden shadow-2xl border border-gray-200 dark:border-gray-800 p-3.5 sm:p-4 space-y-3 animate-in zoom-in-95 duration-200 my-auto text-left">
+            {/* Header Modal */}
+            <div className="flex items-start gap-2.5">
+              <div className="w-8 h-8 rounded-none bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 border border-amber-300 dark:border-amber-800">
+                <AlertTriangle className="w-4 h-4" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-sm font-bold text-gray-900 dark:text-white leading-tight">
+                  Konfirmasi Lanjutkan Pesanan
+                </h3>
+                <p className="text-[10px] text-gray-500 dark:text-gray-400">
+                  Pembayaran pesanan ini belum lunas
+                </p>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setUnpaidProceedOrder(null)}
+                className="w-7 h-7 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-none border border-gray-200 dark:border-gray-700 flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Info Card Pesanan */}
+            <div className="bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-900/50 rounded-none p-2.5 space-y-1.5">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-gray-600 dark:text-gray-400 text-[11px]">Nomor Pesanan:</span>
+                <span className="font-bold text-gray-900 dark:text-white text-[11px] font-mono">
+                  {unpaidProceedOrder._groupOrders?.length > 1
+                    ? `#${unpaidProceedOrder._groupOrders.map(o => o.id).join(', #')} (${unpaidProceedOrder._groupOrders.length} Toko)`
+                    : `#${unpaidProceedOrder.id}`}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-gray-600 dark:text-gray-400 text-[11px]">Nama Pemesan:</span>
+                <span className="font-semibold text-gray-900 dark:text-white text-[11px]">
+                  {unpaidProceedOrder.user?.santri_name || unpaidProceedOrder.user?.name || 'Santri'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-gray-600 dark:text-gray-400 text-[11px]">Status Bayar Saat Ini:</span>
+                <span className={`px-1.5 py-0.5 rounded-none font-bold text-[10px] ${
+                  unpaidProceedOrder.payment_status === 'waiting_confirmation'
+                    ? 'bg-amber-200 text-amber-900 dark:bg-amber-900 dark:text-amber-200 border border-amber-400'
+                    : 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200 border border-red-300'
+                }`}>
+                  {unpaidProceedOrder.payment_status === 'waiting_confirmation'
+                    ? '⏳ Menunggu Validasi'
+                    : '⚠️ Belum Bayar'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center pt-1.5 border-t border-amber-200/60 dark:border-amber-900/50 text-xs font-bold text-gray-900 dark:text-white font-mono">
+                <span className="font-sans">Total Tagihan:</span>
+                <span className="text-green-600 dark:text-green-400">
+                  Rp {parseFloat(unpaidProceedOrder._groupGrandTotal || unpaidProceedOrder.total_price || 0).toLocaleString('id-ID')}
+                </span>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-gray-600 dark:text-gray-400 leading-relaxed">
+              Pesanan ini belum dikonfirmasi lunas. Apakah Anda ingin menandai lunas sekarang atau tetap melanjutkannya ke kurir?
+            </p>
+
+            {/* Tombol Aksi */}
+            <div className="space-y-1.5 pt-1">
+              <button
+                type="button"
+                disabled={batchUpdateStatusMutation.isPending || updateStatusMutation.isPending}
+                onClick={async () => {
+                  const ord = unpaidProceedOrder;
+                  setUnpaidProceedOrder(null);
+                  const targetOrders = ord._groupOrders || [ord];
+                  const pendingOrders = targetOrders.filter(o => o.status === 'pending');
+                  try {
+                    await updateStatusMutation.mutateAsync({ id: ord.id, payment_status: 'paid' });
+                    if (pendingOrders.length > 1) {
+                      batchUpdateStatusMutation.mutate({
+                        order_ids: pendingOrders.map(o => o.id),
+                        status: 'processing'
+                      });
+                    } else if (pendingOrders.length === 1) {
+                      updateStatusMutation.mutate({
+                        id: pendingOrders[0].id,
+                        status: 'processing'
+                      });
+                    }
+                  } catch (e) {
+                    console.error(e);
+                  }
+                }}
+                className="w-full py-1.5 px-3 bg-green-600 hover:bg-green-700 text-white rounded-none text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
+              >
+                <CheckCircle className="w-3.5 h-3.5" /> Tandai Lunas & Lanjutkan
+              </button>
+
+              <button
+                type="button"
+                disabled={batchUpdateStatusMutation.isPending || updateStatusMutation.isPending}
+                onClick={() => {
+                  const ord = unpaidProceedOrder;
+                  setUnpaidProceedOrder(null);
+                  const targetOrders = ord._groupOrders || [ord];
+                  const pendingOrders = targetOrders.filter(o => o.status === 'pending');
+                  if (pendingOrders.length > 1) {
+                    batchUpdateStatusMutation.mutate({
+                      order_ids: pendingOrders.map(o => o.id),
+                      status: 'processing'
+                    });
+                  } else if (pendingOrders.length === 1) {
+                    updateStatusMutation.mutate({
+                      id: pendingOrders[0].id,
+                      status: 'processing'
+                    });
+                  }
+                }}
+                className="w-full py-1.5 px-3 bg-amber-500 hover:bg-amber-600 text-white rounded-none text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
+              >
+                Tetap Lanjutkan (Belum Lunas)
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setUnpaidProceedOrder(null)}
+                className="w-full py-1.5 px-3 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-none text-xs font-semibold transition-colors flex items-center justify-center cursor-pointer border border-gray-200 dark:border-gray-700"
+              >
+                Batal
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

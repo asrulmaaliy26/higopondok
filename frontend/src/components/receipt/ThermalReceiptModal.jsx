@@ -37,31 +37,47 @@ const formatDateOnly = (dateStr) => {
   }
 };
 
+export const cleanItemNotes = (noteStr) => {
+  if (!noteStr) return '';
+  const noPrice = String(noteStr)
+    .replace(/\s*\(\s*\+?\s*Rp?\s*[\d\.\,]+\s*\)/gi, '')
+    .replace(/\s*\+\s*Rp?\s*[\d\.\,]+/gi, '')
+    .trim();
+  const parts = noPrice.split('•').map(s => s.trim()).filter(Boolean);
+  return Array.from(new Set(parts)).join(' • ');
+};
+
 export const getSantriReceiptInfo = (user, order = null) => {
-  const isTeacher = Boolean(order?.order_for === 'guru' || user?.is_teacher || (order?.is_priority && !user?.santri_name));
+  const targetUser = user || order?.user;
+  const isTeacher = Boolean(order?.order_for === 'guru' || targetUser?.is_teacher || (order?.is_priority && !targetUser?.santri_name));
 
   if (isTeacher) {
     return {
       isTeacher: true,
-      santriName: `🎓 ${user?.name || 'Guru / Staff'}`,
-      santriClass: user?.teacher_unit ? `Unit ${user.teacher_unit}` : 'Staff Yayasan',
-      santriLevel: user?.niy ? `NIY: ${user.niy}` : '',
-      santriRoom: order?.delivery_location || `Ruang Guru ${user?.teacher_unit || ''}`,
+      santriName: `🎓 ${targetUser?.name || 'Guru / Staff'}`,
+      santriClass: targetUser?.teacher_unit ? `Unit ${targetUser.teacher_unit}` : 'Staff Yayasan',
+      santriLevel: targetUser?.niy ? `NIY: ${targetUser.niy}` : '',
+      santriRoom: order?.delivery_location || `Ruang Guru ${targetUser?.teacher_unit || ''}`,
       waliName: 'Tenaga Pendidik / Staff'
     };
   }
 
-  const santriName = user?.santri_name || user?.name || '-';
-  let santriClass = user?.santri_class || '';
-  let santriLevel = user?.santri_level || '';
-  let santriRoom = user?.santri_room || '-';
+  // Prioritas nama santri asli dari profil user atau orderan
+  const rawSantriName = targetUser?.santri_name || order?.santri_name || targetUser?.name || order?.customer_name;
+  const santriName = (rawSantriName && rawSantriName.trim() !== '' && rawSantriName.trim() !== '-')
+    ? rawSantriName.trim()
+    : (targetUser?.name || '-');
+  let santriClass = targetUser?.santri_class || order?.santri_class || '';
+  let santriLevel = targetUser?.santri_level || order?.santri_level || '';
+  let santriRoom = targetUser?.santri_room || order?.santri_room || order?.delivery_location || '-';
 
-  if (santriName && santriData?.data) {
+  // Cocokkan ke database santri.json HANYA jika nama valid (minimal 3 huruf dan bukan tanda strip '-')
+  if (santriName && santriName !== '-' && santriName.length >= 3 && santriData?.data) {
     const sName = santriName.toLowerCase().trim();
     const match = santriData.data.find(r => {
       if (!r || !r[1]) return false;
       const rawName = r[1].toLowerCase().replace(/\s+(laki-laki|perempuan)$/i, '').trim();
-      return rawName === sName || sName.includes(rawName) || rawName.includes(sName);
+      return rawName === sName || (rawName.length >= 4 && sName.includes(rawName)) || (sName.length >= 4 && rawName.includes(sName));
     });
     if (match) {
       if (!santriLevel && match[4]) santriLevel = match[4];
@@ -84,7 +100,7 @@ export const getSantriReceiptInfo = (user, order = null) => {
     santriClass,
     santriLevel,
     santriRoom,
-    waliName: user?.name || '-'
+    waliName: targetUser?.name || order?.wali_name || '-'
   };
 };
 
@@ -142,10 +158,10 @@ export default function ThermalReceiptModal({
     }
   }, [isOpen]);
 
-  // Filter batch orders: include all passed orders (except cancelled), uncompleted first
+  // Filter batch / bundle orders: include all passed orders (except cancelled), uncompleted first
   const rawBatchOrders = Array.isArray(orders) ? orders : [];
   const filteredBatchOrders = useMemo(() => {
-    if (mode !== 'batch') return [];
+    if (mode !== 'batch' && mode !== 'bundle' && mode !== 'group') return [];
     const valid = rawBatchOrders.filter(o => o.status !== 'cancelled');
     return valid.sort((a, b) => {
       const getPriority = (status) => {
@@ -160,6 +176,56 @@ export default function ThermalReceiptModal({
       return (b.id || 0) - (a.id || 0);
     });
   }, [rawBatchOrders, mode]);
+
+  // Deteksi otomatis apakah seluruh orders milik 1 wadah/checkout/user yang sama (Struk Gabungan 1 User)
+  const isSameUserBundle = useMemo(() => {
+    if (mode === 'bundle' || mode === 'group') return true;
+    if (rawBatchOrders.length <= 1) return false;
+    // Cek checkout_id yang sama
+    const firstCheckout = rawBatchOrders[0]?.checkout_id;
+    if (firstCheckout && rawBatchOrders.every(o => o.checkout_id === firstCheckout)) return true;
+    // Cek user_id yang sama
+    const firstUserId = rawBatchOrders[0]?.user_id || rawBatchOrders[0]?.user?.id;
+    if (firstUserId && rawBatchOrders.every(o => (o.user_id || o.user?.id) === firstUserId)) return true;
+    return false;
+  }, [mode, rawBatchOrders]);
+
+  const bundleUser = useMemo(() => {
+    if (order?.user) return order.user;
+    if (rawBatchOrders && rawBatchOrders.length > 0) {
+      const found = rawBatchOrders.find(o => o?.user);
+      if (found) return found.user;
+      return rawBatchOrders[0]?.user;
+    }
+    return null;
+  }, [order, rawBatchOrders]);
+
+  // Kelompokkan seluruh order berdasarkan User / Santri (1 User = 1 Struk Utuh, Seluruh Toko Digabung)
+  const groupedOrdersByUser = useMemo(() => {
+    if (!filteredBatchOrders || filteredBatchOrders.length === 0) return [];
+    
+    const userGroups = new Map();
+    
+    filteredBatchOrders.forEach(o => {
+      const u = o.user;
+      const info = getSantriReceiptInfo(u, o);
+      // Kunci unik santri: id santri/user jika ada, atau kombinasi nama dan asrama
+      const userKey = u?.id || o.user_id || (info.santriName ? `${info.santriName.toLowerCase().trim()}_${(info.santriRoom || '').toLowerCase().trim()}` : `order_${o.id}`);
+      
+      if (!userGroups.has(userKey)) {
+        userGroups.set(userKey, {
+          userKey,
+          user: u,
+          primaryOrder: o,
+          info,
+          orders: []
+        });
+      }
+      userGroups.get(userKey).orders.push(o);
+    });
+    
+    return Array.from(userGroups.values());
+  }, [filteredBatchOrders]);
 
   // Calculate single order summary
   const singleSummary = useMemo(() => {
@@ -188,7 +254,64 @@ export default function ThermalReceiptModal({
     };
   }, [order]);
 
-  // Calculate batch summaries
+  // Calculate consolidated bundle summary (1 Struk untuk 1 User seluruh toko)
+  const bundleSummary = useMemo(() => {
+    if (!isSameUserBundle) return null;
+    const activeOrders = filteredBatchOrders.length > 0 ? filteredBatchOrders : rawBatchOrders;
+    if (activeOrders.length === 0) return null;
+
+    let subtotalBelanja = 0;
+    let totalOngkir = 0;
+    let totalAdmin = 0;
+    let totalBayar = 0;
+    let totalDiskon = 0;
+    let totalModalHpp = 0;
+
+    activeOrders.forEach(o => {
+      const del = parseFloat(o.delivery_fee || 0);
+      const adm = parseFloat(o.admin_fee || 0);
+      const tot = parseFloat(o.total_price || 0);
+      const disc = parseFloat(o.voucher_discount ?? (o.voucher?.discount_amount ?? 0));
+      totalModalHpp += getOrderModalBelanja(o);
+
+      let itemsSub = 0;
+      if (o.items && o.items.length > 0) {
+        itemsSub = o.items.reduce((s, it) => s + parseFloat(it.subtotal || (parseFloat(it.price || 0) * (it.quantity || 1))), 0);
+      } else {
+        itemsSub = Math.max(0, tot - del - adm);
+      }
+
+      subtotalBelanja += itemsSub;
+      totalOngkir += del;
+      totalAdmin += adm;
+      totalBayar += tot;
+      totalDiskon += disc;
+    });
+
+    const isAllPaid = activeOrders.every(o => o.payment_status === 'paid');
+    const isAnyWaiting = activeOrders.some(o => o.payment_status === 'waiting_confirmation');
+    const paymentStatusText = isAllPaid ? 'LUNAS' : isAnyWaiting ? 'VERIFIKASI' : 'BELUM LUNAS';
+
+    const checkoutId = activeOrders[0]?.checkout_id || null;
+    const orderIds = activeOrders.map(o => `#ORD-${o.id}`).join(', ');
+
+    return {
+      ordersCount: activeOrders.length,
+      checkoutId,
+      orderIds,
+      subtotalBelanja,
+      totalOngkir,
+      totalAdmin,
+      totalBayar,
+      totalDiskon,
+      totalModalHpp,
+      isAllPaid,
+      paymentStatusText,
+      created_at: activeOrders[0]?.created_at
+    };
+  }, [isSameUserBundle, filteredBatchOrders, rawBatchOrders]);
+
+  // Calculate batch summaries (Kurir multi-santri run-sheet)
   const batchSummary = useMemo(() => {
     let products = 0;
     let hpp = 0;
@@ -294,33 +417,51 @@ export default function ThermalReceiptModal({
             word-break: ${isA4 ? 'normal' : 'break-word'} !important;
             overflow-wrap: break-word !important;
           }
+          .thermal-header-title {
+            font-size: ${paperWidth === '58mm' ? '15pt' : '18pt'} !important;
+            font-weight: 900 !important;
+            line-height: 1.2 !important;
+          }
+          .thermal-header-sub {
+            font-size: ${paperWidth === '58mm' ? '10pt' : '11.5pt'} !important;
+            font-weight: 700 !important;
+          }
           .thermal-order-code {
-            font-size: ${paperWidth === '58mm' ? '13pt' : '15pt'} !important;
+            font-size: ${paperWidth === '58mm' ? '14pt' : '17pt'} !important;
             font-weight: 900 !important;
             line-height: 1.2 !important;
           }
           .thermal-santri-name {
-            font-size: ${paperWidth === '58mm' ? '12pt' : '14pt'} !important;
+            font-size: ${paperWidth === '58mm' ? '14pt' : '17pt'} !important;
             font-weight: 900 !important;
             line-height: 1.2 !important;
           }
           .thermal-santri-meta {
-            font-size: ${paperWidth === '58mm' ? '10pt' : '11.5pt'} !important;
-            font-weight: 700 !important;
-            line-height: 1.25 !important;
-          }
-          .thermal-menu-header {
-            font-size: ${paperWidth === '58mm' ? '10pt' : '11.5pt'} !important;
-            font-weight: 900 !important;
-          }
-          .thermal-menu-item {
-            font-size: ${paperWidth === '58mm' ? '11pt' : '12.5pt'} !important;
+            font-size: ${paperWidth === '58mm' ? '11pt' : '13pt'} !important;
             font-weight: 800 !important;
             line-height: 1.25 !important;
           }
+          .thermal-menu-header {
+            font-size: ${paperWidth === '58mm' ? '11pt' : '13pt'} !important;
+            font-weight: 900 !important;
+          }
+          .thermal-store-header {
+            font-size: ${paperWidth === '58mm' ? '11.5pt' : '13.5pt'} !important;
+            font-weight: 900 !important;
+          }
+          .thermal-menu-item {
+            font-size: ${paperWidth === '58mm' ? '12pt' : '14pt'} !important;
+            font-weight: 900 !important;
+            line-height: 1.25 !important;
+          }
           .thermal-menu-note {
-            font-size: ${paperWidth === '58mm' ? '9.5pt' : '10.5pt'} !important;
+            font-size: ${paperWidth === '58mm' ? '10pt' : '11.5pt'} !important;
             font-style: italic !important;
+            font-weight: 700 !important;
+          }
+          .thermal-footer {
+            font-size: ${paperWidth === '58mm' ? '10.5pt' : '12pt'} !important;
+            font-weight: 700 !important;
           }
           .a4-grid-container {
             display: flex !important;
@@ -370,11 +511,13 @@ export default function ThermalReceiptModal({
               </div>
               <div>
                 <h3 className="font-bold text-gray-900 dark:text-white text-xs sm:text-sm">
-                  {title || (mode === 'batch' ? `Rekap Pesanan (${filteredBatchOrders.length} Pesanan)` : `Struk Pesanan #ORD-${order?.id}`)}
+                  {title || (isSameUserBundle ? `Struk Wadah (${bundleSummary?.ordersCount || filteredBatchOrders.length} Toko)` : mode === 'batch' ? `Rekap Pesanan (${filteredBatchOrders.length} Pesanan)` : `Struk Pesanan #ORD-${order?.id}`)}
                 </h3>
                 <p className="text-[10px] text-gray-500">
                   {isA4
-                    ? (mode === 'batch' && a4Layout === 'grid'
+                    ? (isSameUserBundle
+                        ? 'Format Kertas A4 (PDF) • Invoice Resmi Wadah Pemesan'
+                        : mode === 'batch' && a4Layout === 'grid'
                         ? 'Format Kertas A4 (PDF) • Slip Struk Kasir Siap Gunting'
                         : 'Format Dokumen / Kertas A4 (PDF)')
                     : `Format Printer Thermal (${paperWidth})`}
@@ -595,7 +738,7 @@ export default function ThermalReceiptModal({
                                 <td className="py-2.5 px-3 text-center text-gray-500 border-r border-gray-200 font-medium">{idx + 1}</td>
                                 <td className="py-2.5 px-3 border-r border-gray-200 font-semibold text-gray-900">
                                   {item.product?.name || 'Produk'}
-                                  {item.notes && <span className="block text-[11px] text-gray-500 font-normal italic">Catatan: {item.notes}</span>}
+                                  {item.notes && <span className="block text-[11px] text-gray-500 font-normal italic">Catatan: {cleanItemNotes(item.notes)}</span>}
                                 </td>
                                 <td className="py-2.5 px-3 text-center border-r border-gray-200 font-bold">{qty}</td>
                                 <td className="py-2.5 px-3 text-right border-r border-gray-200">Rp {formatRupiah(price)}</td>
@@ -650,9 +793,217 @@ export default function ThermalReceiptModal({
               )}
 
               {/* ========================================================================= */}
-              {/* 2. FORMAT A4: BATCH RECAP / SLIP STRUK (KERTAS A4 / PDF)                  */}
+              {/* 2. FORMAT A4: BUNDLE ORDER INVOICE (1 USER BANYAK TOKO / CHECKOUT GABUNGAN) */}
               {/* ========================================================================= */}
-              {isA4 && mode === 'batch' && (
+              {isA4 && isSameUserBundle && bundleSummary && (
+                <div className="space-y-5 text-gray-900">
+                  {/* KOP RESMI A4 */}
+                  <div className="border-b-2 border-gray-900 pb-4">
+                    <div className="flex justify-between items-start gap-4">
+                      <div>
+                        <h1 className="text-xl font-black tracking-tight text-gray-900 uppercase">
+                          HIGO PONDOK
+                        </h1>
+                        <p className="text-xs font-semibold text-gray-600">
+                          Sistem Layanan Pesan Antar Santri • Pondok Pesantren
+                        </p>
+                        <p className="text-[11px] text-gray-500 mt-0.5">
+                          Invoice / Bukti Pemesanan Gabungan Wadah ({bundleSummary.ordersCount} Toko)
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <span className="inline-block px-3 py-1 bg-green-700 text-white font-black text-xs rounded-none uppercase tracking-wider">
+                          INVOICE WADAH
+                        </span>
+                        <p className="text-sm font-bold text-gray-900 mt-1 font-mono">
+                          {bundleSummary.checkoutId || `WADAH (${bundleSummary.ordersCount} TOKO)`}
+                        </p>
+                        <p className="text-[11px] text-gray-500">{formatDateTime(bundleSummary.created_at)}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* GRID INFORMASI: SANTRI PEMESAN & PENGANTARAN (1 KALI) */}
+                  <div className="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-none border border-gray-200 text-xs">
+                    {/* Kolom 1: Info Pemesan */}
+                    {(() => {
+                      const primaryOrder = filteredBatchOrders[0] || rawBatchOrders[0];
+                      const targetUser = bundleUser || primaryOrder?.user;
+                      const info = getSantriReceiptInfo(targetUser, primaryOrder);
+                      const asrama = (info.santriRoom && info.santriRoom !== '-') ? info.santriRoom : (primaryOrder?.delivery_location || '-');
+                      const kelas = info.santriClass || (info.santriLevel ? `Kelas ${info.santriLevel}` : (info.isTeacher ? 'Guru / Staff' : '-'));
+
+                      return (
+                        <div className="space-y-1">
+                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                            {info.isTeacher ? 'DATA GURU / TENAGA PENDIDIK:' : 'DATA SANTRI / PENERIMA:'}
+                          </p>
+                          <p className="text-sm font-black text-gray-900 uppercase">
+                            👤 {info.santriName}
+                          </p>
+                          {!info.isTeacher && info.waliName && info.waliName !== '-' && (
+                            <p className="text-gray-600">
+                              <span className="font-semibold">Wali:</span> {info.waliName}
+                            </p>
+                          )}
+                          <p className="text-gray-600">
+                            <span className="font-semibold">{info.isTeacher ? 'Ruang Guru / Meja:' : 'Kamar / Asrama:'}</span> {asrama}
+                          </p>
+                          {(kelas && kelas !== '-') && (
+                            <p className="text-gray-600">
+                              <span className="font-semibold">{info.isTeacher ? 'Unit:' : 'Kelas:'}</span> {kelas}
+                            </p>
+                          )}
+                          {primaryOrder?.delivery_location && primaryOrder.delivery_location !== asrama && (
+                            <p className="text-gray-600">
+                              <span className="font-semibold">Tujuan Antar:</span> {primaryOrder.delivery_location}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })()}
+
+                    {/* Kolom 2: Info Pesanan & Status */}
+                    <div className="space-y-1 text-right">
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">INFO PENGIRIMAN & PEMBAYARAN:</p>
+                      <p className="text-xs font-bold text-gray-700">
+                        Total: <span className="text-black font-black">{bundleSummary.ordersCount} Toko / Kantin</span>
+                      </p>
+                      <p className="text-[11px] text-gray-600 font-mono">
+                        {bundleSummary.orderIds}
+                      </p>
+                      <p className="text-gray-600">
+                        <span className="font-semibold">Kurir:</span> {courierName || 'Petugas Kurir Pondok'}
+                      </p>
+                      <div className="pt-1 flex items-center justify-end gap-2 flex-wrap">
+                        <span className={`px-2.5 py-0.5 rounded-none font-bold text-[10px] uppercase border ${
+                          bundleSummary.isAllPaid
+                            ? 'bg-green-100 text-green-800 border-green-300'
+                            : 'bg-red-100 text-red-800 border-red-300'
+                        }`}>
+                          {bundleSummary.isAllPaid ? '✅ Lunas' : `⚠️ ${bundleSummary.paymentStatusText}`}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* TABEL RINCIAN SEMUA ITEM PER TOKO */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse border border-gray-200">
+                      <thead>
+                        <tr className="border-b-2 border-gray-800 text-[11px] font-bold uppercase text-gray-700 bg-gray-100">
+                          <th className="py-2.5 px-3 w-[40px] text-center shrink-0 border-r border-gray-200">No</th>
+                          <th className="py-2.5 px-3 w-[140px] border-r border-gray-200">Toko / Kantin</th>
+                          <th className="py-2.5 px-3 min-w-[180px] border-r border-gray-200">Menu / Produk</th>
+                          <th className="py-2.5 px-3 text-center w-[60px] shrink-0 border-r border-gray-200">Jumlah</th>
+                          <th className="py-2.5 px-3 text-right w-[120px] shrink-0 border-r border-gray-200">Harga Satuan</th>
+                          <th className="py-2.5 px-3 text-right w-[120px] shrink-0">Total Harga</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 text-xs">
+                        {(() => {
+                          let counter = 1;
+                          const rows = [];
+                          filteredBatchOrders.forEach((o, oIdx) => {
+                            if (o.items && o.items.length > 0) {
+                              o.items.forEach((item, itemIdx) => {
+                                const qty = item.quantity || 1;
+                                const price = parseFloat(item.price || 0);
+                                const sub = parseFloat(item.subtotal || price * qty);
+                                rows.push(
+                                  <tr key={`${oIdx}-${itemIdx}`} className="hover:bg-gray-50">
+                                    <td className="py-2.5 px-3 text-center text-gray-500 border-r border-gray-200 font-medium">{counter++}</td>
+                                    <td className="py-2.5 px-3 border-r border-gray-200 font-bold text-gray-800">
+                                      🏪 {o.canteen?.name || 'Kantin'}
+                                      <span className="block text-[10px] font-mono text-gray-500 font-normal">#ORD-{o.id}</span>
+                                    </td>
+                                    <td className="py-2.5 px-3 border-r border-gray-200 font-semibold text-gray-900">
+                                      {item.product?.name || item.product_name || 'Produk'}
+                                      {item.notes && <span className="block text-[11px] text-gray-500 font-normal italic">Catatan: {cleanItemNotes(item.notes)}</span>}
+                                    </td>
+                                    <td className="py-2.5 px-3 text-center border-r border-gray-200 font-bold">{qty}</td>
+                                    <td className="py-2.5 px-3 text-right border-r border-gray-200">Rp {formatRupiah(price)}</td>
+                                    <td className="py-2.5 px-3 text-right font-bold text-gray-900">Rp {formatRupiah(sub)}</td>
+                                  </tr>
+                                );
+                              });
+                            } else {
+                              rows.push(
+                                <tr key={`${oIdx}-custom`} className="hover:bg-gray-50">
+                                  <td className="py-2.5 px-3 text-center text-gray-500 border-r border-gray-200 font-medium">{counter++}</td>
+                                  <td className="py-2.5 px-3 border-r border-gray-200 font-bold text-gray-800">
+                                    🏪 {o.canteen?.name || 'Kantin'}
+                                    <span className="block text-[10px] font-mono text-gray-500 font-normal">#ORD-{o.id}</span>
+                                  </td>
+                                  <td className="py-2.5 px-3 border-r border-gray-200 font-semibold text-gray-900">
+                                    {o.custom_notes || 'Pesanan Khusus / Titip Beli'}
+                                  </td>
+                                  <td className="py-2.5 px-3 text-center border-r border-gray-200 font-bold">1</td>
+                                  <td className="py-2.5 px-3 text-right border-r border-gray-200">Rp {formatRupiah(o.total_price)}</td>
+                                  <td className="py-2.5 px-3 text-right font-bold text-gray-900">Rp {formatRupiah(o.total_price)}</td>
+                                </tr>
+                              );
+                            }
+                          });
+                          return rows;
+                        })()}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* RINGKASAN PEMBAYARAN */}
+                  <div className="flex justify-end pt-2">
+                    <div className="w-80 space-y-2 bg-gray-50 p-4 rounded-none border border-gray-200 text-xs">
+                      <div className="flex justify-between text-gray-600">
+                        <span>Subtotal Belanja:</span>
+                        <span className="font-semibold text-gray-900">Rp {formatRupiah(bundleSummary.subtotalBelanja)}</span>
+                      </div>
+                      {bundleSummary.totalDiskon > 0 && (
+                        <div className="flex justify-between text-red-600 font-semibold">
+                          <span>Diskon Voucher:</span>
+                          <span>-Rp {formatRupiah(bundleSummary.totalDiskon)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-gray-600">
+                        <span>Ongkos Kirim Kurir:</span>
+                        <span className="font-semibold text-gray-900">Rp {formatRupiah(bundleSummary.totalOngkir)}</span>
+                      </div>
+                      {bundleSummary.totalAdmin > 0 && (
+                        <div className="flex justify-between text-gray-600">
+                          <span>Biaya Layanan/Admin:</span>
+                          <span className="font-semibold text-gray-900">Rp {formatRupiah(bundleSummary.totalAdmin)}</span>
+                        </div>
+                      )}
+                      <div className="border-t border-gray-300 pt-2 flex justify-between font-black text-sm text-gray-900">
+                        <span>TOTAL AKHIR:</span>
+                        <span className="text-green-700">Rp {formatRupiah(bundleSummary.totalBayar)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* AREA TTD / PARAF PENERIMAAN */}
+                  <div className="pt-4 border-t border-gray-200 grid grid-cols-2 gap-8 text-center text-xs">
+                    <div>
+                      <p className="text-gray-500 font-semibold mb-10">Petugas Pengantar / Kurir</p>
+                      <p className="font-bold text-gray-900 underline">{courierName || '( ........................................ )'}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500 font-semibold mb-10">Penerima / Santri</p>
+                      <p className="font-bold text-gray-900 underline">( ........................................ )</p>
+                    </div>
+                  </div>
+
+                  {/* FOOTER */}
+                  <div className="text-center pt-3 border-t border-dotted border-gray-300 text-[10px] text-gray-400">
+                    Dokumen ini sah dan dicetak secara otomatis dari sistem Higo Pondok pada {formatDateTime(new Date().toISOString())}.
+                  </div>
+                </div>
+              )}
+
+              {/* ========================================================================= */}
+              {/* 3. FORMAT A4: BATCH RECAP / SLIP STRUK (KERTAS A4 / PDF UNTUK BANYAK SANTRI)*/}
+              {/* ========================================================================= */}
+              {isA4 && !isSameUserBundle && (mode === 'batch' || mode === 'bundle') && (
                 <div className="space-y-4 text-gray-900">
                   {/* OPSI A: SLIP STRUK GRID (STRUK KASIR KOMPAK FONT MONOSPACE SIAP GUNTING) */}
                   {a4Layout === 'grid' && (
@@ -684,13 +1035,18 @@ export default function ThermalReceiptModal({
 
                       {/* STRUK PENUH 1 KOLOM (FULL WIDTH, FONT BESAR, SEPERTI STRUK KASIR ASLI MAKSIMAL) */}
                       <div className="a4-grid-container flex flex-col gap-6 w-full">
-                        {filteredBatchOrders.length === 0 ? (
+                        {groupedOrdersByUser.length === 0 ? (
                           <div className="py-12 text-center text-gray-500 font-bold font-mono text-base">
                             Tidak ada data pesanan aktif untuk filter saat ini.
                           </div>
                         ) : (
-                          filteredBatchOrders.map((o, idx) => {
-                            const info = getSantriReceiptInfo(o.user, o);
+                          groupedOrdersByUser.map((group, idx) => {
+                            const info = group.info;
+                            const primaryOrder = group.primaryOrder;
+                            const asrama = (info.santriRoom && info.santriRoom !== '-') ? info.santriRoom : (primaryOrder?.delivery_location || '-');
+                            const kelas = info.santriClass || (info.santriLevel ? `Kelas ${info.santriLevel}` : (info.isTeacher ? 'Guru / Staff' : '-'));
+                            const orderCodes = group.orders.map(o => `#ORD-${o.id}`).join(', ');
+
                             return (
                               <div 
                                 key={idx} 
@@ -700,9 +1056,9 @@ export default function ThermalReceiptModal({
                                 <div className="text-center pb-3 border-b-2 border-dashed border-black">
                                   <div className="flex justify-between items-center text-xs sm:text-sm font-bold text-gray-700">
                                     <span className="bg-black text-white px-2.5 py-0.5 rounded-none text-xs sm:text-sm font-black tracking-wider">
-                                      #ORD-{o.id}
+                                      {group.orders.length > 1 ? `WADAH (${group.orders.length} TOKO)` : orderCodes}
                                     </span>
-                                    <span className="font-mono">{formatDateTime(o.created_at)}</span>
+                                    <span className="font-mono">{formatDateTime(primaryOrder.created_at)}</span>
                                   </div>
                                   <h3 className="font-black text-xl sm:text-2xl uppercase tracking-widest text-black mt-2">
                                     HIGO PONDOK
@@ -727,7 +1083,7 @@ export default function ThermalReceiptModal({
                                       {info.isTeacher ? 'Ruang / Meja      :' : 'Kamar / Asrama     :'}
                                     </span>
                                     <span className="font-black text-right break-words text-black text-sm sm:text-base">
-                                      📍 {info.santriRoom !== '-' ? info.santriRoom : (o.delivery_location || '-')}
+                                      📍 {asrama}
                                     </span>
                                   </div>
                                   {(info.santriClass || info.santriLevel) && (
@@ -735,101 +1091,60 @@ export default function ThermalReceiptModal({
                                       <span className="shrink-0">
                                         {info.isTeacher ? 'Unit / Identitas  :' : 'Kelas / Jenjang   :'}
                                       </span>
-                                      <span className="text-right font-bold">{info.santriClass} {info.santriLevel ? `(${info.santriLevel})` : ''}</span>
+                                      <span className="text-right font-bold">{kelas}</span>
                                     </div>
                                   )}
-                                  <div className="flex items-start justify-between gap-2 pt-1 border-t border-dotted border-gray-400">
-                                    <span className="shrink-0 text-gray-700 font-bold">Toko Pengirim     :</span>
-                                    <span className="font-black text-right break-words text-black text-xs sm:text-sm">
-                                      🏪 {o.canteen?.name || 'Kantin'}
-                                    </span>
-                                  </div>
+                                  {info.waliName && info.waliName !== '-' && (
+                                    <div className="flex items-start justify-between gap-2 text-xs text-gray-600">
+                                      <span className="shrink-0">Wali Santri       :</span>
+                                      <span className="text-right font-bold">{info.waliName}</span>
+                                    </div>
+                                  )}
+                                  {primaryOrder?.delivery_location && primaryOrder.delivery_location !== asrama && (
+                                    <div className="flex items-start justify-between gap-2 text-xs text-gray-800">
+                                      <span className="shrink-0">Tujuan Antar      :</span>
+                                      <span className="text-right font-bold">{primaryOrder.delivery_location}</span>
+                                    </div>
+                                  )}
                                 </div>
 
-                                {/* DAFTAR MENU / ITEM */}
-                                <div className="py-2 border-b-2 border-dashed border-black text-xs sm:text-sm">
-                                  <div className="flex justify-between font-black text-xs text-gray-600 pb-1.5 border-b border-dotted border-gray-400 tracking-wider">
-                                    <span>RINCIAN MENU / PESANAN</span>
-                                    {showPrice && <span>SUBTOTAL</span>}
+                                {/* DAFTAR MENU DARI SELURUH TOKO */}
+                                <div className="py-2 border-b-2 border-dashed border-black text-xs sm:text-sm space-y-3">
+                                  <div className="font-black text-xs sm:text-sm text-black pb-1.5 border-b border-black tracking-wider uppercase">
+                                    RINCIAN MENU ({group.orders.length} TOKO):
                                   </div>
-                                  <div className="pt-2 space-y-2">
-                                    {o.items && o.items.length > 0 ? (
-                                      o.items.map((item, itIdx) => {
-                                        const qty = item.quantity || 1;
-                                        const price = parseFloat(item.price || 0);
-                                        const sub = parseFloat(item.subtotal || price * qty);
-                                        return (
-                                          <div key={itIdx} className="space-y-0.5">
-                                            <div className="flex justify-between items-start gap-2 text-sm sm:text-base font-black">
-                                              <span className="break-words leading-tight">{qty}x {item.product?.name || 'Produk'}</span>
-                                              {showPrice && <span className="shrink-0 whitespace-nowrap">Rp {formatRupiah(sub)}</span>}
-                                            </div>
-                                            {showPrice && (
-                                              <div className="text-xs text-gray-600 flex justify-between items-center pl-2">
-                                                <span>@{formatRupiah(price)}</span>
+                                  {group.orders.map((o, storeIdx) => (
+                                    <div key={storeIdx} className="space-y-1">
+                                      <div className="flex justify-between items-center bg-gray-100 px-2 py-1 border border-black text-xs sm:text-sm font-black">
+                                        <span>🏪 {o.canteen?.name || 'Kantin'}</span>
+                                        <span className="font-mono text-xs">#ORD-{o.id}</span>
+                                      </div>
+                                      <div className="pl-2 space-y-1 pt-1">
+                                        {o.items && o.items.length > 0 ? (
+                                          o.items.map((item, itIdx) => {
+                                            const qty = item.quantity || 1;
+                                            return (
+                                              <div key={itIdx} className="space-y-0.5">
+                                                <div className="flex justify-between items-start gap-2 text-sm sm:text-base font-black">
+                                                  <span className="break-words leading-tight">{qty}x {item.product?.name || 'Produk'}</span>
+                                                </div>
+                                                {item.notes && (
+                                                  <div className="text-xs italic text-gray-800 pl-2 border-l-2 border-black ml-1">
+                                                    Catatan: {cleanItemNotes(item.notes)}
+                                                  </div>
+                                                )}
                                               </div>
-                                            )}
-                                            {item.notes && <div className="text-xs italic text-gray-800 pl-2">Catatan: {item.notes}</div>}
+                                            );
+                                          })
+                                        ) : (
+                                          <div className="text-sm sm:text-base font-black">
+                                            • 1x {o.custom_notes || 'Pesanan Khusus / Titip Beli'}
                                           </div>
-                                        );
-                                      })
-                                    ) : (
-                                      <div className="flex justify-between items-start gap-2 text-sm sm:text-base font-black">
-                                        <span className="break-words">{o.custom_notes || 'Pesanan Khusus / Titip Beli'}</span>
-                                        {showPrice && <span className="shrink-0 whitespace-nowrap">Rp {formatRupiah(o.total_price)}</span>}
+                                        )}
                                       </div>
-                                    )}
-                                  </div>
+                                    </div>
+                                  ))}
                                 </div>
-
-                                {/* BOTTOM: RINCIAN TOTAL & STATUS BAYAR */}
-                                {showPrice ? (
-                                  <div className="pt-2 space-y-1.5 text-xs sm:text-sm">
-                                    <div className="flex justify-between items-center text-gray-700">
-                                      <span className="font-medium">Subtotal Belanja :</span>
-                                      <span className="font-bold whitespace-nowrap">
-                                        Rp {formatRupiah(o.items?.length > 0 ? o.items.reduce((s, i) => s + parseFloat(i.subtotal || (parseFloat(i.price || 0) * (i.quantity || 1))), 0) : Math.max(0, parseFloat(o.total_price || 0) - parseFloat(o.delivery_fee || 0) - parseFloat(o.admin_fee || 0)))}
-                                      </span>
-                                    </div>
-                                    {parseFloat(o.voucher_discount ?? (o.voucher?.discount_amount ?? 0)) > 0 && (
-                                      <div className="flex justify-between items-center text-red-600 font-bold">
-                                        <span className="font-medium">Diskon Voucher :</span>
-                                        <span className="whitespace-nowrap">-Rp {formatRupiah(o.voucher_discount ?? o.voucher?.discount_amount)}</span>
-                                      </div>
-                                    )}
-                                    <div className="flex justify-between items-center text-gray-700">
-                                      <span className="font-medium">Ongkos Kirim     :</span>
-                                      <span className="font-bold whitespace-nowrap">
-                                        {parseFloat(o.delivery_fee || 0) === 0 && o.voucher_id ? 'Rp 0 (Voucher)' : `Rp ${formatRupiah(o.delivery_fee || 0)}`}
-                                      </span>
-                                    </div>
-                                    <div className="flex justify-between items-center font-black pt-2 pb-1 border-t-2 border-dotted border-black text-black">
-                                      <span className="text-base sm:text-lg uppercase">TOTAL BAYAR :</span>
-                                      <span className="text-xl sm:text-2xl whitespace-nowrap">Rp {formatRupiah(o.total_price)}</span>
-                                    </div>
-                                    <div className="pt-1 flex justify-between items-center font-black">
-                                      <span className="text-xs sm:text-sm uppercase text-gray-700">STATUS PEMBAYARAN :</span>
-                                      <span className={`px-2 py-0.5 rounded-none text-xs sm:text-sm uppercase whitespace-nowrap border ${
-                                        o.payment_status === 'paid' 
-                                          ? 'border-black bg-gray-100 text-black font-black' 
-                                          : 'border-black bg-black text-white font-black'
-                                      }`}>
-                                        {o.payment_status === 'paid' ? '[ LUNAS / SALDO ]' : '[ COD / TAGIHAN TUNAI ]'}
-                                      </span>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div className="pt-2 flex justify-between items-center font-black">
-                                    <span className="text-xs sm:text-sm uppercase text-gray-700">STATUS PEMBAYARAN :</span>
-                                    <span className={`px-2 py-0.5 rounded-none text-xs sm:text-sm uppercase whitespace-nowrap border ${
-                                      o.payment_status === 'paid' 
-                                        ? 'border-black bg-gray-100 text-black font-black' 
-                                        : 'border-black bg-black text-white font-black'
-                                    }`}>
-                                      {o.payment_status === 'paid' ? '[ LUNAS / SALDO ]' : '[ COD / TAGIHAN TUNAI ]'}
-                                    </span>
-                                  </div>
-                                )}
 
                                 {/* FOOTER CUT MARK */}
                                 <div className="pt-3 border-t-2 border-dashed border-black text-center space-y-0.5">
@@ -1006,28 +1321,28 @@ export default function ThermalReceiptModal({
                 <div className="space-y-2 bg-white text-black">
                   {/* HEADER */}
                   <div className="text-center pb-2 border-b-2 border-dashed border-black">
-                    <h2 className="text-base sm:text-lg font-black uppercase tracking-wider">HIGO PONDOK</h2>
-                    <p className="text-[10px] font-bold text-gray-700">Layanan Pesan Antar Santri</p>
+                    <h2 className="thermal-header-title text-lg sm:text-xl font-black uppercase tracking-wider">HIGO PONDOK</h2>
+                    <p className="thermal-header-sub text-xs sm:text-sm font-bold text-gray-800">Layanan Pesan Antar Santri</p>
                     
                     {/* KODE ORDERAN (BESAR & TEBAL) */}
-                    <div className="mt-2 py-1 px-2 border-2 border-black inline-block bg-black text-white">
+                    <div className="mt-2 py-1 px-3 border-2 border-black inline-block bg-black text-white">
                       <span className="thermal-order-code text-base sm:text-lg font-black tracking-wider">
                         #ORD-{order.id}
                       </span>
                     </div>
 
-                    <div className="text-left text-xs mt-2 space-y-0.5 pt-1.5 border-t border-dotted border-gray-400">
+                    <div className="text-left text-xs sm:text-sm mt-2 space-y-0.5 pt-1.5 border-t border-dotted border-gray-400">
                       <div className="flex justify-between items-start gap-1">
-                        <span className="shrink-0 text-gray-600 font-medium">Waktu:</span>
+                        <span className="shrink-0 text-gray-700 font-medium">Waktu:</span>
                         <span className="font-semibold text-right">{formatDateTime(order.created_at)}</span>
                       </div>
                       <div className="flex justify-between items-start gap-1">
-                        <span className="shrink-0 text-gray-600 font-medium">Toko:</span>
+                        <span className="shrink-0 text-gray-700 font-medium">Toko:</span>
                         <span className="font-bold text-right break-words">{order.canteen?.name || 'Kantin Pondok'}</span>
                       </div>
                       {order.courier?.name && (
                         <div className="flex justify-between items-start gap-1">
-                          <span className="shrink-0 text-gray-600 font-medium">Kurir:</span>
+                          <span className="shrink-0 text-gray-700 font-medium">Kurir:</span>
                           <span className="font-semibold text-right break-words">{order.courier.name}</span>
                         </div>
                       )}
@@ -1041,8 +1356,8 @@ export default function ThermalReceiptModal({
                     const kelas = info.santriClass || (info.santriLevel ? `Kelas ${info.santriLevel}` : (info.isTeacher ? 'Guru / Staff' : '-'));
 
                     return (
-                      <div className="py-1.5 border-b-2 border-dashed border-black space-y-1">
-                        <div className="thermal-santri-name text-sm sm:text-base font-black text-black uppercase leading-tight">
+                      <div className="py-2 border-b-2 border-dashed border-black space-y-1">
+                        <div className="thermal-santri-name text-base sm:text-lg font-black text-black uppercase leading-tight">
                           👤 {info.santriName}
                         </div>
                         <div className="thermal-santri-meta text-xs sm:text-sm font-bold text-black flex flex-wrap items-center gap-x-2 gap-y-0.5 leading-snug">
@@ -1050,8 +1365,13 @@ export default function ThermalReceiptModal({
                           <span>•</span>
                           <span>📍 Asrama: <strong className="font-black">{asrama}</strong></span>
                         </div>
+                        {info.waliName && info.waliName !== '-' && (
+                          <div className="text-xs sm:text-sm font-semibold text-gray-800">
+                            Wali: {info.waliName}
+                          </div>
+                        )}
                         {order.delivery_location && order.delivery_location !== asrama && (
-                          <div className="text-[11px] font-semibold text-gray-800">
+                          <div className="text-xs font-semibold text-gray-800">
                             🎯 Tujuan Antar: {order.delivery_location}
                           </div>
                         )}
@@ -1059,194 +1379,220 @@ export default function ThermalReceiptModal({
                     );
                   })()}
 
-                  {/* DAFTAR MENU (BESAR, JELAS & LENGKAP) */}
-                  <div className="py-1.5 border-b-2 border-dashed border-black">
-                    <div className="flex justify-between font-black text-xs sm:text-sm pb-1 border-b border-black tracking-wider uppercase">
+                  {/* DAFTAR MENU (BESAR, JELAS & LENGKAP - TANPA HARGA) */}
+                  <div className="py-2 border-b-2 border-dashed border-black">
+                    <div className="thermal-menu-header flex justify-between font-black text-xs sm:text-sm pb-1 border-b border-black tracking-wider uppercase">
                       <span>DAFTAR MENU:</span>
-                      {showPrice && <span className="shrink-0">TOTAL</span>}
                     </div>
                     <div className="pt-2 space-y-2">
                       {order.items && order.items.length > 0 ? (
                         order.items.map((item, idx) => {
                           const qty = item.quantity || 1;
-                          const price = parseFloat(item.price || 0);
-                          const sub = parseFloat(item.subtotal || price * qty);
                           const prodName = item.product?.name || item.product_name || 'Produk';
                           return (
                             <div key={idx} className="space-y-0.5">
-                              <div className="flex justify-between items-start gap-1 font-black">
-                                <span className="thermal-menu-item text-xs sm:text-sm break-words leading-tight">
-                                  {qty}x {prodName}
-                                </span>
-                                {showPrice && (
-                                  <span className="shrink-0 whitespace-nowrap text-xs sm:text-sm">
-                                    Rp {formatRupiah(sub)}
-                                  </span>
-                                )}
+                              <div className="thermal-menu-item text-sm sm:text-base font-black text-black leading-tight flex items-start gap-1">
+                                <span className="shrink-0 font-black">{qty}x</span>
+                                <span className="break-words font-black">{prodName}</span>
                               </div>
-                              {showPrice && (
-                                <div className="text-[10px] text-gray-600">
-                                  @{formatRupiah(price)}
-                                </div>
-                              )}
                               {item.notes && (
-                                <div className="thermal-menu-note text-[10.5px] sm:text-xs font-semibold text-gray-800 italic break-words pl-2 border-l-2 border-black">
-                                  ↳ Catatan: {item.notes}
+                                <div className="thermal-menu-note text-xs sm:text-sm font-bold italic text-black pl-3 border-l-2 border-black ml-1">
+                                  ↳ Catatan: {cleanItemNotes(item.notes)}
                                 </div>
                               )}
                             </div>
                           );
                         })
                       ) : (
-                        <div className="space-y-0.5">
-                          <div className="flex justify-between items-start gap-1 font-black">
-                            <span className="thermal-menu-item text-xs sm:text-sm break-words">
-                              • 1x {order.custom_notes || 'Pesanan Khusus / Titip Beli'}
-                            </span>
-                            {showPrice && (
-                              <span className="shrink-0 whitespace-nowrap text-xs sm:text-sm">
-                                Rp {formatRupiah(singleSummary?.hpjSubtotal || 0)}
-                              </span>
-                            )}
-                          </div>
+                        <div className="thermal-menu-item text-sm sm:text-base font-black text-black leading-tight">
+                          • 1x {order.custom_notes || 'Pesanan Khusus / Titip Beli'}
                         </div>
                       )}
                     </div>
                   </div>
 
-                  {/* STATUS ATAU RINGKASAN HARGA */}
-                  {showPrice ? (
-                    <div className="py-1.5 border-b-2 border-dashed border-black text-xs space-y-1">
-                      <div className="flex justify-between items-center text-gray-700">
-                        <span>Subtotal:</span>
-                        <span className="font-semibold whitespace-nowrap">Rp {formatRupiah(singleSummary?.hpjSubtotal || 0)}</span>
-                      </div>
-                      {singleSummary?.voucherDiscount > 0 && (
-                        <div className="flex justify-between items-center text-red-600 font-bold">
-                          <span>Diskon Voucher:</span>
-                          <span className="whitespace-nowrap">-Rp {formatRupiah(singleSummary.voucherDiscount)}</span>
-                        </div>
-                      )}
-                      <div className="flex justify-between items-center text-gray-700">
-                        <span>Ongkir:</span>
-                        <span className="font-semibold whitespace-nowrap">
-                          {parseFloat(singleSummary?.deliveryFee || 0) === 0 && order.voucher_id ? 'Rp 0 (Voucher)' : `Rp ${formatRupiah(singleSummary?.deliveryFee || 0)}`}
-                        </span>
-                      </div>
-                      {parseFloat(singleSummary?.adminFee || 0) > 0 && (
-                        <div className="flex justify-between items-center text-gray-700">
-                          <span>Biaya Layanan:</span>
-                          <span className="font-semibold whitespace-nowrap">Rp {formatRupiah(singleSummary?.adminFee || 0)}</span>
-                        </div>
-                      )}
-                      <div className="flex justify-between items-center font-black text-sm pt-1 border-t border-dotted border-black">
-                        <span>TOTAL:</span>
-                        <span className="whitespace-nowrap">Rp {formatRupiah(singleSummary?.totalPrice || 0)}</span>
-                      </div>
-                      <div className="flex justify-between items-center font-bold text-xs pt-1">
-                        <span>STATUS:</span>
-                        <span className="uppercase text-right whitespace-nowrap">
-                          {order.payment_status === 'paid' ? '[ LUNAS ]' : order.payment_status === 'waiting_confirmation' ? '[ VERIFIKASI ]' : '[ BELUM LUNAS ]'}
-                        </span>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="py-1.5 border-b-2 border-dashed border-black flex justify-between items-center font-black text-xs sm:text-sm">
-                      <span className="text-gray-700">STATUS PEMBAYARAN:</span>
-                      <span className="px-2 py-0.5 border border-black uppercase text-xs font-black">
-                        {order.payment_status === 'paid' ? '[ LUNAS ]' : order.payment_status === 'waiting_confirmation' ? '[ VERIFIKASI ]' : '[ COD / TAGIHAN ]'}
-                      </span>
-                    </div>
-                  )}
-
                   {/* FOOTER */}
-                  <div className="text-center pt-2 text-[10px] space-y-0.5">
-                    <p className="font-bold">Terima Kasih</p>
-                    <p>Semoga Berkah & Bermanfaat</p>
-                    <p className="text-[9px] text-gray-500 pt-0.5">*** Higo Pondok POS ***</p>
+                  <div className="text-center pt-2.5 text-xs space-y-1">
+                    <p className="thermal-footer font-bold text-black text-xs sm:text-sm">Terima Kasih</p>
+                    <p className="text-[11px] sm:text-xs text-gray-800">Semoga Berkah & Bermanfaat</p>
+                    <p className="text-[10px] text-gray-500 pt-0.5">*** Higo Pondok ***</p>
                   </div>
                 </div>
               )}
 
               {/* ========================================================================= */}
-              {/* 4. FORMAT THERMAL: BATCH RECAP (58mm / 80mm THERMAL MANIFEST)             */}
+              {/* 4. FORMAT THERMAL: BUNDLE / GABUNGAN 1 USER (58mm / 80mm THERMAL RECEIPT) */}
               {/* ========================================================================= */}
-              {!isA4 && mode === 'batch' && (
+              {!isA4 && isSameUserBundle && bundleSummary && (
                 <div className="space-y-2 bg-white text-black">
                   {/* HEADER */}
                   <div className="text-center pb-2 border-b-2 border-dashed border-black">
-                    <h2 className="thermal-menu-header text-sm sm:text-base font-black uppercase tracking-wider">{title || 'REKAP DAFTAR PESANAN'}</h2>
-                    <p className="text-[10px] font-bold">HIGO PONDOK</p>
+                    <h2 className="thermal-header-title text-lg sm:text-xl font-black uppercase tracking-wider">HIGO PONDOK</h2>
+                    <p className="thermal-header-sub text-xs sm:text-sm font-bold text-gray-800">Layanan Pesan Antar Santri</p>
+
+                    {/* KODE WADAH / CHECKOUT */}
+                    <div className="mt-2 py-1 px-3 border-2 border-black inline-block bg-black text-white">
+                      <span className="thermal-order-code text-sm sm:text-base font-black tracking-wider block">
+                        {bundleSummary.checkoutId || `WADAH (${bundleSummary.ordersCount} TOKO)`}
+                      </span>
+                    </div>
+
+                    <div className="text-left text-xs sm:text-sm mt-2 space-y-0.5 pt-1.5 border-t border-dotted border-gray-400">
+                      <div className="flex justify-between items-start gap-1">
+                        <span className="shrink-0 text-gray-700 font-medium">Order ID:</span>
+                        <span className="font-bold text-right font-mono text-xs break-words">{bundleSummary.orderIds}</span>
+                      </div>
+                      <div className="flex justify-between items-start gap-1">
+                        <span className="shrink-0 text-gray-700 font-medium">Waktu:</span>
+                        <span className="font-semibold text-right">{formatDateTime(bundleSummary.created_at)}</span>
+                      </div>
+                      {courierName && (
+                        <div className="flex justify-between items-start gap-1">
+                          <span className="shrink-0 text-gray-700 font-medium">Kurir:</span>
+                          <span className="font-semibold text-right break-words">{courierName}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* DATA SANTRI, KELAS, ASRAMA (DITAMPILKAN 1 KALI SAJA) */}
+                  {(() => {
+                    const primaryOrder = filteredBatchOrders[0] || rawBatchOrders[0];
+                    const targetUser = bundleUser || primaryOrder?.user;
+                    const info = getSantriReceiptInfo(targetUser, primaryOrder);
+                    const asrama = (info.santriRoom && info.santriRoom !== '-') ? info.santriRoom : (primaryOrder?.delivery_location || '-');
+                    const kelas = info.santriClass || (info.santriLevel ? `Kelas ${info.santriLevel}` : (info.isTeacher ? 'Guru / Staff' : '-'));
+
+                    return (
+                      <div className="py-2 border-b-2 border-dashed border-black space-y-1">
+                        <div className="thermal-santri-name text-base sm:text-lg font-black text-black uppercase leading-tight">
+                          👤 {info.santriName}
+                        </div>
+                        <div className="thermal-santri-meta text-xs sm:text-sm font-bold text-black flex flex-wrap items-center gap-x-2 gap-y-0.5 leading-snug">
+                          <span>🏫 Kelas: <strong className="font-black">{kelas}</strong></span>
+                          <span>•</span>
+                          <span>📍 Asrama: <strong className="font-black">{asrama}</strong></span>
+                        </div>
+                        {info.waliName && info.waliName !== '-' && (
+                          <div className="text-xs sm:text-sm font-semibold text-gray-800">
+                            Wali: {info.waliName}
+                          </div>
+                        )}
+                        {primaryOrder?.delivery_location && primaryOrder.delivery_location !== asrama && (
+                          <div className="text-xs font-semibold text-gray-800">
+                            🎯 Tujuan: {primaryOrder.delivery_location}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* DAFTAR MENU GABUNGAN SELURUH TOKO (TANPA HARGA) */}
+                  <div className="py-2 border-b-2 border-dashed border-black">
+                    <div className="thermal-menu-header flex justify-between font-black text-xs sm:text-sm pb-1.5 border-b border-black tracking-wider uppercase">
+                      <span>RINCIAN MENU ({bundleSummary.ordersCount} TOKO):</span>
+                    </div>
+                    <div className="pt-2 space-y-3">
+                      {filteredBatchOrders.map((o, storeIdx) => (
+                        <div key={storeIdx} className="space-y-1.5">
+                          {/* Header Toko */}
+                          <div className="thermal-store-header flex items-center justify-between text-xs sm:text-sm font-black uppercase tracking-wider bg-gray-100 px-2 py-1 border border-black">
+                            <span>🏪 {o.canteen?.name || 'Kantin'}</span>
+                            <span className="font-mono text-xs">#ORD-{o.id}</span>
+                          </div>
+
+                          {/* Items Menu */}
+                          <div className="pl-1 space-y-1 pt-0.5">
+                            {o.items && o.items.length > 0 ? (
+                              o.items.map((item, itemIdx) => {
+                                const qty = item.quantity || 1;
+                                const prodName = item.product?.name || item.product_name || 'Produk';
+                                return (
+                                  <div key={itemIdx} className="space-y-0.5">
+                                    <div className="thermal-menu-item text-sm sm:text-base font-black text-black leading-tight flex items-start gap-1">
+                                      <span className="shrink-0 font-black">{qty}x</span>
+                                      <span className="break-words font-black">{prodName}</span>
+                                    </div>
+                                    {item.notes && (
+                                      <div className="thermal-menu-note text-xs sm:text-sm font-bold italic text-black pl-3 border-l-2 border-black ml-1">
+                                        ↳ Catatan: {cleanItemNotes(item.notes)}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })
+                            ) : (
+                              <div className="thermal-menu-item text-sm sm:text-base font-black text-black leading-tight">
+                                • 1x {o.custom_notes || 'Pesanan Khusus / Titip Beli'}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* FOOTER */}
+                  <div className="text-center pt-2.5 text-xs space-y-1">
+                    <p className="thermal-footer font-bold text-black text-xs sm:text-sm">Terima Kasih</p>
+                    <p className="text-[11px] sm:text-xs text-gray-800">Semoga Berkah & Bermanfaat</p>
+                    <p className="text-[10px] text-gray-500 pt-0.5">*** Higo Pondok ***</p>
+                  </div>
+                </div>
+              )}
+
+              {/* ========================================================================= */}
+              {/* 5. FORMAT THERMAL: BATCH RECAP (58mm / 80mm THERMAL MANIFEST PER SANTRI)  */}
+              {/* ========================================================================= */}
+              {!isA4 && !isSameUserBundle && (mode === 'batch' || mode === 'bundle') && (
+                <div className="space-y-2 bg-white text-black">
+                  {/* HEADER */}
+                  <div className="text-center pb-2 border-b-2 border-dashed border-black">
+                    <h2 className="thermal-header-title text-base sm:text-lg font-black uppercase tracking-wider">
+                      {title || 'REKAP SEMUA PESANAN'}
+                    </h2>
+                    <p className="thermal-header-sub text-xs sm:text-sm font-bold text-gray-800">
+                      HIGO PONDOK • Layanan Pesan Antar Santri
+                    </p>
                     
-                    <div className="text-left text-xs mt-2 space-y-0.5 pt-1.5 border-t border-dotted border-gray-400">
+                    <div className="text-left text-xs sm:text-sm mt-2 space-y-0.5 pt-1.5 border-t border-dotted border-gray-400">
                       <div className="flex justify-between items-start gap-1">
                         <span className="shrink-0 text-gray-700 font-medium">Petugas/Kurir:</span>
-                        <span className="font-bold text-right break-words">{courierName || 'Petugas'}</span>
+                        <span className="font-bold text-right break-words">{courierName || 'Administrator'}</span>
                       </div>
                       <div className="flex justify-between items-start gap-1">
                         <span className="shrink-0 text-gray-700 font-medium">Waktu:</span>
                         <span className="text-right">{formatDateTime(new Date().toISOString())}</span>
                       </div>
                       <div className="flex justify-between items-start gap-1">
-                        <span className="shrink-0 text-gray-700 font-medium">Total Pesanan:</span>
-                        <span className="font-black text-right">{filteredBatchOrders.length} Pesanan</span>
+                        <span className="shrink-0 text-gray-700 font-medium">Total Santri:</span>
+                        <span className="font-black text-right">{groupedOrdersByUser.length} Santri ({filteredBatchOrders.length} Pesanan)</span>
                       </div>
                     </div>
                   </div>
 
-                  {/* RINGKASAN KEUANGAN HANYA JIKA SHOW PRICE AKTIF */}
-                  {showPrice && (
-                    <div className="py-1.5 border-b-2 border-dashed border-black text-xs space-y-1">
-                      <div className="flex justify-between items-center font-bold">
-                        <span className="text-gray-800">Modal Belanja (HPP):</span>
-                        <span className="font-black whitespace-nowrap">Rp {formatRupiah(batchSummary.hpp)}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-gray-700">Total Ongkir Kurir:</span>
-                        <span className="whitespace-nowrap">Rp {formatRupiah(batchSummary.delivery)}</span>
-                      </div>
-                      <div className="flex justify-between items-center font-bold">
-                        <span>Total Modal + Ongkir:</span>
-                        <span className="font-black whitespace-nowrap">Rp {formatRupiah(batchSummary.totalModalPlusOngkir)}</span>
-                      </div>
-                      <div className="flex justify-between items-center text-[10px] text-gray-600 pt-0.5 border-t border-dotted border-gray-300">
-                        <span>Total Tagihan Santri:</span>
-                        <span className="font-bold text-black whitespace-nowrap">Rp {formatRupiah(batchSummary.grandTotal)}</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* DAFTAR ANTARAN DETAIL (FOKUS: KODE ORDER, NAMA SANTRI, KELAS, ASRAMA, MENU) */}
+                  {/* DAFTAR ANTARAN PER SANTRI (FOKUS: NAMA SANTRI, KELAS, ASRAMA, TIAP TOKO & MENU - TANPA HARGA) */}
                   <div className="py-1">
                     <p className="thermal-menu-header font-black text-xs sm:text-sm pb-1.5 border-b-2 border-black tracking-wide uppercase">
-                      DAFTAR PESANAN SANTRI ({filteredBatchOrders.length}):
+                      DAFTAR PESANAN SANTRI ({groupedOrdersByUser.length} SANTRI):
                     </p>
                     <div className="pt-2 divide-y-2 divide-dashed divide-black">
-                      {filteredBatchOrders.length === 0 ? (
+                      {groupedOrdersByUser.length === 0 ? (
                         <div className="text-center py-4 text-gray-500 font-bold text-xs">
                           Tidak ada pesanan aktif pada daftar ini.
                         </div>
                       ) : (
-                        filteredBatchOrders.map((o, idx) => {
-                          const info = getSantriReceiptInfo(o.user, o);
-                          const asrama = (info.santriRoom && info.santriRoom !== '-') ? info.santriRoom : (o.delivery_location || '-');
+                        groupedOrdersByUser.map((group, grpIdx) => {
+                          const info = group.info;
+                          const primaryOrder = group.primaryOrder;
+                          const asrama = (info.santriRoom && info.santriRoom !== '-') ? info.santriRoom : (primaryOrder?.delivery_location || '-');
                           const kelas = info.santriClass || (info.santriLevel ? `Kelas ${info.santriLevel}` : (info.isTeacher ? 'Guru / Staff' : '-'));
 
                           return (
-                            <div key={idx} className="py-3 space-y-2 break-inside-avoid">
-                              {/* 1. KODE ORDERAN (BESAR & TEBAL) */}
-                              <div className="flex items-center justify-between gap-1 border-b border-black pb-1">
-                                <span className="thermal-order-code text-base sm:text-lg font-black tracking-wider text-black">
-                                  [ ] #ORD-{o.id}
-                                </span>
-                                <span className="text-[10px] font-bold px-1.5 py-0.5 border border-black uppercase">
-                                  {o.payment_status === 'paid' ? 'LUNAS' : 'COD'}
-                                </span>
-                              </div>
-
-                              {/* 2. NAMA SANTRI, KELAS, ASRAMA (BESAR & TEBAL) */}
+                            <div key={grpIdx} className="py-3 space-y-2 break-inside-avoid">
+                              {/* 1. DATA SANTRI (BESAR & TEBAL) */}
                               <div className="space-y-0.5">
-                                <div className="thermal-santri-name text-sm sm:text-base font-black text-black uppercase leading-tight">
+                                <div className="thermal-santri-name text-base sm:text-lg font-black text-black uppercase leading-tight">
                                   👤 {info.santriName}
                                 </div>
                                 <div className="thermal-santri-meta text-xs sm:text-sm font-bold text-black flex flex-wrap items-center gap-x-2 gap-y-0.5 leading-snug">
@@ -1254,52 +1600,60 @@ export default function ThermalReceiptModal({
                                   <span>•</span>
                                   <span>📍 Asrama: <strong className="font-black">{asrama}</strong></span>
                                 </div>
-                                {o.canteen?.name && (
-                                  <div className="text-[10.5px] font-semibold text-gray-700">
-                                    🏪 Toko: {o.canteen.name}
+                                {info.waliName && info.waliName !== '-' && (
+                                  <div className="text-xs sm:text-sm font-semibold text-gray-800">
+                                    Wali: {info.waliName}
+                                  </div>
+                                )}
+                                {primaryOrder?.delivery_location && primaryOrder.delivery_location !== asrama && (
+                                  <div className="text-xs font-semibold text-gray-800">
+                                    🎯 Tujuan: {primaryOrder.delivery_location}
                                   </div>
                                 )}
                               </div>
 
-                              {/* 3. MENU (BESAR, JELAS, LENGKAP DENGAN CATATAN) */}
-                              <div className="bg-gray-50 border border-black p-2 space-y-1">
-                                <div className="thermal-menu-header text-[11px] sm:text-xs font-black uppercase tracking-wider text-black border-b border-dotted border-gray-400 pb-0.5">
-                                  RINCIAN MENU:
+                              {/* 2. RINCIAN MENU DARI SEMUA TOKO SANTRI INI */}
+                              <div className="space-y-2">
+                                <div className="thermal-menu-header text-xs sm:text-sm font-black uppercase tracking-wider text-black border-b border-black pb-0.5">
+                                  RINCIAN MENU ({group.orders.length} TOKO):
                                 </div>
-                                <div className="space-y-1.5 pt-0.5">
-                                  {o.items && o.items.length > 0 ? (
-                                    o.items.map((item, itIdx) => {
-                                      const qty = item.quantity || 1;
-                                      const prodName = item.product?.name || item.product_name || 'Produk';
-                                      return (
-                                        <div key={itIdx} className="space-y-0.5">
-                                          <div className="thermal-menu-item text-xs sm:text-sm font-black text-black leading-tight flex items-start gap-1">
-                                            <span className="shrink-0 font-black">{qty}x</span>
-                                            <span className="break-words font-black">{prodName}</span>
-                                          </div>
-                                          {item.notes && (
-                                            <div className="thermal-menu-note text-[10.5px] sm:text-xs font-semibold italic text-gray-800 pl-4 border-l-2 border-gray-400 ml-1">
-                                              ↳ Catatan: {item.notes}
-                                            </div>
-                                          )}
-                                        </div>
-                                      );
-                                    })
-                                  ) : (
-                                    <div className="thermal-menu-item text-xs sm:text-sm font-black text-black leading-tight">
-                                      • 1x {o.custom_notes || 'Pesanan Khusus / Titip Beli'}
+                                {group.orders.map((o, storeIdx) => (
+                                  <div key={storeIdx} className="space-y-1">
+                                    {/* Header Toko */}
+                                    <div className="thermal-store-header flex items-center justify-between text-xs sm:text-sm font-black uppercase tracking-wider bg-gray-100 px-2 py-1 border border-black">
+                                      <span>🏪 {o.canteen?.name || 'Kantin'}</span>
+                                      <span className="font-mono text-xs">#ORD-{o.id}</span>
                                     </div>
-                                  )}
-                                </div>
-                              </div>
 
-                              {/* TAMPILKAN HARGA HANYA JIKA SHOW PRICE AKTIF */}
-                              {showPrice && (
-                                <div className="text-xs flex justify-between items-center font-bold text-gray-700 pt-0.5">
-                                  <span>Tagihan Santri:</span>
-                                  <span className="font-black text-black text-sm">Rp {formatRupiah(o.total_price)}</span>
-                                </div>
-                              )}
+                                    {/* Items Menu */}
+                                    <div className="pl-1 space-y-1 pt-0.5">
+                                      {o.items && o.items.length > 0 ? (
+                                        o.items.map((item, itIdx) => {
+                                          const qty = item.quantity || 1;
+                                          const prodName = item.product?.name || item.product_name || 'Produk';
+                                          return (
+                                            <div key={itIdx} className="space-y-0.5">
+                                              <div className="thermal-menu-item text-sm sm:text-base font-black text-black leading-tight flex items-start gap-1">
+                                                <span className="shrink-0 font-black">{qty}x</span>
+                                                <span className="break-words font-black">{prodName}</span>
+                                              </div>
+                                              {item.notes && (
+                                                <div className="thermal-menu-note text-xs sm:text-sm font-bold italic text-black pl-3 border-l-2 border-black ml-1">
+                                                  ↳ Catatan: {cleanItemNotes(item.notes)}
+                                                </div>
+                                              )}
+                                            </div>
+                                          );
+                                        })
+                                      ) : (
+                                        <div className="thermal-menu-item text-sm sm:text-base font-black text-black leading-tight">
+                                          • 1x {o.custom_notes || 'Pesanan Khusus / Titip Beli'}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
                             </div>
                           );
                         })
@@ -1308,10 +1662,10 @@ export default function ThermalReceiptModal({
                   </div>
 
                   {/* FOOTER */}
-                  <div className="text-center pt-2 text-[10px] space-y-0.5">
-                    <p className="font-bold">Selamat Bertugas</p>
-                    <p>Pastikan Pesanan Diterima Santri Sesuai Daftar</p>
-                    <p className="text-[9px] text-gray-500 pt-0.5">*** Higo Pondok System ***</p>
+                  <div className="text-center pt-2.5 text-xs space-y-1">
+                    <p className="thermal-footer font-bold text-black text-xs sm:text-sm">Terima Kasih</p>
+                    <p className="text-[11px] sm:text-xs text-gray-800">Semoga Berkah & Bermanfaat</p>
+                    <p className="text-[10px] text-gray-500 pt-0.5">*** Higo Pondok ***</p>
                   </div>
                 </div>
               )}
