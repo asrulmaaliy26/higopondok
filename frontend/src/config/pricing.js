@@ -19,13 +19,12 @@ export const PRICING_CONFIG = {
   EXTRA_ADMIN_PER_5_ITEMS: 3000,    // Tambahan ke admin
 
   // Aturan pesanan bertingkat rombongan toko (Batch Order)
-  // - Santri ke-1: Ongkir kurir utuh Rp 3.000 (Potongan Rp 0)
-  // - Santri ke-2: Dialihkan Rp 1.000 ke kas admin (Kurir Rp 2.000, Admin Rp 3.000)
-  // - Santri ke-3+: Dialihkan Rp 2.000 ke kas admin (Kurir Rp 1.000, Admin Rp 4.000)
-  USER_RANK_2_COURIER_CUT: 1000,
-  USER_RANK_3_PLUS_COURIER_CUT: 2000,
+  // - Santri ke-1: Ongkir kurir utuh Rp 3.000 (Potongan Rp 0, Admin Rp 2.000)
+  // - Santri ke-2 dst: Ongkir kurir Rp 1.500 (Potongan Rp 1.500 dialihkan ke kas admin, Admin Rp 3.500)
+  USER_RANK_2_COURIER_CUT: 1500,
+  USER_RANK_3_PLUS_COURIER_CUT: 1500,
   USER_THRESHOLD_LIMIT: 1,
-  USER_THRESHOLD_COURIER_CUT: 2000,
+  USER_THRESHOLD_COURIER_CUT: 1500,
 };
 
 /**
@@ -68,15 +67,12 @@ export function calculateOrderFees(totalQuantity = 1, userRank = 1, hasCourier =
   const baseAdminFee = PRICING_CONFIG.BASE_ADMIN_FEE + extraAdminFee;
 
   // Potongan ongkir bertingkat dialihkan ke kas admin pada hari yang sama:
-  // Rank 1: Rp 0
-  // Rank 2: Rp 1.000
-  // Rank 3+: Rp 2.000
+  // Rank 1: Rp 0 (Kurir Rp 3.000, Admin Rp 2.000)
+  // Rank 2+: Rp 1.500 (Kurir Rp 1.500, Admin Rp 3.500)
   let cutRate = 0;
   if (hasCourier) {
-    if (userRank === 2) {
-      cutRate = PRICING_CONFIG.USER_RANK_2_COURIER_CUT;
-    } else if (userRank >= 3) {
-      cutRate = PRICING_CONFIG.USER_RANK_3_PLUS_COURIER_CUT;
+    if (userRank >= 2) {
+      cutRate = PRICING_CONFIG.USER_THRESHOLD_COURIER_CUT;
     }
   }
 

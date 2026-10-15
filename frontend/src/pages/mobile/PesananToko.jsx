@@ -1317,10 +1317,10 @@ ${itemsListText}
           </div>
         </div>
 
-        {/* 2. Responsive Body: Left (Customer & Payment Strip), Right (Items) */}
-        <div className="grid grid-cols-1 sm:grid-cols-12 gap-1.5 items-start flex-1">
-          {/* Left Column (sm: 5 cols): Santri, Wali, Kontak, Bukti, Pembayaran dalam 1 strip padat */}
-          <div className="sm:col-span-5 space-y-1">
+        {/* 2. Responsive Body: Stacked Vertically so Customer & Items never collide */}
+        <div className="space-y-1.5 flex-1 min-w-0">
+          {/* Customer & Destination Strip (Full Width) */}
+          <div className="w-full min-w-0 space-y-1">
             <div className={`p-1.5 rounded-none border text-[11px] space-y-1 ${
               isTeacher 
                 ? 'bg-indigo-50/50 dark:bg-indigo-950/30 border-indigo-200 dark:border-indigo-800' 
@@ -1363,9 +1363,9 @@ ${itemsListText}
                   <div className="flex items-center gap-1.5 flex-wrap min-w-0">
                     <span className="font-bold text-gray-900 dark:text-white flex items-center gap-1">
                       <User className="w-3 h-3 text-gray-400 shrink-0" />
-                      <span className="truncate">{santriName}</span>
+                      <span>{santriName}</span>
                     </span>
-                    <span className="text-gray-500 dark:text-gray-400 text-[10px] truncate">
+                    <span className="text-gray-500 dark:text-gray-400 text-[10px]">
                       (Wali: {waliName})
                     </span>
                     {(santriLevel || santriClass) && (
@@ -1516,8 +1516,8 @@ ${itemsListText}
             </div>
           </div>
 
-          {/* Right Column (sm: 7 cols): Items List & Courier */}
-          <div className="sm:col-span-7 space-y-1">
+          {/* Items List & Courier (Full Width) */}
+          <div className="w-full min-w-0 space-y-1">
             <div className="bg-gray-50/80 dark:bg-gray-800/50 rounded-none p-1.5 space-y-0.5 text-xs border border-gray-200 dark:border-gray-700">
               {order.custom_notes && (
                 <div className="text-[10px] font-medium text-purple-800 dark:text-purple-300 pb-0.5 border-b border-purple-100 dark:border-purple-900/40">
@@ -1558,6 +1558,14 @@ ${itemsListText}
                 </div>
               )}
 
+              {/* Subtotal Makanan di bawah nilai produk */}
+              <div className="pt-1 mt-0.5 border-t border-gray-200/70 dark:border-gray-700/70 flex justify-between items-center text-[11px]">
+                <span className="text-gray-500 dark:text-gray-400 font-medium">Makanan:</span>
+                <span className="font-bold text-gray-900 dark:text-white font-mono">
+                  Rp {formatRupiah(Math.max(0, parseFloat(order.total_price || 0) - parseFloat(order.delivery_fee || 0) - parseFloat(order.admin_fee || 0)))}
+                </span>
+              </div>
+
               {/* Kurir info badge if present */}
               {order.courier && (
                 <div className="pt-0.5 border-t border-gray-200/50 dark:border-gray-700/50 flex items-center justify-between text-[10px]">
@@ -1572,22 +1580,17 @@ ${itemsListText}
         </div>
 
         {/* 3. Footer: Total Price & Canteen Operational Actions Segaris */}
-        <div className="pt-1.5 border-t border-gray-200 dark:border-gray-700/80 flex items-center justify-between gap-1 flex-wrap">
+        <div className="pt-1.5 border-t border-gray-200 dark:border-gray-700/80 flex items-center justify-between gap-1.5 flex-wrap">
           <div className="flex items-baseline gap-1.5 flex-wrap min-w-0">
             <span className="text-sm font-black text-green-700 dark:text-green-400 leading-tight font-mono">
               Rp {formatRupiah(order.total_price)}
             </span>
-            <div className="text-[9px] sm:text-[10px] text-gray-500 dark:text-gray-400 flex items-center gap-1">
-              <span>Makanan: <strong className="text-gray-900 dark:text-white font-mono">Rp {formatRupiah(Math.max(0, parseFloat(order.total_price || 0) - parseFloat(order.delivery_fee || 0) - parseFloat(order.admin_fee || 0)))}</strong></span>
-              <span>•</span>
-              <span>Ongkir: <strong className="text-blue-600 dark:text-blue-400 font-mono">Rp {formatRupiah(order.delivery_fee)}</strong></span>
-            </div>
             {Boolean(order.is_custom) && parseFloat(order.total_price) === 0 && (
               <span className="text-[9.5px] text-amber-600 font-semibold">Harga belum diset</span>
             )}
           </div>
 
-          <div className="flex items-center gap-1 shrink-0 flex-wrap">
+          <div className="flex items-center gap-1 flex-wrap">
             {/* Tombol Cetak Struk */}
             <button 
               onClick={() => handlePrintSingleReceipt(order)}
@@ -1788,10 +1791,10 @@ ${itemsListText}
           </div>
         </div>
 
-        {/* 2. Responsive Body: Left (Customer & Payment Strip), Right (Stores breakdown) */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-1.5 items-start flex-1">
-          {/* Left Column (5 of 12 cols on lg+): Santri, Room, Wali, WA, Proofs, Payment */}
-          <div className="lg:col-span-5 space-y-1">
+        {/* 2. Responsive Body: Stacked Vertically */}
+        <div className="space-y-1.5 flex-1 min-w-0">
+          {/* Customer & Destination Strip (Full Width) */}
+          <div className="w-full min-w-0 space-y-1">
             <div className="bg-gray-50/80 dark:bg-gray-800/40 p-1.5 rounded-none border border-gray-200/80 dark:border-gray-700/80 text-[11px] space-y-1">
               {/* Row 1: Santri & Wali Info */}
               <div className="flex items-center justify-between gap-1 flex-wrap">
@@ -1928,8 +1931,8 @@ ${itemsListText}
             </div>
           </div>
 
-          {/* Right Column (7 of 12 cols on md+): Per-Toko Breakdown Box */}
-          <div className="lg:col-span-7 space-y-1">
+          {/* Stores Breakdown (Full Width) */}
+          <div className="w-full min-w-0 space-y-1">
             {group.orders.map((o, oIdx) => (
               <div key={o.id} className="bg-gray-50/80 dark:bg-gray-800/50 rounded-none p-1.5 space-y-0.5 text-xs border border-gray-200 dark:border-gray-700">
                 <div className="flex items-center justify-between pb-0.5 border-b border-gray-200/60 dark:border-gray-700/60">
@@ -1993,10 +1996,7 @@ ${itemsListText}
                 {/* Subtotal Toko & Custom Price Setting */}
                 <div className="flex items-center justify-between pt-0.5 border-t border-gray-200/50 dark:border-gray-700/50 text-[10px]">
                   <div className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
-                    <span>Produk Toko:</span>
-                    <span className="text-[9.5px] font-normal text-gray-400 font-mono">
-                      (Ongkir: Rp {formatRupiah(o.delivery_fee)})
-                    </span>
+                    <span>Produk Toko</span>
                   </div>
                   <div className="flex items-center gap-1">
                     {Boolean(o.is_custom) && o.payment_status !== 'paid' && (o.status === 'pending' || o.status === 'processing') && (
@@ -2026,7 +2026,7 @@ ${itemsListText}
         </div>
 
         {/* 3. Footer: Total Price & Actions Segaris */}
-        <div className="pt-1.5 border-t border-gray-200 dark:border-gray-700/80 flex items-center justify-between gap-1 flex-wrap">
+        <div className="pt-1.5 border-t border-gray-200 dark:border-gray-700/80 flex items-center justify-between gap-1.5 flex-wrap">
           <div className="flex items-baseline gap-1.5 flex-wrap min-w-0">
             <span className="text-sm font-black text-green-700 dark:text-green-400 leading-tight font-mono">
               Rp {formatRupiah(group.grandTotal)}
@@ -2034,12 +2034,9 @@ ${itemsListText}
             <span className="text-[10px] text-gray-500 dark:text-gray-400 font-semibold">
               ({group.orders.length} Toko)
             </span>
-            <div className="text-[9px] sm:text-[10px] text-gray-500 dark:text-gray-400 flex items-center gap-1">
-              <span>Ongkir: <strong className="text-blue-600 dark:text-blue-400 font-mono">Rp {formatRupiah(group.totalDeliveryFee)}</strong></span>
-            </div>
           </div>
 
-          <div className="flex items-center gap-1 shrink-0 flex-wrap">
+          <div className="flex items-center gap-1 flex-wrap">
             {/* Tombol Cetak Struk Batch */}
             <button 
               onClick={() => {

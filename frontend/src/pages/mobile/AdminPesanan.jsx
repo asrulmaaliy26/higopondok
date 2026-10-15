@@ -1366,9 +1366,6 @@ export default function AdminPesanan() {
                                     <span className="text-xs font-black text-green-700 dark:text-green-400 font-mono">
                                       Rp {parseFloat(order.total_price || 0).toLocaleString('id-ID')}
                                     </span>
-                                    <span className="text-[9.5px] text-gray-500 dark:text-gray-400">
-                                      • Ongkir Rp {parseFloat(order.delivery_fee || 0).toLocaleString('id-ID')}
-                                    </span>
                                   </div>
                                   <span className="text-[9.5px] text-gray-400 font-mono">
                                     {order.items?.length || 0} Item

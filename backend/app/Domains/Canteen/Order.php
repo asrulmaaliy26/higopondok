@@ -20,7 +20,7 @@ class Order extends Model
     public const BASE_ADMIN_FEE = 2000.0;
     public const EXTRA_DELIVERY_PER_5_ITEMS = 2000.0;
     public const EXTRA_ADMIN_PER_5_ITEMS = 3000.0;
-    public const USER_THRESHOLD_COURIER_CUT = 2000.0; // Potongan ongkir dialihkan ke admin mulai user ke-2 dst
+    public const USER_THRESHOLD_COURIER_CUT = 1500.0; // Potongan ongkir dialihkan ke admin mulai user ke-2 dst (Kurir Rp 1.500, Admin Rp 3.500)
     public const USER_THRESHOLD_LIMIT = 1;            // Hanya user ke-1 yang tidak dipotong (mulai user ke-2 langsung dipotong)
 
     /**
