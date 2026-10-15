@@ -61,12 +61,16 @@ class Order extends Model
         'is_priority',
         'voucher_id',
         'voucher_discount',
+        'payment_verified_by',
+        'payment_ref_number',
+        'payment_ocr_data',
     ];
 
     protected $casts = [
         'proof_of_delivery' => 'array',
         'proof_of_purchase' => 'array',
         'proof_of_payment' => 'array',
+        'payment_ocr_data' => 'array',
         'total_price' => 'float',
         'admin_fee' => 'float',
         'delivery_fee' => 'float',

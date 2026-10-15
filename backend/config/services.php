@@ -40,4 +40,8 @@ return [
         'secret' => env('SYNC_SECRET_KEY', 'higo_pondok_sync_secret_key_2026_secure'),
     ],
 
+    'gemini' => [
+        'api_key' => env('GEMINI_API_KEY'),
+    ],
+
 ];

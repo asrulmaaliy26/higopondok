@@ -307,10 +307,14 @@ export default function Pembayaran() {
       return false;
     },
     retryDelay: (attemptIndex) => Math.min(1500 * (attemptIndex + 1), 6000),
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries(['user_orders']);
       queryClient.invalidateQueries(['orders']);
-      toast.success('Bukti transfer berhasil diunggah!');
+      if (data?.ai_verified) {
+        toast.success(data.message || 'Pembayaran berhasil diverifikasi otomatis oleh AI! Status Lunas.', { duration: 5000 });
+      } else {
+        toast.success(data?.message || 'Bukti transfer berhasil diunggah! Menunggu validasi admin.', { duration: 4500 });
+      }
       setShowPaymentProofModal(false);
       setPaymentProofFiles([]);
       setActiveOrderForPaymentProof(null);

@@ -1526,12 +1526,39 @@ class OrderController extends Controller
                 $order->items()->update(['created_at' => $now]);
             }
 
-            return !empty($order->checkout_id) ? $order->fresh() : $order;
+            return [
+                'order' => !empty($order->checkout_id) ? $order->fresh() : $order,
+                'uploaded_paths' => $paths,
+                'checkout_id' => $order->checkout_id,
+            ];
         });
 
+        $order = $uploadResult['order'];
+        $uploadedPaths = $uploadResult['uploaded_paths'] ?? [];
+        $checkoutId = $uploadResult['checkout_id'];
+
+        $targetOrders = !empty($checkoutId)
+            ? Order::where('checkout_id', $checkoutId)->get()
+            : collect([$order]);
+
+        // Verifikasi otomatis bukti bayar dengan Google Gemini AI Vision (Mendukung multi-gambar)
+        $aiResult = null;
+        if (!empty($uploadedPaths)) {
+            try {
+                $scanner = app(\App\Domains\Canteen\Services\ReceiptScannerService::class);
+                $aiResult = $scanner->verifyAndApplyPayment($targetOrders, $uploadedPaths);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error("[OrderController] Gagal verifikasi bukti transfer AI: " . $e->getMessage());
+            }
+        }
+
+        $responseMsg = $aiResult['message'] ?? 'Bukti transfer berhasil diunggah! Menunggu konfirmasi & validasi pembayaran.';
+
         return response()->json([
-            'message' => 'Bukti transfer berhasil diunggah! Menunggu konfirmasi & validasi pembayaran.',
-            'order' => $order->load(['canteen', 'user', 'items.product', 'courier'])
+            'message' => $responseMsg,
+            'ai_verified' => $aiResult['verified'] ?? false,
+            'ai_ocr_data' => $aiResult['scan'] ?? null,
+            'order' => $order->fresh()->load(['canteen', 'user', 'items.product', 'courier'])
         ]);
     }
 
@@ -1547,7 +1574,7 @@ class OrderController extends Controller
 
         $user = $request->user();
 
-        $orders = DB::transaction(function () use ($request, $checkoutId, $user) {
+        $uploadResult = DB::transaction(function () use ($request, $checkoutId, $user) {
             $query = Order::where('checkout_id', $checkoutId)->lockForUpdate();
             if (!$user->hasRole('admin') && !$user->hasRole('super_admin')) {
                 $query->where('user_id', $user->id);
@@ -1597,13 +1624,35 @@ class OrderController extends Controller
                 $order->items()->update(['created_at' => $now]);
             }
 
-            return $orders;
+            return [
+                'orders' => $orders,
+                'uploaded_paths' => $paths,
+            ];
         });
 
+        $orders = $uploadResult['orders'];
+        $uploadedPaths = $uploadResult['uploaded_paths'] ?? [];
+
+        // Verifikasi otomatis bukti bayar dengan Google Gemini AI Vision (Mendukung multi-gambar)
+        $aiResult = null;
+        if (!empty($uploadedPaths)) {
+            try {
+                $scanner = app(\App\Domains\Canteen\Services\ReceiptScannerService::class);
+                $aiResult = $scanner->verifyAndApplyPayment($orders, $uploadedPaths);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error("[OrderController] Gagal verifikasi checkout proof AI: " . $e->getMessage());
+            }
+        }
+
+        $responseMsg = $aiResult['message'] ?? 'Bukti transfer berhasil diunggah untuk seluruh pesanan dalam checkout ini!';
+        $refreshedOrders = Order::where('checkout_id', $checkoutId)->get();
+
         return response()->json([
-            'message' => 'Bukti transfer berhasil diunggah untuk seluruh pesanan dalam checkout ini!',
+            'message' => $responseMsg,
+            'ai_verified' => $aiResult['verified'] ?? false,
+            'ai_ocr_data' => $aiResult['scan'] ?? null,
             'checkout_id' => $checkoutId,
-            'orders' => $orders->load(['canteen', 'user', 'items.product', 'courier'])
+            'orders' => $refreshedOrders->load(['canteen', 'user', 'items.product', 'courier'])
         ]);
     }
 
