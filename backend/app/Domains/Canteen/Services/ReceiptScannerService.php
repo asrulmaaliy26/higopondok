@@ -245,7 +245,8 @@ Kembalikan respon HANYA dalam format JSON valid tanpa tanda markdown (```json):
 
         if ($isAmountValid && !$hasDuplicateFraud) {
             // VERIFIKASI BERHASIL -> OTOMATIS LUNAS
-            $refNumbersString = implode(', ', array_unique($usedRefNumbers));
+            $overpaid = max(0.0, $accumulatedAmount - $totalExpected);
+            $overpaidInfo = ($overpaid > 0) ? " [Kelebihan Bayar: Rp " . number_format($overpaid, 0, ',', '.') . "]" : '';
 
             foreach ($orderCollection as $ord) {
                 $ord->payment_status = 'paid';
@@ -253,11 +254,16 @@ Kembalikan respon HANYA dalam format JSON valid tanpa tanda markdown (```json):
                 if (!empty($refNumbersString)) {
                     $ord->payment_ref_number = $refNumbersString;
                 }
-                $ord->payment_ocr_data = count($scannedResults) === 1 ? $scannedResults[0] : [
+
+                $ocrData = count($scannedResults) === 1 ? $scannedResults[0] : [
                     'summary' => 'multi_proof_verified',
                     'total_accumulated' => $accumulatedAmount,
                     'proofs' => $scannedResults,
                 ];
+                if ($overpaid > 0) {
+                    $ocrData['overpaid_amount'] = $overpaid;
+                }
+                $ord->payment_ocr_data = $ocrData;
 
                 // Sinkronkan created_at ke hari ini jika pesanan lama
                 $isNotToday = !Carbon::parse($ord->created_at, 'Asia/Jakarta')->isToday();
@@ -274,10 +280,10 @@ Kembalikan respon HANYA dalam format JSON valid tanpa tanda markdown (```json):
 
             if (count($validReceipts) > 1) {
                 $banks = implode(' + ', array_filter(array_map(fn($v) => $v['source_bank'] ?? 'Bank', $validReceipts)));
-                $msg = "Pembayaran Rp {$fmtAccumulated} dari " . count($validReceipts) . " bukti transfer ({$banks}) berhasil diverifikasi otomatis oleh AI! Status pesanan kini LUNAS{$refInfo}.";
+                $msg = "Pembayaran Rp {$fmtAccumulated} dari " . count($validReceipts) . " bukti transfer ({$banks}) berhasil diverifikasi otomatis oleh AI! Status pesanan kini LUNAS{$refInfo}{$overpaidInfo}.";
             } else {
                 $bank = !empty($validReceipts[0]['source_bank']) ? " via {$validReceipts[0]['source_bank']}" : '';
-                $msg = "Pembayaran Rp {$fmtAccumulated}{$bank} berhasil diverifikasi otomatis oleh AI! Status pesanan kini LUNAS{$refInfo}.";
+                $msg = "Pembayaran Rp {$fmtAccumulated}{$bank} berhasil diverifikasi otomatis oleh AI! Status pesanan kini LUNAS{$refInfo}{$overpaidInfo}.";
             }
 
             return [
