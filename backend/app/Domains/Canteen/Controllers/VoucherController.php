@@ -399,7 +399,7 @@ class VoucherController extends Controller
 
         $claims = UserVoucher::with([
                 'user:id,name,phone,santri_name,santri_room,santri_class,santri_level',
-                'order:id,order_number,status,total_amount'
+                'order:id,checkout_id,status,total_price'
             ])
             ->where('voucher_id', $voucher->id)
             ->latest('claimed_at')
@@ -412,9 +412,11 @@ class VoucherController extends Controller
                     'used_at' => $uv->used_at,
                     'order' => $uv->order ? [
                         'id' => $uv->order->id,
-                        'order_number' => $uv->order->order_number,
+                        'order_number' => $uv->order->checkout_id,
+                        'checkout_id' => $uv->order->checkout_id,
                         'status' => $uv->order->status,
-                        'total_amount' => $uv->order->total_amount,
+                        'total_amount' => $uv->order->total_price,
+                        'total_price' => $uv->order->total_price,
                     ] : null,
                     'user' => $uv->user ? [
                         'id' => $uv->user->id,
