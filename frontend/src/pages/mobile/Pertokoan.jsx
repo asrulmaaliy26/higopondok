@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios, { getStorageUrl } from '../../lib/axios';
@@ -51,6 +51,15 @@ const getZone = getCanteenZone;
 /** Format angka ke Rp X.XXX */
 const rp = (n) => `Rp ${(n || 0).toLocaleString('id-ID')}`;
 
+/** Standar preset jam operasional di Indonesia (WIB) */
+const INDONESIA_HOUR_PRESETS = [
+  { label: 'Standar Pondok', open: '06:00', close: '21:00', desc: '06:00 - 21:00 WIB' },
+  { label: 'Pagi - Sore', open: '07:00', close: '17:00', desc: '07:00 - 17:00 WIB' },
+  { label: 'Full Day', open: '06:00', close: '22:00', desc: '06:00 - 22:00 WIB' },
+  { label: 'Kantin Malam', open: '16:00', close: '23:00', desc: '16:00 - 23:00 WIB' },
+  { label: '24 Jam Penuh', open: '00:00', close: '23:59', desc: '00:00 - 23:59 WIB' },
+];
+
 export default function Pertokoan() {
   const queryClient = useQueryClient();
 
@@ -80,8 +89,32 @@ export default function Pertokoan() {
   const [isBulkHoursModalOpen, setIsBulkHoursModalOpen] = useState(false);
   const [bulkCategory, setBulkCategory] = useState('all');
   const [bulkOpenTime, setBulkOpenTime] = useState('06:00');
-  const [bulkCloseTime, setBulkCloseTime] = useState('23:59');
+  const [bulkCloseTime, setBulkCloseTime] = useState('21:00');
   const [bulkReopenForceClosed, setBulkReopenForceClosed] = useState(true);
+
+  // Live Realtime Waktu Indonesia (WIB / Asia/Jakarta)
+  const [currentWibTime, setCurrentWibTime] = useState(() => {
+    return new Date().toLocaleTimeString('id-ID', {
+      timeZone: 'Asia/Jakarta',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    });
+  });
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentWibTime(new Date().toLocaleTimeString('id-ID', {
+        timeZone: 'Asia/Jakarta',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      }));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Search & Filter state
   const [searchTerm, setSearchTerm] = useState('');
@@ -629,7 +662,7 @@ export default function Pertokoan() {
     const categoryName = bulkCategory === 'all'
       ? 'Semua Toko'
       : getZone(bulkCategory).label;
-    if (window.confirm(`Terapkan jam operasional ${bulkOpenTime} - ${bulkCloseTime} ke ${categoryName}?`)) {
+    if (window.confirm(`Terapkan jam operasional ${bulkOpenTime} - ${bulkCloseTime} WIB ke ${categoryName}?`)) {
       bulkUpdateHoursMutation.mutate({
         open_time: bulkOpenTime,
         close_time: bulkCloseTime,
@@ -1028,12 +1061,12 @@ export default function Pertokoan() {
                         ) : canteen.is_open ? (
                           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 text-[9px] font-bold rounded-none border border-emerald-200 dark:border-emerald-800 truncate">
                             <span className="w-1.5 h-1.5 rounded-none bg-emerald-500 animate-pulse shrink-0"></span>
-                            Buka ({openFormatted}-{closeFormatted})
+                            Buka ({openFormatted}-{closeFormatted} WIB)
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 text-[9px] font-semibold rounded-none border border-gray-200 dark:border-gray-700 truncate">
                             <Clock className="w-2.5 h-2.5 text-gray-500 shrink-0" />
-                            Tutup ({openFormatted}-{closeFormatted})
+                            Tutup ({openFormatted}-{closeFormatted} WIB)
                           </span>
                         )}
                       </div>
@@ -1155,7 +1188,7 @@ export default function Pertokoan() {
                 </div>
                 <div>
                   <h3 className="font-bold text-sm text-gray-900 dark:text-white">Atur Jam Semua Toko</h3>
-                  <p className="text-[10px] text-gray-500 dark:text-gray-400">Terapkan jadwal buka/tutup serentak</p>
+                  <p className="text-[10px] text-gray-500 dark:text-gray-400">Terapkan jadwal buka/tutup serentak (WIB)</p>
                 </div>
               </div>
               <button 
@@ -1164,6 +1197,17 @@ export default function Pertokoan() {
               >
                 <X size={16} />
               </button>
+            </div>
+
+            {/* Live Realtime Indonesia (WIB) Banner */}
+            <div className="flex items-center justify-between p-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs">
+              <span className="font-semibold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-emerald-600 animate-pulse shrink-0" />
+                Waktu Saat Ini (Indonesia / WIB):
+              </span>
+              <span className="font-mono font-black text-emerald-700 dark:text-emerald-400">
+                {currentWibTime} WIB
+              </span>
             </div>
 
             <form onSubmit={handleSaveBulkHours} className="space-y-3 text-xs">
@@ -1184,34 +1228,74 @@ export default function Pertokoan() {
                 </select>
               </div>
 
+              {/* Pilihan Cepat Jam Operasional Indonesia */}
+              <div>
+                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1 text-[11px]">
+                  Preset Jam Operasional Indonesia (WIB):
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
+                  {INDONESIA_HOUR_PRESETS.map((p) => {
+                    const isActive = bulkOpenTime === p.open && bulkCloseTime === p.close;
+                    return (
+                      <button
+                        key={p.label}
+                        type="button"
+                        onClick={() => {
+                          setBulkOpenTime(p.open);
+                          setBulkCloseTime(p.close);
+                        }}
+                        className={`p-1.5 text-left border rounded-none transition-all cursor-pointer ${
+                          isActive
+                            ? 'bg-green-600 text-white border-green-700 font-bold shadow-xs'
+                            : 'bg-gray-50 hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700/80 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700'
+                        }`}
+                      >
+                        <div className="font-bold text-[10px] leading-tight flex items-center justify-between">
+                          <span>{p.label}</span>
+                          {isActive && <CheckCircle size={10} className="text-white shrink-0" />}
+                        </div>
+                        <div className={`text-[9px] font-mono mt-0.5 ${isActive ? 'text-green-100' : 'text-gray-500 dark:text-gray-400'}`}>
+                          {p.desc}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Jam Buka & Jam Tutup */}
-              <div className="grid grid-cols-2 gap-2">
-                <div className="bg-gray-50 dark:bg-gray-800/50 p-2 rounded-none border border-gray-200 dark:border-gray-700">
-                  <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-0.5 text-[10px]">
-                    Jam Buka
-                  </label>
-                  <input
-                    type="time"
-                    lang="id-ID"
-                    value={bulkOpenTime}
-                    onChange={(e) => setBulkOpenTime(e.target.value)}
-                    required
-                    className="w-full rounded-none border border-gray-300 dark:border-gray-700 dark:bg-gray-800 p-1.5 font-bold text-gray-900 dark:text-white focus:ring-1 focus:ring-green-500 text-center text-xs font-mono"
-                  />
+              <div className="space-y-1">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-gray-50 dark:bg-gray-800/50 p-2 rounded-none border border-gray-200 dark:border-gray-700">
+                    <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-0.5 text-[10px]">
+                      Jam Buka (WIB)
+                    </label>
+                    <input
+                      type="time"
+                      lang="id-ID"
+                      value={bulkOpenTime}
+                      onChange={(e) => setBulkOpenTime(e.target.value)}
+                      required
+                      className="w-full rounded-none border border-gray-300 dark:border-gray-700 dark:bg-gray-800 p-1.5 font-bold text-gray-900 dark:text-white focus:ring-1 focus:ring-green-500 text-center text-xs font-mono"
+                    />
+                  </div>
+                  <div className="bg-gray-50 dark:bg-gray-800/50 p-2 rounded-none border border-gray-200 dark:border-gray-700">
+                    <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-0.5 text-[10px]">
+                      Jam Tutup (WIB)
+                    </label>
+                    <input
+                      type="time"
+                      lang="id-ID"
+                      value={bulkCloseTime}
+                      onChange={(e) => setBulkCloseTime(e.target.value)}
+                      required
+                      className="w-full rounded-none border border-gray-300 dark:border-gray-700 dark:bg-gray-800 p-1.5 font-bold text-gray-900 dark:text-white focus:ring-1 focus:ring-green-500 text-center text-xs font-mono"
+                    />
+                  </div>
                 </div>
-                <div className="bg-gray-50 dark:bg-gray-800/50 p-2 rounded-none border border-gray-200 dark:border-gray-700">
-                  <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-0.5 text-[10px]">
-                    Jam Tutup
-                  </label>
-                  <input
-                    type="time"
-                    lang="id-ID"
-                    value={bulkCloseTime}
-                    onChange={(e) => setBulkCloseTime(e.target.value)}
-                    required
-                    className="w-full rounded-none border border-gray-300 dark:border-gray-700 dark:bg-gray-800 p-1.5 font-bold text-gray-900 dark:text-white focus:ring-1 focus:ring-green-500 text-center text-xs font-mono"
-                  />
-                </div>
+                <p className="text-[10px] text-gray-400 dark:text-gray-500 text-center">
+                  Standar 24 jam Indonesia (WIB). Contoh: 06:00 s/d 21:00 WIB.
+                </p>
               </div>
 
               {/* Checkbox Reopen */}
@@ -1268,6 +1352,17 @@ export default function Pertokoan() {
               </button>
             </div>
 
+            {/* Live Realtime Indonesia (WIB) Banner */}
+            <div className="flex items-center justify-between p-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs">
+              <span className="font-semibold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-emerald-600 animate-pulse shrink-0" />
+                Waktu Saat Ini:
+              </span>
+              <span className="font-mono font-black text-emerald-700 dark:text-emerald-400">
+                {currentWibTime} WIB
+              </span>
+            </div>
+
             <form 
               onSubmit={(e) => {
                 e.preventDefault();
@@ -1280,10 +1375,45 @@ export default function Pertokoan() {
               }}
               className="space-y-3 text-xs"
             >
+              {/* Presets Jam Indonesia */}
+              <div>
+                <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1 text-[11px]">
+                  Pilih Cepat Jadwal Indonesia (WIB):
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
+                  {INDONESIA_HOUR_PRESETS.map((p) => {
+                    const isActive = quickOpenTime === p.open && quickCloseTime === p.close;
+                    return (
+                      <button
+                        key={p.label}
+                        type="button"
+                        onClick={() => {
+                          setQuickOpenTime(p.open);
+                          setQuickCloseTime(p.close);
+                        }}
+                        className={`p-1.5 text-left border rounded-none transition-all cursor-pointer ${
+                          isActive
+                            ? 'bg-green-600 text-white border-green-700 font-bold shadow-xs'
+                            : 'bg-gray-50 hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700/80 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700'
+                        }`}
+                      >
+                        <div className="font-bold text-[10px] leading-tight flex items-center justify-between">
+                          <span>{p.label}</span>
+                          {isActive && <CheckCircle size={10} className="text-white shrink-0" />}
+                        </div>
+                        <div className={`text-[9px] font-mono mt-0.5 ${isActive ? 'text-green-100' : 'text-gray-500 dark:text-gray-400'}`}>
+                          {p.desc}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-2">
                 <div className="bg-gray-50 dark:bg-gray-800/50 p-2 rounded-none border border-gray-200 dark:border-gray-700">
                   <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-0.5 text-[10px]">
-                    Jam Buka
+                    Jam Buka (WIB)
                   </label>
                   <input
                     type="time"
@@ -1296,7 +1426,7 @@ export default function Pertokoan() {
                 </div>
                 <div className="bg-gray-50 dark:bg-gray-800/50 p-2 rounded-none border border-gray-200 dark:border-gray-700">
                   <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-0.5 text-[10px]">
-                    Jam Tutup
+                    Jam Tutup (WIB)
                   </label>
                   <input
                     type="time"
@@ -1949,11 +2079,32 @@ export default function Pertokoan() {
                   <div className="flex items-center justify-between gap-1 mb-1">
                     <h3 className="font-bold text-[10.5px] uppercase tracking-wider text-gray-900 dark:text-white flex items-center gap-1.5">
                       <Clock className="w-3 h-3 text-green-600 dark:text-green-400 shrink-0" />
-                      <span className="truncate">Jam Operasional</span>
+                      <span className="truncate">Jam Operasional (WIB)</span>
                     </h3>
                     <span className="text-[10px] font-mono text-gray-500 dark:text-gray-400 font-semibold shrink-0">
-                      {detailOpenTime} - {detailCloseTime}
+                      {detailOpenTime} - {detailCloseTime} WIB
                     </span>
+                  </div>
+
+                  {/* Preset Jam Indonesia di Detail Modal */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1 mb-1.5">
+                    {INDONESIA_HOUR_PRESETS.slice(0, 3).map((p) => (
+                      <button
+                        key={p.label}
+                        type="button"
+                        onClick={() => {
+                          setDetailOpenTime(p.open);
+                          setDetailCloseTime(p.close);
+                        }}
+                        className={`px-1.5 py-0.5 text-[9px] border rounded-none truncate cursor-pointer ${
+                          detailOpenTime === p.open && detailCloseTime === p.close
+                            ? 'bg-green-600 text-white border-green-700 font-bold'
+                            : 'bg-gray-50 hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700'
+                        }`}
+                      >
+                        {p.label} ({p.open}-{p.close})
+                      </button>
+                    ))}
                   </div>
 
                   <form 
@@ -1977,6 +2128,7 @@ export default function Pertokoan() {
                           onChange={(e) => setDetailOpenTime(e.target.value)}
                           className="flex-1 min-w-0 w-0 rounded-none border border-gray-300 dark:border-gray-700 dark:bg-gray-800 text-gray-900 dark:text-white font-bold p-1 text-center text-xs font-mono h-[29px]"
                           required
+                          title="Jam Buka (WIB)"
                         />
                         <span className="text-[10px] text-gray-400 font-bold shrink-0">s/d</span>
                         <input
@@ -1986,6 +2138,7 @@ export default function Pertokoan() {
                           onChange={(e) => setDetailCloseTime(e.target.value)}
                           className="flex-1 min-w-0 w-0 rounded-none border border-gray-300 dark:border-gray-700 dark:bg-gray-800 text-gray-900 dark:text-white font-bold p-1 text-center text-xs font-mono h-[29px]"
                           required
+                          title="Jam Tutup (WIB)"
                         />
                       </div>
                       <button

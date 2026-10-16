@@ -298,7 +298,7 @@ export default function DetailKantin() {
 
           <div className="flex items-center gap-1 text-[11px] text-gray-500 font-medium">
             <Clock className="w-3 h-3 text-gray-400" />
-            <span>{canteen.open_time ? `${canteen.open_time.substring(0, 5)} - ${canteen.close_time?.substring(0, 5)}` : '08:00 - 21:00'}</span>
+            <span>{canteen.open_time ? `${canteen.open_time.substring(0, 5)} - ${canteen.close_time?.substring(0, 5)} WIB` : '06:00 - 21:00 WIB'}</span>
             {canteen.closed_days && canteen.closed_days.length > 0 && (
               <span className="text-red-500 font-semibold ml-1">
                 (Libur: {canteen.closed_days.map(d => d.charAt(0).toUpperCase() + d.slice(1)).join(', ')})

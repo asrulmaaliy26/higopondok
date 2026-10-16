@@ -572,11 +572,31 @@ class OrderController extends Controller
                 $order->items()->update(['created_at' => $now]);
             }
         }
+
+        // Jika pembayaran LUNAS dan status pesanan masih pending, otomatis lanjutkan ke processing & kurir
+        if ($paymentStatus === 'paid' && $order->status === 'pending') {
+            $order->status = 'processing';
+            if (!$order->courier_id) {
+                $assignedCourierId = DB::table('canteen_couriers')
+                    ->where('canteen_id', $order->canteen_id)
+                    ->value('courier_id');
+                if (!$assignedCourierId) {
+                    $assignedCourierId = \App\Domains\Auth\User::role('kurir')->value('id');
+                }
+                if ($assignedCourierId) {
+                    $order->courier_id = $assignedCourierId;
+                }
+            }
+        }
+
         $order->save();
 
-        // Jika memiliki checkout_id, sinkronkan status ke semua order lain dalam checkout yang sama
+        // Jika memiliki checkout_id, sinkronkan status pembayaran HANYA untuk pesanan di kantin yang sama (toko lain tidak ikut)
         if (!empty($order->checkout_id)) {
-            $linkedOrders = Order::where('checkout_id', $order->checkout_id)->where('id', '!=', $order->id)->get();
+            $linkedOrders = Order::where('checkout_id', $order->checkout_id)
+                ->where('id', '!=', $order->id)
+                ->where('canteen_id', $order->canteen_id)
+                ->get();
             foreach ($linkedOrders as $linked) {
                 $linked->payment_status = $paymentStatus;
                 if (in_array($paymentStatus, ['paid', 'waiting_confirmation'])) {
@@ -789,15 +809,6 @@ class OrderController extends Controller
                 $order->items()->update(['created_at' => $targetDate]);
                 $formattedDate = $targetDate->translatedFormat('d M Y');
                 $dateMsg = " dan dijadwalkan ke tanggal {$formattedDate}";
-
-                if (!empty($order->checkout_id)) {
-                    $linkedOrders = Order::where('checkout_id', $order->checkout_id)->where('id', '!=', $order->id)->get();
-                    foreach ($linkedOrders as $linked) {
-                        $linked->created_at = $targetDate;
-                        $linked->save();
-                        $linked->items()->update(['created_at' => $targetDate]);
-                    }
-                }
             }
 
             $order->status = $request->status;
@@ -1585,8 +1596,11 @@ class OrderController extends Controller
         $scanData     = $aiResult['scan'] ?? [];
         $refNo        = $scanData['ref_number'] ?? ($scanData['proofs'][0]['ref_number'] ?? null);
         $bank         = $scanData['source_bank'] ?? ($scanData['proofs'][0]['source_bank'] ?? null);
+        $transDate    = $scanData['date'] ?? ($scanData['proofs'][0]['date'] ?? null);
+        $transTime    = $scanData['time'] ?? ($scanData['proofs'][0]['time'] ?? null);
         $refInfo      = $refNo ? " | Ref: {$refNo}" : '';
         $bankInfo     = $bank ? " | Bank: {$bank}" : '';
+        $dateInfo     = $transDate ? " | Tgl Struk: {$transDate}" . ($transTime ? " {$transTime}" : '') : ' | Tgl Struk: Tidak tertera';
 
         if (!empty($aiResult)) {
             if ($aiResult['verified'] ?? false) {
@@ -1595,7 +1609,7 @@ class OrderController extends Controller
                     'action'      => 'ai_payment_verified',
                     'model_type'  => Order::class,
                     'model_id'    => $freshOrder->id,
-                    'description' => "✅ AI Gemini MEMVERIFIKASI & MELUNASI pesanan #{$orderIds} ({$canteenName} - {$customerName}) senilai Rp {$totalFmt}{$bankInfo}{$refInfo}. Diunggah oleh: {$uploaderUser->name}.",
+                    'description' => "✅ AI Gemini MEMVERIFIKASI & MELUNASI pesanan #{$orderIds} ({$canteenName} - {$customerName}) senilai Rp {$totalFmt}{$bankInfo}{$refInfo}{$dateInfo}. Diunggah oleh: {$uploaderUser->name}.",
                 ]);
             } else {
                 $failReason = $aiResult['message'] ?? 'Tidak diketahui';
@@ -1604,7 +1618,7 @@ class OrderController extends Controller
                     'action'      => 'ai_payment_unverified',
                     'model_type'  => Order::class,
                     'model_id'    => $freshOrder->id,
-                    'description' => "⏳ AI Gemini GAGAL memverifikasi pesanan #{$orderIds} ({$canteenName} - {$customerName}) senilai Rp {$totalFmt}{$bankInfo}{$refInfo}. Alasan: {$failReason}. Menunggu konfirmasi manual admin. Diunggah oleh: {$uploaderUser->name}.",
+                    'description' => "⏳ AI Gemini GAGAL memverifikasi pesanan #{$orderIds} ({$canteenName} - {$customerName}) senilai Rp {$totalFmt}{$bankInfo}{$refInfo}{$dateInfo}. Alasan: {$failReason}. Menunggu konfirmasi manual admin. Diunggah oleh: {$uploaderUser->name}.",
                 ]);
             }
         }
@@ -1712,8 +1726,11 @@ class OrderController extends Controller
         $scanData      = $aiResult['scan'] ?? [];
         $refNo         = $scanData['ref_number'] ?? ($scanData['proofs'][0]['ref_number'] ?? null);
         $bank          = $scanData['source_bank'] ?? ($scanData['proofs'][0]['source_bank'] ?? null);
+        $transDate     = $scanData['date'] ?? ($scanData['proofs'][0]['date'] ?? null);
+        $transTime     = $scanData['time'] ?? ($scanData['proofs'][0]['time'] ?? null);
         $refInfo       = $refNo ? " | Ref: {$refNo}" : '';
         $bankInfo      = $bank ? " | Bank: {$bank}" : '';
+        $dateInfo      = $transDate ? " | Tgl Struk: {$transDate}" . ($transTime ? " {$transTime}" : '') : ' | Tgl Struk: Tidak tertera';
 
         if (!empty($aiResult)) {
             if ($aiResult['verified'] ?? false) {
@@ -1722,7 +1739,7 @@ class OrderController extends Controller
                     'action'      => 'ai_payment_verified',
                     'model_type'  => Order::class,
                     'model_id'    => $firstOrder?->id,
-                    'description' => "✅ AI Gemini MEMVERIFIKASI & MELUNASI checkout #{$checkoutId} (Pesanan #{$orderIdsList}) [{$canteenNames} - {$customerName}] senilai Rp {$totalFmt}{$bankInfo}{$refInfo}. Diunggah oleh: {$uploaderUser->name}.",
+                    'description' => "✅ AI Gemini MEMVERIFIKASI & MELUNASI checkout #{$checkoutId} (Pesanan #{$orderIdsList}) [{$canteenNames} - {$customerName}] senilai Rp {$totalFmt}{$bankInfo}{$refInfo}{$dateInfo}. Diunggah oleh: {$uploaderUser->name}.",
                 ]);
             } else {
                 $failReason = $aiResult['message'] ?? 'Tidak diketahui';
@@ -1731,7 +1748,7 @@ class OrderController extends Controller
                     'action'      => 'ai_payment_unverified',
                     'model_type'  => Order::class,
                     'model_id'    => $firstOrder?->id,
-                    'description' => "⏳ AI Gemini GAGAL memverifikasi checkout #{$checkoutId} (Pesanan #{$orderIdsList}) [{$canteenNames} - {$customerName}] senilai Rp {$totalFmt}{$bankInfo}{$refInfo}. Alasan: {$failReason}. Menunggu konfirmasi manual admin. Diunggah oleh: {$uploaderUser->name}.",
+                    'description' => "⏳ AI Gemini GAGAL memverifikasi checkout #{$checkoutId} (Pesanan #{$orderIdsList}) [{$canteenNames} - {$customerName}] senilai Rp {$totalFmt}{$bankInfo}{$refInfo}{$dateInfo}. Alasan: {$failReason}. Menunggu konfirmasi manual admin. Diunggah oleh: {$uploaderUser->name}.",
                 ]);
             }
         }
@@ -1794,6 +1811,22 @@ class OrderController extends Controller
                     $linked->created_at = $now;
                     $linked->proof_of_payment = $linkedMerged;
                     $linked->payment_status = $newPaymentStatus;
+
+                    if ($newPaymentStatus === 'paid' && $linked->status === 'pending') {
+                        $linked->status = 'processing';
+                        if (!$linked->courier_id) {
+                            $assignedCourierId = DB::table('canteen_couriers')
+                                ->where('canteen_id', $linked->canteen_id)
+                                ->value('courier_id');
+                            if (!$assignedCourierId) {
+                                $assignedCourierId = \App\Domains\Auth\User::role('kurir')->value('id');
+                            }
+                            if ($assignedCourierId) {
+                                $linked->courier_id = $assignedCourierId;
+                            }
+                        }
+                    }
+
                     $linked->save();
                     $linked->items()->update(['created_at' => $now]);
                 }
@@ -1801,6 +1834,22 @@ class OrderController extends Controller
                 $order->created_at = $now;
                 $order->proof_of_payment = $mergedPaths;
                 $order->payment_status = $newPaymentStatus;
+
+                if ($newPaymentStatus === 'paid' && $order->status === 'pending') {
+                    $order->status = 'processing';
+                    if (!$order->courier_id) {
+                        $assignedCourierId = DB::table('canteen_couriers')
+                            ->where('canteen_id', $order->canteen_id)
+                            ->value('courier_id');
+                        if (!$assignedCourierId) {
+                            $assignedCourierId = \App\Domains\Auth\User::role('kurir')->value('id');
+                        }
+                        if ($assignedCourierId) {
+                            $order->courier_id = $assignedCourierId;
+                        }
+                    }
+                }
+
                 $order->save();
                 $order->items()->update(['created_at' => $now]);
             }

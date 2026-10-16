@@ -7,6 +7,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 
 class ReceiptScannerService
@@ -15,9 +16,11 @@ class ReceiptScannerService
      * Model Gemini yang digunakan secara berurutan jika terjadi kendala/demand spike
      */
     protected array $models = [
-        'gemini-3.5-flash-lite',
-        'gemini-3.5-flash',
+        'gemini-3-flash-preview',
+        'gemini-2.5-flash',
+        'gemini-2.5-flash-lite',
         'gemini-flash-latest',
+        'gemini-flash-lite-latest',
     ];
 
     /**
@@ -92,7 +95,8 @@ Kembalikan respon HANYA dalam format JSON valid tanpa tanda markdown (```json):
   "ref_number": string atau null (nomor referensi / ID transaksi / no ref unik),
   "source_bank": string atau null (nama bank atau aplikasi pengirim seperti BCA, BRI, Mandiri, BNI, BSI, QRIS, Dana, GoPay, OVO, ShopeePay),
   "recipient_name": string atau null (nama penerima transfer jika terlihat),
-  "confidence_score": float (skor keyakinan AI antara 0.0 hingga 1.0)
+  "confidence_score": float (skor keyakinan AI antara 0.0 hingga 1.0),
+  "ai_note": string (catatan detail kondisi bukti transfer untuk superadmin: sebutkan apakah gambar jelas/buram/terpotong, ada tanggal transaksi atau tidak, kejelasan nominal, atau jika bukan bukti bayar)
 }';
 
         $payload = [
@@ -243,16 +247,45 @@ Kembalikan respon HANYA dalam format JSON valid tanpa tanda markdown (```json):
         // 3. Tidak ada deteksi penipuan nomor referensi duplikat
         $isAmountValid = !empty($validReceipts) && ($accumulatedAmount >= ($totalExpected - 50));
 
+        $rawNotes = array_filter(array_map(fn($v) => $v['ai_note'] ?? null, $scannedResults));
+        $combinedAiNotes = !empty($rawNotes) ? implode('; ', $rawNotes) : null;
+
         if ($isAmountValid && !$hasDuplicateFraud) {
             // VERIFIKASI BERHASIL -> OTOMATIS LUNAS
             $overpaid = max(0.0, $accumulatedAmount - $totalExpected);
             $overpaidInfo = ($overpaid > 0) ? " [Kelebihan Bayar: Rp " . number_format($overpaid, 0, ',', '.') . "]" : '';
+
+            $fmtAccumulated = number_format($accumulatedAmount, 0, ',', '.');
+            $conditionNote = "✅ Bukti transfer valid & nominal sesuai (Rp {$fmtAccumulated}).";
+            if ($overpaid > 0) {
+                $conditionNote .= " Lebih bayar: Rp " . number_format($overpaid, 0, ',', '.') . ".";
+            }
+            if ($combinedAiNotes) {
+                $conditionNote .= " Kondisi AI: {$combinedAiNotes}";
+            }
 
             foreach ($orderCollection as $ord) {
                 $ord->payment_status = 'paid';
                 $ord->payment_verified_by = 'ai_gemini';
                 if (!empty($refNumbersString)) {
                     $ord->payment_ref_number = $refNumbersString;
+                }
+
+                // Otomatis lanjutkan pesanan ke 'processing' agar langsung masuk antrean kurir jika masih pending
+                if ($ord->status === 'pending') {
+                    $ord->status = 'processing';
+
+                    if (!$ord->courier_id) {
+                        $assignedCourierId = DB::table('canteen_couriers')
+                            ->where('canteen_id', $ord->canteen_id)
+                            ->value('courier_id');
+                        if (!$assignedCourierId) {
+                            $assignedCourierId = \App\Domains\Auth\User::role('kurir')->value('id');
+                        }
+                        if ($assignedCourierId) {
+                            $ord->courier_id = $assignedCourierId;
+                        }
+                    }
                 }
 
                 $ocrData = count($scannedResults) === 1 ? $scannedResults[0] : [
@@ -263,6 +296,8 @@ Kembalikan respon HANYA dalam format JSON valid tanpa tanda markdown (```json):
                 if ($overpaid > 0) {
                     $ocrData['overpaid_amount'] = $overpaid;
                 }
+                $ocrData['ai_note'] = $combinedAiNotes ?: ($scannedResults[0]['ai_note'] ?? null);
+                $ocrData['condition_note'] = $conditionNote;
                 $ord->payment_ocr_data = $ocrData;
 
                 // Sinkronkan created_at ke hari ini jika pesanan lama
@@ -275,15 +310,14 @@ Kembalikan respon HANYA dalam format JSON valid tanpa tanda markdown (```json):
                 $ord->save();
             }
 
-            $fmtAccumulated = number_format($accumulatedAmount, 0, ',', '.');
             $refInfo = !empty($refNumbersString) ? " (Ref: {$refNumbersString})" : '';
 
             if (count($validReceipts) > 1) {
                 $banks = implode(' + ', array_filter(array_map(fn($v) => $v['source_bank'] ?? 'Bank', $validReceipts)));
-                $msg = "Pembayaran Rp {$fmtAccumulated} dari " . count($validReceipts) . " bukti transfer ({$banks}) berhasil diverifikasi otomatis oleh AI! Status pesanan kini LUNAS{$refInfo}{$overpaidInfo}.";
+                $msg = "Pembayaran Rp {$fmtAccumulated} dari " . count($validReceipts) . " bukti transfer ({$banks}) berhasil diverifikasi otomatis oleh AI! Pesanan LUNAS dan otomatis dilanjutkan ke kurir (Sedang Diproses){$refInfo}{$overpaidInfo}.";
             } else {
                 $bank = !empty($validReceipts[0]['source_bank']) ? " via {$validReceipts[0]['source_bank']}" : '';
-                $msg = "Pembayaran Rp {$fmtAccumulated}{$bank} berhasil diverifikasi otomatis oleh AI! Status pesanan kini LUNAS{$refInfo}{$overpaidInfo}.";
+                $msg = "Pembayaran Rp {$fmtAccumulated}{$bank} berhasil diverifikasi otomatis oleh AI! Pesanan LUNAS dan otomatis dilanjutkan ke kurir (Sedang Diproses){$refInfo}{$overpaidInfo}.";
             }
 
             return [
@@ -294,47 +328,57 @@ Kembalikan respon HANYA dalam format JSON valid tanpa tanda markdown (```json):
                     'status' => 'SUCCESS',
                     'amount' => $accumulatedAmount,
                     'proofs' => $scannedResults,
+                    'ai_note' => $combinedAiNotes,
+                    'condition_note' => $conditionNote,
                 ],
             ];
         }
 
         // JIKA TIDAK MEMENUHI SYARAT OTOMATIS:
         // Simpan hasil scan AI ke pesanan agar admin/toko bisa melihat catatan AI, namun status tetap 'waiting_confirmation'
+        $reason = '';
+        if ($hasDuplicateFraud) {
+            $reason = "⚠️ PERHATIAN: Nomor referensi {$duplicateRefName} terdeteksi sudah pernah digunakan sebelumnya!";
+        } elseif (empty($validReceipts)) {
+            $reason = '⚠️ Gambar yang diunggah tidak terdeteksi sebagai struk transfer resmi.';
+        } elseif (!$isAmountValid) {
+            $fmtDetected = number_format($accumulatedAmount, 0, ',', '.');
+            $fmtExpected = number_format($totalExpected, 0, ',', '.');
+            $kurang = number_format($totalExpected - $accumulatedAmount, 0, ',', '.');
+            $reason = "⚠️ KURANG BAYAR: Terbaca transfer Rp {$fmtDetected}, total tagihan Rp {$fmtExpected} (Kekurangan: Rp {$kurang}).";
+        } else {
+            $reason = 'Menunggu verifikasi pembayaran manual oleh admin.';
+        }
+
+        $fullConditionNote = $reason . ($combinedAiNotes ? " Catatan AI: {$combinedAiNotes}" : '');
+
         foreach ($orderCollection as $ord) {
             $ord->payment_status = 'waiting_confirmation';
             $ord->payment_verified_by = null;
             if (!empty($usedRefNumbers)) {
                 $ord->payment_ref_number = implode(', ', array_unique($usedRefNumbers));
             }
-            $ord->payment_ocr_data = count($scannedResults) === 1 ? $scannedResults[0] : [
+            $ocrData = count($scannedResults) === 1 ? $scannedResults[0] : [
                 'summary' => 'multi_proof_pending',
                 'total_accumulated' => $accumulatedAmount,
                 'proofs' => $scannedResults,
             ];
+            $ocrData['ai_note'] = $combinedAiNotes ?: ($scannedResults[0]['ai_note'] ?? null);
+            $ocrData['condition_note'] = $fullConditionNote;
+            $ord->payment_ocr_data = $ocrData;
             $ord->save();
-        }
-
-        $reason = 'Bukti pembayaran diunggah. ';
-        if ($hasDuplicateFraud) {
-            $reason .= "Perhatian: Nomor referensi {$duplicateRefName} terdeteksi sudah pernah digunakan sebelumnya. Menunggu validasi admin.";
-        } elseif (empty($validReceipts)) {
-            $reason .= 'Gambar yang diunggah tidak terdeteksi sebagai struk transfer resmi. Menunggu verifikasi manual admin.';
-        } elseif (!$isAmountValid) {
-            $fmtDetected = number_format($accumulatedAmount, 0, ',', '.');
-            $fmtExpected = number_format($totalExpected, 0, ',', '.');
-            $reason .= "Total nominal dari bukti valid terbaca Rp {$fmtDetected}, sedangkan total tagihan Rp {$fmtExpected}. Menunggu konfirmasi admin.";
-        } else {
-            $reason .= 'Menunggu konfirmasi & validasi pembayaran manual oleh admin.';
         }
 
         return [
             'verified' => false,
-            'message' => $reason,
+            'message' => $fullConditionNote,
             'scan' => count($scannedResults) === 1 ? $scannedResults[0] : [
                 'is_transfer_receipt' => !empty($validReceipts),
                 'status' => 'PENDING',
                 'amount' => $accumulatedAmount,
                 'proofs' => $scannedResults,
+                'ai_note' => $combinedAiNotes,
+                'condition_note' => $fullConditionNote,
             ],
         ];
     }

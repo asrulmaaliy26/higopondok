@@ -190,7 +190,7 @@ class AdminController extends Controller
         Cache::forget('canteen_force_closed_' . $canteen->id);
         
         return response()->json([
-            'message' => 'Jam operasional berhasil diperbarui', 
+            'message' => "Jam operasional berhasil diperbarui ({$openTime} - {$closeTime} WIB)", 
             'canteen' => new CanteenResource($canteen->fresh())
         ]);
     }
@@ -228,7 +228,7 @@ class AdminController extends Controller
         };
 
         return response()->json([
-            'message' => "Jam operasional {$categoryLabel} ({$count} toko) berhasil diatur ke {$openTime} - {$closeTime}.",
+            'message' => "Jam operasional {$categoryLabel} ({$count} toko) berhasil diatur ke {$openTime} - {$closeTime} WIB.",
             'affected_count' => $count
         ]);
     }

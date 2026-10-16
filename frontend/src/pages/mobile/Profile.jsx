@@ -834,14 +834,42 @@ export default function Profile() {
                     <label htmlFor="description" className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Deskripsi Singkat</label>
                     <textarea id="description" rows="2" value={profileData.description} onChange={e => setProfileData({...profileData, description: e.target.value})} className="mt-1 block w-full rounded-none border border-gray-200 dark:border-gray-700 py-2 px-3 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-800 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors" />
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
                     <div>
-                      <label htmlFor="open_time" className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Jam Buka</label>
-                      <input type="time" id="open_time" required value={profileData.open_time} onChange={e => setProfileData({...profileData, open_time: e.target.value})} className="mt-1 block w-full rounded-none border border-gray-200 dark:border-gray-700 py-2 px-3 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-800 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors" />
+                      <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                        Pilihan Cepat Jam Operasional (WIB):
+                      </label>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1">
+                        {[
+                          { label: 'Standar Pondok', open: '06:00', close: '21:00' },
+                          { label: 'Pagi - Sore', open: '07:00', close: '17:00' },
+                          { label: 'Full Day', open: '06:00', close: '22:00' },
+                          { label: '24 Jam', open: '00:00', close: '23:59' },
+                        ].map(p => (
+                          <button
+                            key={p.label}
+                            type="button"
+                            onClick={() => setProfileData(prev => ({ ...prev, open_time: p.open, close_time: p.close }))}
+                            className={`px-2 py-1 text-[10px] font-bold border rounded-none transition-all cursor-pointer ${
+                              profileData.open_time === p.open && profileData.close_time === p.close
+                                ? 'bg-green-600 text-white border-green-700 shadow-xs'
+                                : 'bg-gray-50 hover:bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700'
+                            }`}
+                          >
+                            {p.label} ({p.open}-{p.close})
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                    <div>
-                      <label htmlFor="close_time" className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Jam Tutup</label>
-                      <input type="time" id="close_time" required value={profileData.close_time} onChange={e => setProfileData({...profileData, close_time: e.target.value})} className="mt-1 block w-full rounded-none border border-gray-200 dark:border-gray-700 py-2 px-3 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-800 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors" />
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label htmlFor="open_time" className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Jam Buka (WIB)</label>
+                        <input type="time" id="open_time" required value={profileData.open_time} onChange={e => setProfileData({...profileData, open_time: e.target.value})} className="mt-1 block w-full rounded-none border border-gray-200 dark:border-gray-700 py-2 px-3 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-800 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors" />
+                      </div>
+                      <div>
+                        <label htmlFor="close_time" className="block text-xs font-semibold text-gray-700 dark:text-gray-300">Jam Tutup (WIB)</label>
+                        <input type="time" id="close_time" required value={profileData.close_time} onChange={e => setProfileData({...profileData, close_time: e.target.value})} className="mt-1 block w-full rounded-none border border-gray-200 dark:border-gray-700 py-2 px-3 text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-800 focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors" />
+                      </div>
                     </div>
                   </div>
 

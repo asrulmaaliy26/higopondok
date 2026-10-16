@@ -61,9 +61,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/admin/orders/recap', [\App\Domains\Admin\Controllers\AdminOrderController::class, 'recap']);
         Route::put('/admin/orders/{id}/cancel', [\App\Domains\Admin\Controllers\AdminOrderController::class, 'cancel']);
         Route::put('/admin/orders/{id}/status', [\App\Domains\Admin\Controllers\AdminOrderController::class, 'updateStatus']);
+        Route::put('/admin/orders/{id}/notes', [\App\Domains\Admin\Controllers\AdminOrderController::class, 'updateAdminNotes']);
         Route::post('/admin/orders/{id}/payment-proof', [\App\Domains\Admin\Controllers\AdminOrderController::class, 'uploadPaymentProof']);
         Route::delete('/admin/orders/{id}/proof', [\App\Domains\Admin\Controllers\AdminOrderController::class, 'deleteProof']);
         Route::get('/admin/orders/trash', [\App\Domains\Admin\Controllers\AdminOrderController::class, 'trash']);
+        Route::match(['put', 'post'], '/admin/orders/batch-status', [\App\Domains\Admin\Controllers\AdminOrderController::class, 'batchUpdateStatus']);
+        Route::post('/admin/orders/batch-delete', [\App\Domains\Admin\Controllers\AdminOrderController::class, 'batchDestroy']);
         Route::delete('/admin/orders/{id}', [\App\Domains\Admin\Controllers\AdminOrderController::class, 'destroy']);
         Route::post('/admin/orders/{id}/restore', [\App\Domains\Admin\Controllers\AdminOrderController::class, 'restore']);
         Route::delete('/admin/orders/{id}/force', [\App\Domains\Admin\Controllers\AdminOrderController::class, 'forceDelete']);

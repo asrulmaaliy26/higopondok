@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, Link } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ShoppingCart, Trash2, Plus, Minus, Store, ChevronRight, ChevronLeft, MapPin, AlertCircle, LogIn, X, Ticket, Check, Sparkles } from 'lucide-react';
+import { ShoppingCart, Trash2, Plus, Minus, Store, ChevronRight, ChevronLeft, MapPin, AlertCircle, LogIn, X, Ticket, Check, Sparkles, Search, ChevronDown, User, Phone, Home, GraduationCap, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../lib/axios';
 import { getStorageUrl } from '../../lib/axios';
@@ -11,12 +11,16 @@ import { useAuthStore } from '../../store/authStore';
 import { calculateOrderFees } from '../../config/pricing';
 import { ROLES, getUserRole } from '../../config/roles';
 import AppImage from '../../components/common/AppImage';
+import santriData from '../../data/santri.json';
+
+const uniqueJenjang = [...new Set(santriData.data.filter(r => r.length > 5 && r[4]).map(r => r[4]))].sort();
 
 export default function Keranjang() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const token = useAuthStore(state => state.token);
   const user = useAuthStore(state => state.user);
+  const setUser = useAuthStore(state => state.setUser);
   const { cart, addItem, removeItem, incrementItem, clearCanteen, clearAll, updateItemNote } = useCartStore();
 
   const [orderFor, setOrderFor] = useState(user?.is_teacher ? 'guru' : 'santri');
@@ -35,14 +39,92 @@ export default function Keranjang() {
     user?.santri_room.trim() !== ''
   );
 
-  const [showTeacherSantriModal, setShowTeacherSantriModal] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [santriSearch, setSantriSearch] = useState('');
+  const [isSantriOpen, setIsSantriOpen] = useState(false);
+  const [filterGender, setFilterGender] = useState('');
+  const santriDropdownRef = React.useRef(null);
+
+  const [profileFormData, setProfileFormData] = useState({
+    name: user?.name || '',
+    phone: user?.phone || '',
+    santri_name: user?.santri_name || '',
+    santri_room: user?.santri_room || '',
+    santri_class: user?.santri_class || '',
+    santri_level: user?.santri_level || '',
+    niy: user?.niy || '',
+    teacher_unit: user?.teacher_unit || ''
+  });
+
+  React.useEffect(() => {
+    if (user) {
+      setProfileFormData({
+        name: user?.name || '',
+        phone: user?.phone || '',
+        santri_name: user?.santri_name || '',
+        santri_room: user?.santri_room || '',
+        santri_class: user?.santri_class || '',
+        santri_level: user?.santri_level || '',
+        niy: user?.niy || '',
+        teacher_unit: user?.teacher_unit || ''
+      });
+    }
+  }, [user]);
+
+  React.useEffect(() => {
+    function handleClickOutside(event) {
+      if (santriDropdownRef.current && !santriDropdownRef.current.contains(event.target)) {
+        setIsSantriOpen(false);
+      }
+    }
+    if (isSantriOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [isSantriOpen]);
+
+  const availableKelas = React.useMemo(() => {
+    if (!profileFormData.santri_level) {
+      return [...new Set(santriData.data.filter(r => r.length > 5 && r[5]).map(r => r[5]))].sort();
+    }
+    return [...new Set(santriData.data.filter(r => r.length > 5 && r[4] === profileFormData.santri_level && r[5]).map(r => r[5]))].sort();
+  }, [profileFormData.santri_level]);
+
+  const filteredSantris = React.useMemo(() => {
+    return santriData.data.filter(row => {
+      if (row.length < 6) return false;
+      const nameCol = row[1] || '';
+      const jenjang = row[4] || '';
+      const kelas = row[5] || '';
+      
+      let matchJenjang = profileFormData.santri_level ? jenjang === profileFormData.santri_level : true;
+      let matchKelas = profileFormData.santri_class ? kelas === profileFormData.santri_class : true;
+      let matchGender = true;
+      if (filterGender) {
+        matchGender = nameCol.endsWith(filterGender);
+      }
+      let matchSearch = true;
+      if (santriSearch.trim()) {
+        const q = santriSearch.toLowerCase().trim();
+        const cleanName = nameCol.replace(' Laki-laki', '').replace(' Perempuan', '').toLowerCase();
+        matchSearch = cleanName.includes(q);
+      }
+      return matchJenjang && matchKelas && matchGender && matchSearch;
+    });
+  }, [profileFormData.santri_level, profileFormData.santri_class, filterGender, santriSearch]);
 
   const handleToggleOrderFor = (target) => {
-    // Jika guru ingin memesan untuk santri tapi belum isi profil santri
+    // Jika guru ingin memesan untuk santri tapi belum isi profil santri, langsung buka modal form di layar checkout
     if (target === 'santri' && user?.is_teacher) {
       if (!hasSantriProfile) {
-        setShowTeacherSantriModal(true);
-        toast.error('Silakan lengkapi data santri di menu Profil terlebih dahulu.');
+        setOrderFor('santri');
+        setShowProfileModal(true);
+        toast('Silakan lengkapi data santri untuk pengiriman.', { icon: '📝' });
         return;
       }
     }
@@ -56,7 +138,6 @@ export default function Keranjang() {
   };
   const [canteenNotes, setCanteenNotes] = useState({}); // canteenId -> general note
   const [isProcessing, setIsProcessing] = useState(false);
-  const [showProfileAlert, setShowProfileAlert] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [selectedVoucher, setSelectedVoucher] = useState(null);
   const [showVoucherDrawer, setShowVoucherDrawer] = useState(false);
@@ -129,31 +210,15 @@ export default function Keranjang() {
 
   const finalLocation = deliveryLocation.trim();
 
-  const handleCheckoutAll = async () => {
-    // 1. Validasi login
-    if (!token || !user) {
-      setShowLoginModal(true);
-      return;
-    }
-
-    // 2. Validasi profil (Guru/Staff tidak wajib mengisi santri jika memesan untuk diri sendiri)
-    if (user?.is_teacher && orderFor === 'guru') {
-      if (!user?.phone || !user?.niy || !user?.teacher_unit) {
-        setShowProfileAlert(true);
-        return;
-      }
-    } else {
-      if (!user?.phone || !user?.santri_name || !user?.santri_room || !user?.santri_class || !user?.santri_level) {
-        setShowProfileAlert(true);
-        return;
-      }
-    }
-    if (!finalLocation) {
+  // Eksekusi pesanan ke backend API
+  const executeOrderCheckout = async (loc, activeUser = user) => {
+    const locFinal = (loc || deliveryLocation || '').trim();
+    if (!locFinal) {
       toast.error('Silakan pilih atau ketik lokasi pengiriman Anda terlebih dahulu sebelum Checkout.');
       return;
     }
 
-    // 3. Validasi Toko Tutup (Wali tidak bisa membuat pesanan ketika toko tutup)
+    // Validasi Toko Tutup (Wali tidak bisa membuat pesanan ketika toko tutup)
     const closedCanteens = canteenSummaries.filter(({ canteen }) => !canteen.is_open);
     if (closedCanteens.length > 0) {
       const names = closedCanteens.map(({ canteen }) => canteen.name).join(', ');
@@ -165,7 +230,7 @@ export default function Keranjang() {
 
     try {
       const payload = {
-        delivery_location: finalLocation,
+        delivery_location: locFinal,
         order_for: orderFor,
         voucher_id: selectedVoucher ? selectedVoucher.id : null,
         canteens: canteenSummaries.map(({ canteen, itemList }) => ({
@@ -207,6 +272,102 @@ export default function Keranjang() {
       toast.error(errorDetail || errorMessage || 'Gagal membuat pesanan. Silakan coba lagi.');
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const handleCheckoutAll = async () => {
+    // 1. Validasi login
+    if (!token || !user) {
+      setShowLoginModal(true);
+      return;
+    }
+
+    // 2. Validasi profil — jika data belum lengkap, buka form modal popup langsung di sini (tanpa keluar halaman)
+    if (user?.is_teacher && orderFor === 'guru') {
+      if (!user?.phone || !user?.niy || !user?.teacher_unit) {
+        setShowProfileModal(true);
+        return;
+      }
+    } else {
+      if (!user?.phone || !user?.santri_name || !user?.santri_room || !user?.santri_class || !user?.santri_level) {
+        setShowProfileModal(true);
+        return;
+      }
+    }
+
+    await executeOrderCheckout(finalLocation, user);
+  };
+
+  // Simpan profil langsung dari modal di keranjang lalu otomatis checkout
+  const handleSaveProfileAndCheckout = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+
+    let p = (profileFormData.phone || '').trim().replace(/\D/g, '');
+    if (p.startsWith('62')) p = p.substring(2);
+    if (p.startsWith('0')) p = p.substring(1);
+
+    if (!p || p.length < 8) {
+      toast.error('Silakan isi nomor WhatsApp aktif yang valid.');
+      return;
+    }
+    const finalPhone = '62' + p;
+
+    const isOrderingForTeacher = user?.is_teacher && orderFor === 'guru';
+    if (!isOrderingForTeacher) {
+      if (!profileFormData.santri_name?.trim()) {
+        toast.error('Silakan pilih nama santri.');
+        return;
+      }
+      if (!profileFormData.santri_room?.trim()) {
+        toast.error('Silakan isi nama asrama / kamar santri.');
+        return;
+      }
+      if (!profileFormData.santri_level) {
+        toast.error('Silakan pilih jenjang pendidikan santri.');
+        return;
+      }
+      if (!profileFormData.santri_class) {
+        toast.error('Silakan pilih kelas santri.');
+        return;
+      }
+    }
+
+    setIsSavingProfile(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('_method', 'PUT');
+      if (profileFormData.name && profileFormData.name.trim()) {
+        formData.append('name', profileFormData.name.trim());
+      }
+      formData.append('phone', finalPhone);
+
+      if (!isOrderingForTeacher) {
+        formData.append('santri_name', profileFormData.santri_name.trim());
+        formData.append('santri_room', profileFormData.santri_room.trim());
+        formData.append('santri_class', profileFormData.santri_class);
+        formData.append('santri_level', profileFormData.santri_level);
+      }
+
+      const res = await api.post('/me', formData);
+      const updatedUser = res.data.user;
+      setUser(updatedUser);
+      toast.success('Profil pengiriman berhasil disimpan!');
+      setShowProfileModal(false);
+
+      const targetLoc = isOrderingForTeacher
+        ? `Ruang Guru / Kantor ${updatedUser?.teacher_unit || 'Yayasan'}`
+        : (updatedUser?.santri_room || profileFormData.santri_room.trim());
+
+      setDeliveryLocation(targetLoc);
+
+      // Otomatis lanjutkan proses checkout langsung tanpa perlu klik ulang!
+      await executeOrderCheckout(targetLoc, updatedUser);
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Gagal menyimpan profil pengiriman.';
+      toast.error(msg);
+    } finally {
+      setIsSavingProfile(false);
     }
   };
 
@@ -735,87 +896,305 @@ export default function Keranjang() {
         document.body
       )}
 
-      {/* Profil Belum Lengkap Modal */}
-      {showProfileAlert && createPortal(
-        <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-none w-full max-w-sm p-5 text-center my-auto shadow-2xl animate-in zoom-in-95 duration-150">
-            <div className="w-12 h-12 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-none flex items-center justify-center mx-auto mb-3">
-              <AlertCircle className="w-6 h-6 text-amber-600 dark:text-amber-500" />
-            </div>
-            <h3 className="text-base font-bold text-gray-900 dark:text-white mb-1.5">Profil Belum Lengkap</h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-5 leading-relaxed">
-              {user?.is_teacher && orderFor === 'guru'
-                ? 'Silakan lengkapi No. WhatsApp, NIY, dan Unit Yayasan di halaman Profil terlebih dahulu sebelum melakukan Checkout.'
-                : 'Silakan isi identitas santri dan nomor telepon (WhatsApp) di halaman Profil terlebih dahulu sebelum melakukan Checkout.'}
-            </p>
-            <div className="flex gap-2">
-              <button 
-                onClick={() => setShowProfileAlert(false)}
-                className="flex-1 py-2 rounded-none font-bold text-xs text-gray-600 bg-gray-100 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-200 transition-colors border border-gray-200 dark:border-gray-700"
-              >
-                Nanti Saja
-              </button>
-              <button 
-                onClick={() => {
-                  setShowProfileAlert(false);
-                  navigate({ to: '/dashboard/profile' });
-                }}
-                className="flex-1 py-2 rounded-none font-bold text-xs text-white bg-green-600 hover:bg-green-700 transition-colors"
-              >
-                Ke Profil
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
-
-      {/* Modal Wajib Isi Data Santri di Profil (Khusus Akun Guru) */}
-      {showTeacherSantriModal && createPortal(
-        <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-none w-full max-w-sm p-4 sm:p-5 text-center my-auto shadow-2xl animate-in zoom-in-95 duration-150">
-            <div className="w-12 h-12 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-none flex items-center justify-center mx-auto mb-3 text-2xl">
-              👦
-            </div>
-            
-            <h3 className="text-sm sm:text-base font-black text-gray-900 dark:text-white uppercase tracking-wide mb-1.5">
-              Isi Data Santri di Profil Dulu
-            </h3>
-            
-            <p className="text-xs text-gray-600 dark:text-gray-300 mb-3.5 leading-relaxed">
-              Akun Guru/Staff Anda saat ini belum memiliki data santri. Silakan lengkapi data santri (nama dan kamar) di menu <strong className="text-green-600 dark:text-green-400">Profil</strong> terlebih dahulu jika ingin memesankan makanan untuk santri.
-            </p>
-
-            <div className="bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/60 p-2.5 rounded-none mb-4 text-left text-[11px] space-y-1">
-              <div className="flex justify-between items-center text-gray-600 dark:text-gray-400">
-                <span>Akun Guru:</span>
-                <span className="font-bold text-gray-900 dark:text-gray-100">{user?.name} (Unit {user?.teacher_unit || 'Yayasan'})</span>
+      {/* Modal Popup Lengkapi Profil Langsung di Layar Checkout (Flat Sharp High Density) */}
+      {showProfileModal && createPortal(
+        <div className="fixed inset-0 z-[110] bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-none w-full max-w-md shadow-2xl my-auto animate-in zoom-in-95 duration-150 flex flex-col max-h-[92vh]">
+            {/* Header */}
+            <div className="p-3.5 sm:p-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between shrink-0 bg-gray-50 dark:bg-gray-950">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-green-50 dark:bg-green-950/50 border border-green-200 dark:border-green-800 rounded-none flex items-center justify-center text-green-600 dark:text-green-400">
+                  <User className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900 dark:text-white leading-tight">
+                    Lengkapi Profil Pengiriman
+                  </h3>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                    Lengkapi data sekali saja untuk checkout langsung tanpa keluar
+                  </p>
+                </div>
               </div>
-              <div className="flex justify-between items-center text-amber-700 dark:text-amber-400 font-bold">
-                <span>Data Santri:</span>
-                <span className="bg-amber-100 dark:bg-amber-900/60 px-1 py-0.2 rounded-none">⚠️ Belum Terhubung</span>
-              </div>
+              <button 
+                type="button" 
+                onClick={() => setShowProfileModal(false)}
+                className="w-7 h-7 flex items-center justify-center rounded-none text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
 
-            <div className="flex gap-2">
-              <button 
-                type="button"
-                onClick={() => setShowTeacherSantriModal(false)}
-                className="flex-1 py-2 rounded-none font-bold text-xs text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors border border-gray-200 dark:border-gray-700 cursor-pointer"
-              >
-                Tetap Untuk Guru
-              </button>
-              <button 
-                type="button"
-                onClick={() => {
-                  setShowTeacherSantriModal(false);
-                  navigate({ to: token ? '/dashboard/profile?tab=santri' : '/profile?tab=santri' });
-                }}
-                className="flex-1 py-2 rounded-none font-black text-xs text-white bg-green-600 hover:bg-green-700 active:bg-green-800 transition-colors uppercase tracking-wider cursor-pointer shadow-xs"
-              >
-                Ke Profil
-              </button>
-            </div>
+            {/* Form Body */}
+            <form onSubmit={handleSaveProfileAndCheckout} className="p-4 sm:p-5 overflow-y-auto space-y-3.5 flex-1 text-left">
+              {/* No. WhatsApp (Wajib) */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-800 dark:text-gray-200 mb-1">
+                  No. WhatsApp Aktif <span className="text-red-500">*</span>
+                </label>
+                <div className="flex items-center border border-gray-300 dark:border-gray-700 rounded-none bg-white dark:bg-gray-800 focus-within:ring-2 focus-within:ring-green-500">
+                  <span className="px-2.5 py-2 text-xs font-bold text-gray-500 dark:text-gray-400 border-r border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 select-none">
+                    +62
+                  </span>
+                  <input
+                    type="tel"
+                    required
+                    placeholder="Contoh: 81234567890"
+                    value={profileFormData.phone ? (profileFormData.phone.startsWith('62') ? profileFormData.phone.slice(2) : (profileFormData.phone.startsWith('0') ? profileFormData.phone.slice(1) : profileFormData.phone)) : ''}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '');
+                      setProfileFormData(prev => ({ ...prev, phone: val.startsWith('0') ? val.substring(1) : val }));
+                    }}
+                    className="flex-1 p-2 text-xs text-gray-900 dark:text-white bg-transparent outline-none"
+                  />
+                </div>
+                <p className="text-[10px] text-gray-400 mt-1">
+                  Digunakan toko dan kurir untuk mengonfirmasi pengantaran makanan.
+                </p>
+              </div>
+
+              {/* Data Santri (jika bukan akun guru yang memesan untuk guru) */}
+              {(!user?.is_teacher || orderFor === 'santri') ? (
+                <div className="space-y-3 pt-2 border-t border-gray-100 dark:border-gray-800">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
+                      <GraduationCap className="w-3.5 h-3.5 text-green-600" />
+                      Identitas Santri Penerima
+                    </span>
+                    <span className="text-[10px] text-green-600 dark:text-green-400 font-semibold bg-green-50 dark:bg-green-950/40 px-1.5 py-0.5 border border-green-200 dark:border-green-800">
+                      Wajib Diisi
+                    </span>
+                  </div>
+
+                  {/* Filter Jenjang & Kelas */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[11px] font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Jenjang <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={profileFormData.santri_level}
+                        onChange={(e) => {
+                          setProfileFormData(prev => ({
+                            ...prev,
+                            santri_level: e.target.value,
+                            santri_class: '',
+                            santri_name: '',
+                            santri_room: ''
+                          }));
+                        }}
+                        className="w-full rounded-none border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white p-2 text-xs focus:ring-2 focus:ring-green-500 outline-none"
+                      >
+                        <option value="">-- Pilih Jenjang --</option>
+                        {uniqueJenjang.map(j => <option key={j} value={j}>{j}</option>)}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Kelas <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={profileFormData.santri_class}
+                        onChange={(e) => {
+                          setProfileFormData(prev => ({
+                            ...prev,
+                            santri_class: e.target.value,
+                            santri_name: '',
+                            santri_room: ''
+                          }));
+                        }}
+                        className="w-full rounded-none border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white p-2 text-xs focus:ring-2 focus:ring-green-500 outline-none"
+                      >
+                        <option value="">-- Pilih Kelas --</option>
+                        {availableKelas.map(k => <option key={k} value={k}>{k}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Jenis Kelamin Filter */}
+                  <div>
+                    <label className="block text-[11px] font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Filter Jenis Kelamin (Opsional)
+                    </label>
+                    <select
+                      value={filterGender}
+                      onChange={(e) => setFilterGender(e.target.value)}
+                      className="w-full rounded-none border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white p-2 text-xs focus:ring-2 focus:ring-green-500 outline-none"
+                    >
+                      <option value="">Semua Santri</option>
+                      <option value="Laki-laki">Santri Putra (Laki-laki)</option>
+                      <option value="Perempuan">Santri Putri (Perempuan)</option>
+                    </select>
+                  </div>
+
+                  {/* Dropdown Santri Autocomplete */}
+                  <div className="relative" ref={santriDropdownRef}>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[11px] font-medium text-gray-700 dark:text-gray-300">
+                        Pilih Nama Santri <span className="text-red-500">*</span>
+                      </label>
+                      <span className="text-[10px] text-gray-400">
+                        {filteredSantris.length} santri ditemukan
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsSantriOpen(!isSantriOpen);
+                        setSantriSearch('');
+                      }}
+                      className={`w-full text-left rounded-none border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white p-2 text-xs flex items-center justify-between focus:ring-2 focus:ring-green-500 outline-none ${
+                        isSantriOpen ? 'border-green-500 ring-1 ring-green-500' : ''
+                      }`}
+                    >
+                      <span className={`truncate pr-2 ${profileFormData.santri_name ? 'font-semibold text-gray-900 dark:text-white' : 'text-gray-400'}`}>
+                        {profileFormData.santri_name 
+                          ? `${profileFormData.santri_name} ${profileFormData.santri_level || profileFormData.santri_class ? `(${[profileFormData.santri_level, profileFormData.santri_class].filter(Boolean).join(' - ')})` : ''}` 
+                          : '-- Ketuk untuk Cari / Pilih Santri --'}
+                      </span>
+                      <ChevronDown className={`w-3.5 h-3.5 text-gray-400 shrink-0 transition-transform ${isSantriOpen ? 'rotate-180 text-green-600' : ''}`} />
+                    </button>
+
+                    {/* Panel Pencarian Santri */}
+                    {isSantriOpen && (
+                      <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-green-500 dark:border-green-600 z-50 shadow-2xl max-h-56 flex flex-col">
+                        <div className="p-2 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/80 flex items-center gap-1.5 shrink-0">
+                          <Search className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                          <input
+                            type="text"
+                            autoFocus
+                            placeholder="Ketik nama santri..."
+                            value={santriSearch}
+                            onChange={(e) => setSantriSearch(e.target.value)}
+                            className="w-full bg-transparent text-xs text-gray-900 dark:text-white outline-none placeholder:text-gray-400"
+                          />
+                          {santriSearch && (
+                            <button
+                              type="button"
+                              onClick={() => setSantriSearch('')}
+                              className="text-gray-400 hover:text-gray-600 p-0.5"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700 flex-1">
+                          {filteredSantris.length === 0 ? (
+                            <div className="p-3 text-[11px] text-gray-500 dark:text-gray-400 text-center">
+                              Santri tidak ditemukan {santriSearch ? `untuk "${santriSearch}"` : ''}
+                            </div>
+                          ) : (
+                            filteredSantris.slice(0, 50).map((row, i) => {
+                              const rawName = row[1] || '';
+                              const cleanName = rawName.replace(' Laki-laki', '').replace(' Perempuan', '').trim();
+                              const jenjang = row[4] || '';
+                              const kelas = row[5] || '';
+                              const info = [jenjang, kelas].filter(Boolean).join(' - ');
+                              const isSelected = profileFormData.santri_name === cleanName;
+
+                              return (
+                                <button
+                                  type="button"
+                                  key={i}
+                                  onClick={() => {
+                                    setProfileFormData(prev => ({
+                                      ...prev,
+                                      santri_name: cleanName,
+                                      santri_level: row[4] || prev.santri_level,
+                                      santri_class: row[5] || prev.santri_class,
+                                      santri_room: row[10] || prev.santri_room || ''
+                                    }));
+                                    setIsSantriOpen(false);
+                                    setSantriSearch('');
+                                  }}
+                                  className={`w-full text-left p-2 text-xs flex items-center justify-between hover:bg-green-50 dark:hover:bg-green-950/30 transition-colors ${
+                                    isSelected 
+                                      ? 'bg-green-50 dark:bg-green-950/50 text-green-700 dark:text-green-300 font-bold' 
+                                      : 'text-gray-800 dark:text-gray-200'
+                                  }`}
+                                >
+                                  <div className="truncate pr-2">
+                                    <span className="font-semibold text-gray-900 dark:text-white">{cleanName}</span>
+                                    {info && <span className="ml-1 text-[10px] text-gray-400">({info})</span>}
+                                  </div>
+                                  {isSelected && <Check className="w-3.5 h-3.5 text-green-600 shrink-0" />}
+                                </button>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Kamar / Asrama Santri */}
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-800 dark:text-gray-200 mb-1">
+                      Asrama / Kamar Santri <span className="text-red-500">*</span>
+                    </label>
+                    <div className="flex items-center border border-gray-300 dark:border-gray-700 rounded-none bg-white dark:bg-gray-800 focus-within:ring-2 focus-within:ring-green-500">
+                      <span className="p-2 text-gray-400">
+                        <Home className="w-3.5 h-3.5" />
+                      </span>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Contoh: Asrama Abu Bakar 02 / Kamar Al-Ghazali 05"
+                        value={profileFormData.santri_room}
+                        onChange={(e) => setProfileFormData(prev => ({ ...prev, santri_room: e.target.value }))}
+                        className="flex-1 p-2 text-xs text-gray-900 dark:text-white bg-transparent outline-none"
+                      />
+                    </div>
+                    <p className="text-[10px] text-gray-400 mt-1">
+                      Lokasi tujuan pengantaran kurir pondok.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                /* Khusus Akun Guru memesan untuk Guru */
+                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-none space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-900 dark:text-emerald-200">
+                    <GraduationCap className="w-4 h-4 text-emerald-600" />
+                    <span>Pesanan Khusus Guru / Staff Yayasan</span>
+                  </div>
+                  <div className="text-[11px] text-emerald-800 dark:text-emerald-300 space-y-1">
+                    <p>Unit: <strong className="text-gray-900 dark:text-white">{user?.teacher_unit || 'Yayasan'}</strong></p>
+                    <p>Lokasi Pengantaran: <strong className="text-gray-900 dark:text-white">{deliveryLocation}</strong></p>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="pt-3 border-t border-gray-200 dark:border-gray-800 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowProfileModal(false)}
+                  disabled={isSavingProfile}
+                  className="flex-1 py-2.5 rounded-none font-bold text-xs text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors border border-gray-200 dark:border-gray-700 cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingProfile}
+                  className="flex-[2] py-2.5 rounded-none font-black text-xs text-white bg-green-600 hover:bg-green-700 active:bg-green-800 transition-colors flex items-center justify-center shadow-xs disabled:opacity-70 cursor-pointer"
+                >
+                  {isSavingProfile ? (
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                      <span>Menyimpan & Melanjutkan...</span>
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1.5">
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Simpan & Lanjutkan Checkout</span>
+                    </span>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>,
         document.body

@@ -600,7 +600,7 @@ export default function TokoSaya() {
                   {canteen?.is_open ? 'Buka' : 'Tutup'}
                 </span>
                 <span className="text-[11px] font-medium text-gray-600 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded-none flex items-center gap-1 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300">
-                  <Clock className="w-3 h-3" /> {canteen?.open_time?.substring(0,5) || '09:00'} - {canteen?.close_time?.substring(0,5) || '17:00'}
+                  <Clock className="w-3 h-3" /> {canteen?.open_time?.substring(0,5) || '06:00'} - {canteen?.close_time?.substring(0,5) || '21:00'} WIB
                 </span>
                 <button 
                   onClick={() => navigate({ to: '/dashboard/toko-saya/pesanan' })}

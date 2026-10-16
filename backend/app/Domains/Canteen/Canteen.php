@@ -105,15 +105,23 @@ class Canteen extends Model
         if ($this->is_closed_today) return false;
         
         $now = now('Asia/Jakarta')->format('H:i:s');
-        $open = $this->open_time ?? '09:00:00';
-        $close = $this->close_time ?? '17:00:00';
+        $rawOpen = $this->open_time ?? '06:00:00';
+        $rawClose = $this->close_time ?? '21:00:00';
+
+        $open = strlen($rawOpen) === 5 ? $rawOpen . ':00' : $rawOpen;
+        $close = strlen($rawClose) === 5 ? $rawClose . ':00' : $rawClose;
+
+        // Buka 24 Jam Penuh (contoh: 00:00 s/d 23:59 atau 00:00 s/d 00:00)
+        if ($open === '00:00:00' && in_array($close, ['23:59:00', '23:59:59', '24:00:00', '00:00:00'])) {
+            return true;
+        }
 
         if ($open === $close) return false;
 
         if ($open <= $close) {
             return $now >= $open && $now <= $close;
         } else {
-            // Handles crossing midnight (e.g. open 18:00, close 02:00)
+            // Handles crossing midnight (e.g. open 16:00, close 02:00)
             return $now >= $open || $now <= $close;
         }
     }
@@ -200,6 +208,9 @@ class Canteen extends Model
                            $q3->whereTime('open_time', '<=', $timeNow)
                               ->orWhereTime('close_time', '>=', $timeNow);
                        });
+                })->orWhere(function($q4) {
+                    $q4->where('open_time', '00:00:00')
+                       ->whereIn('close_time', ['23:59:59', '23:59:00', '24:00:00', '00:00:00']);
                 });
             });
     }

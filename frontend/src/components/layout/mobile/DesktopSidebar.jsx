@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from '@tanstack/react-router';
+import { Clock } from 'lucide-react';
 import ThemeToggle from '../../ui/ThemeToggle';
 import SyncDbButton from '../../common/SyncDbButton';
 import { useActiveOrdersCount } from '../../../hooks/useActiveOrdersCount';
@@ -15,6 +16,32 @@ export default function DesktopSidebar({ sidebarMenus }) {
   const totalCartItems = role === ROLES.USER ? getTotalItems() : 0;
   const activeOrdersCount = useActiveOrdersCount();
 
+  const [currentTime, setCurrentTime] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const formatTime = (date) => {
+    const h = String(date.getHours()).padStart(2, '0');
+    const m = String(date.getMinutes()).padStart(2, '0');
+    const s = String(date.getSeconds()).padStart(2, '0');
+    return `${h}:${m}:${s}`;
+  };
+
+  const getTimezoneAbbr = () => {
+    const offset = -new Date().getTimezoneOffset() / 60;
+    if (offset === 7) return 'WIB';
+    if (offset === 8) return 'WITA';
+    if (offset === 9) return 'WIT';
+    return '';
+  };
+
+  const tzAbbr = getTimezoneAbbr();
+
   return (
     <aside className="hidden lg:flex flex-col inset-y-0 left-0 z-50 w-72 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 shrink-0">
       <div className="flex h-16 shrink-0 items-center justify-between px-6 border-b border-gray-200 dark:border-gray-700">
@@ -27,10 +54,20 @@ export default function DesktopSidebar({ sidebarMenus }) {
       </div>
 
       <div className="px-4 py-6 overflow-y-auto flex-1">
-        <div className="mb-6 px-4">
+        <div className="mb-6 px-4 flex items-center justify-between gap-2">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
             Menu Utama
           </p>
+          <div 
+            title={currentTime.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+            className="flex items-center gap-1.5 px-2 py-0.5 bg-gray-100 dark:bg-gray-800/80 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-none font-mono text-[11px] font-semibold tracking-wide select-none shadow-xs"
+          >
+            <Clock className="w-3 h-3 text-green-600 dark:text-green-400 shrink-0" />
+            <span>{formatTime(currentTime)}</span>
+            {tzAbbr && (
+              <span className="text-[9px] text-green-600 dark:text-green-400 font-sans font-bold">{tzAbbr}</span>
+            )}
+          </div>
         </div>
         <nav className="space-y-1">
           {sidebarMenus.map((item) => {

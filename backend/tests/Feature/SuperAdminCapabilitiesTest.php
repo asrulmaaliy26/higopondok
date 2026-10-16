@@ -62,14 +62,16 @@ class SuperAdminCapabilitiesTest extends TestCase
                 'status' => 'approved',
                 'balance' => 50000,
                 'admin_debt' => 10000,
-                'open_time' => '07:00:00',
-                'close_time' => '21:00:00',
+                'open_time' => '00:00:00',
+                'close_time' => '23:59:59',
             ]
         );
         $this->canteen->update([
             'balance' => 50000,
             'admin_debt' => 10000,
             'status' => 'approved',
+            'open_time' => '00:00:00',
+            'close_time' => '23:59:59',
         ]);
 
         // 4. Kurir
