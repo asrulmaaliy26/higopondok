@@ -462,7 +462,7 @@ export default function PesananToko({ allStores = false, isAdminView = false }) 
     return map;
   }, []);
 
-  const getSantriMeta = React.useCallback((orderUser, fallbackLocation, orderFor) => {
+  const getSantriMeta = React.useCallback((orderUser, fallbackLocation, orderFor, order = null) => {
     if (orderFor === 'guru' || (!orderUser?.santri_name && orderUser?.is_teacher)) {
       return {
         santriName: orderUser?.name || 'Guru / Staff',
@@ -473,11 +473,11 @@ export default function PesananToko({ allStores = false, isAdminView = false }) 
         isTeacher: true
       };
     }
-    const santriName = orderUser?.santri_name || orderUser?.name || 'Pembeli';
+    const santriName = order?.recipient_santri_name || orderUser?.santri_name || orderUser?.name || 'Pembeli';
     const waliName = orderUser?.name || 'Wali';
-    let santriClass = orderUser?.santri_class || '';
-    let santriLevel = orderUser?.santri_level || '';
-    let santriRoom = orderUser?.santri_room || fallbackLocation || '';
+    let santriClass = order?.recipient_santri_class || orderUser?.santri_class || '';
+    let santriLevel = order?.recipient_santri_level || orderUser?.santri_level || '';
+    let santriRoom = order?.recipient_santri_room || orderUser?.santri_room || fallbackLocation || '';
 
     if (santriName) {
       const sName = santriName.toLowerCase().trim();
@@ -536,7 +536,7 @@ export default function PesananToko({ allStores = false, isAdminView = false }) 
         const q = searchQuery.toLowerCase();
         const idMatch = order.id?.toString().includes(q);
         const userMatch = order.user?.name?.toLowerCase().includes(q);
-        const santriMatch = order.user?.santri_name?.toLowerCase().includes(q);
+        const santriMatch = (order.recipient_santri_name || order.user?.santri_name)?.toLowerCase().includes(q) || (order.recipient_santri_room || order.user?.santri_room)?.toLowerCase().includes(q);
         const canteenMatch = order.canteen?.name?.toLowerCase().includes(q);
         const canteenOwnerMatch = order.canteen?.user?.name?.toLowerCase().includes(q);
         const notesMatch = order.custom_notes?.toLowerCase().includes(q);
@@ -888,7 +888,7 @@ export default function PesananToko({ allStores = false, isAdminView = false }) 
 
   const buildCanteenWaMessage = (order, type = 'detail') => {
     if (!order) return '';
-    const meta = getSantriMeta(order.user, order.delivery_location, order.order_for);
+    const meta = getSantriMeta(order.user, order.delivery_location, order.order_for, order);
     const isTeacher = meta.isTeacher;
     const canteenName = order.canteen?.name || 'Kantin';
     const santriName = meta.santriName;
@@ -1240,7 +1240,7 @@ ${itemsListText}
     const isTeacher = order.order_for === 'guru' || (order.is_priority && !order.user?.santri_name);
     const isPriority = order.is_priority || isTeacher;
 
-    const { santriName, waliName, santriClass, santriLevel, santriRoom } = getSantriMeta(order.user, order.delivery_location, order.order_for);
+    const { santriName, waliName, santriClass, santriLevel, santriRoom } = getSantriMeta(order.user, order.delivery_location, order.order_for, order);
 
     return (
       <div 
@@ -1713,7 +1713,7 @@ ${itemsListText}
     const isWaiting = group.payment_status === 'waiting_confirmation';
 
     const pOrder = group.primaryOrder;
-    const { santriName, waliName, santriClass, santriLevel, santriRoom } = getSantriMeta(pOrder.user, pOrder.delivery_location || group.delivery_location, pOrder.order_for);
+    const { santriName, waliName, santriClass, santriLevel, santriRoom } = getSantriMeta(pOrder.user, pOrder.delivery_location || group.delivery_location, pOrder.order_for, pOrder);
 
     const allPaymentProofs = Array.from(new Set(
       group.orders.flatMap(o => {
@@ -4636,7 +4636,7 @@ ${itemsListText}
                   <span className="text-gray-400 text-[10px] block">Santri / Penerima:</span>
                   <span className="font-bold text-gray-900 dark:text-white truncate block">
                     {(() => {
-                      const m = getSantriMeta(waModalOrder.user, waModalOrder.delivery_location, waModalOrder.order_for);
+                      const m = getSantriMeta(waModalOrder.user, waModalOrder.delivery_location, waModalOrder.order_for, waModalOrder);
                       if (m.isTeacher) return `🎓 ${m.santriName} ${waModalOrder.user?.teacher_unit ? `(${waModalOrder.user.teacher_unit})` : ''}`;
                       const lvl = m.santriLevel || waModalOrder.user?.santri_level || '';
                       let c = m.santriClass || waModalOrder.user?.santri_class || '';

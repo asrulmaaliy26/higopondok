@@ -498,9 +498,10 @@ export default function Pembayaran() {
   };
 
   const buildCourierWAText = (group) => {
+    const firstOrder = group.orders[0];
     const isTeacher = group.orders.some(o => o.order_for === 'guru');
-    const santriName = isTeacher ? `Guru / Staff (${user?.name})` : (user?.santri_name || user?.name || '-');
-    let santriRoom = group.delivery_location || (isTeacher ? `Ruang Guru / Kantor ${user?.teacher_unit || ''}` : user?.santri_room || '');
+    const santriName = isTeacher ? `Guru / Staff (${user?.name})` : (firstOrder?.recipient_santri_name || user?.santri_name || user?.name || '-');
+    let santriRoom = firstOrder?.recipient_santri_room || group.delivery_location || (isTeacher ? `Ruang Guru / Kantor ${user?.teacher_unit || ''}` : user?.santri_room || '');
 
     let text = `Assalamu'alaikum Warahmatullahi Wabarakatuh, Kurir Higo Pondok.\n`;
     text += `Saya ingin konfirmasi pengiriman pesanan saya${isTeacher ? ' (⚡ Pesanan Guru / Staff - Prioritas)' : ''}:\n`;
@@ -520,10 +521,10 @@ export default function Pembayaran() {
       ? Math.max(0, parseFloat(order.total_price) - parseFloat(order.delivery_fee || 0) - parseFloat(order.admin_fee || 0))
       : (order.items?.reduce((sum, item) => sum + parseFloat(item.subtotal), 0) || 0);
 
-    const santriName = user?.santri_name || user?.name || '-';
-    let santriClass = user?.santri_class || '';
-    let santriLevel = user?.santri_level || '';
-    let santriRoom = user?.santri_room || order.delivery_location || '';
+    const santriName = order.recipient_santri_name || user?.santri_name || user?.name || '-';
+    let santriClass = order.recipient_santri_class || user?.santri_class || '';
+    let santriLevel = order.recipient_santri_level || user?.santri_level || '';
+    let santriRoom = order.recipient_santri_room || user?.santri_room || order.delivery_location || '';
 
     if (santriName && santriData?.data) {
       const sName = santriName.toLowerCase().trim();
@@ -573,11 +574,12 @@ export default function Pembayaran() {
     if (!ordersList || ordersList.length === 0) return '';
     if (ordersList.length === 1) return buildOrderWAText(ordersList[0]);
 
+    const firstOrder = ordersList[0];
     const isTeacher = ordersList.some(o => o.order_for === 'guru');
-    const santriName = isTeacher ? `Guru / Staff (${user?.name})` : (user?.santri_name || user?.name || '-');
-    let santriClass = user?.santri_class || '';
-    let santriLevel = user?.santri_level || '';
-    let santriRoom = ordersList[0].delivery_location || (isTeacher ? `Ruang Guru / Kantor ${user?.teacher_unit || ''}` : user?.santri_room || '');
+    const santriName = isTeacher ? `Guru / Staff (${user?.name})` : (firstOrder?.recipient_santri_name || user?.santri_name || user?.name || '-');
+    let santriClass = firstOrder?.recipient_santri_class || user?.santri_class || '';
+    let santriLevel = firstOrder?.recipient_santri_level || user?.santri_level || '';
+    let santriRoom = firstOrder?.recipient_santri_room || ordersList[0].delivery_location || (isTeacher ? `Ruang Guru / Kantor ${user?.teacher_unit || ''}` : user?.santri_room || '');
 
     if (!isTeacher && santriName && santriData?.data) {
       const sName = santriName.toLowerCase().trim();
@@ -917,13 +919,21 @@ export default function Pembayaran() {
                         <span>{new Date(group.created_at).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' })}</span>
                       </div>
 
-                      {/* Location Chip */}
+                      {/* Location & Santri Chip */}
+                      {singleOrder?.recipient_santri_name && (
+                        <div className="flex items-center gap-1 mt-1 text-[10px] text-gray-600 dark:text-gray-300">
+                          <span>👤</span>
+                          <span className="font-bold text-gray-800 dark:text-gray-200">
+                            {singleOrder.recipient_santri_name}
+                          </span>
+                        </div>
+                      )}
                       {group.delivery_location && (
                         <div className="flex items-center gap-1 mt-1 text-[10px] text-gray-500">
                           <span>📍</span>
                           <span>{isTeacherGroup ? 'Ruang Guru:' : 'Kamar:'}</span>
                           <span className="font-mono font-bold text-gray-800 dark:text-gray-200 px-1 py-0.2 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
-                            {group.delivery_location}
+                            {singleOrder?.recipient_santri_room || group.delivery_location}
                           </span>
                         </div>
                       )}

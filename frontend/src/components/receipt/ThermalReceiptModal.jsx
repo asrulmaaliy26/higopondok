@@ -62,14 +62,14 @@ export const getSantriReceiptInfo = (user, order = null) => {
     };
   }
 
-  // Prioritas nama santri asli dari profil user atau orderan
-  const rawSantriName = targetUser?.santri_name || order?.santri_name || targetUser?.name || order?.customer_name;
+  // Prioritas nama santri asli dari snapshot pesanan, profil user atau orderan
+  const rawSantriName = order?.recipient_santri_name || targetUser?.santri_name || order?.santri_name || targetUser?.name || order?.customer_name;
   const santriName = (rawSantriName && rawSantriName.trim() !== '' && rawSantriName.trim() !== '-')
     ? rawSantriName.trim()
     : (targetUser?.name || '-');
-  let santriClass = targetUser?.santri_class || order?.santri_class || '';
-  let santriLevel = targetUser?.santri_level || order?.santri_level || '';
-  let santriRoom = targetUser?.santri_room || order?.santri_room || order?.delivery_location || '-';
+  let santriClass = order?.recipient_santri_class || targetUser?.santri_class || order?.santri_class || '';
+  let santriLevel = order?.recipient_santri_level || targetUser?.santri_level || order?.santri_level || '';
+  let santriRoom = order?.recipient_santri_room || targetUser?.santri_room || order?.santri_room || order?.delivery_location || '-';
 
   // Cocokkan ke database santri.json HANYA jika nama valid (minimal 3 huruf dan bukan tanda strip '-')
   if (santriName && santriName !== '-' && santriName.length >= 3 && santriData?.data) {
@@ -1257,10 +1257,10 @@ export default function ThermalReceiptModal({
                                     </td>
                                     <td className="py-2 px-2.5 border-r border-gray-300">
                                       <span className="font-bold block text-gray-900 leading-tight">
-                                        {o.user?.santri_name || o.user?.name || '-'}
+                                        {o.recipient_santri_name || o.user?.santri_name || o.user?.name || '-'}
                                       </span>
                                       <span className="text-[9.5px] text-gray-600 block mt-0.5 leading-tight">
-                                        📍 {o.user?.santri_room || o.delivery_location || '-'}
+                                        📍 {o.recipient_santri_room || o.delivery_location || o.user?.santri_room || '-'}
                                       </span>
                                     </td>
                                     <td className="py-2 px-2 border-r border-gray-300 font-semibold text-[10.5px] leading-tight">

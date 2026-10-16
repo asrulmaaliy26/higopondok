@@ -686,10 +686,10 @@ export default function TugasKurir() {
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const matchesId = order.id?.toString().includes(q);
-        const matchesSantri = order.user?.santri_name?.toLowerCase().includes(q);
+        const matchesSantri = (order.recipient_santri_name || order.user?.santri_name)?.toLowerCase().includes(q);
         const matchesWali = order.user?.name?.toLowerCase().includes(q);
-        const matchesRoom = order.user?.santri_room?.toLowerCase().includes(q);
-        const matchesPhone = order.user?.phone?.toLowerCase().includes(q);
+        const matchesRoom = (order.recipient_santri_room || order.user?.santri_room)?.toLowerCase().includes(q);
+        const matchesPhone = (order.recipient_phone || order.user?.phone)?.toLowerCase().includes(q);
         const matchesCanteen = order.canteen?.name?.toLowerCase().includes(q);
         const matchesLocation = order.delivery_location?.toLowerCase().includes(q);
         const matchesNiy = order.user?.niy?.toLowerCase().includes(q);
@@ -791,13 +791,13 @@ export default function TugasKurir() {
       // Group customer info for "siapa aja"
       const u = order.user;
       const isTeacherOrder = checkIsTeacherOrder(order);
-      const santriName = isTeacherOrder ? (u?.name || 'Guru / Staff') : (u?.santri_name || u?.name || 'Santri Tanpa Nama');
+      const santriName = isTeacherOrder ? (u?.name || 'Guru / Staff') : (order.recipient_santri_name || u?.santri_name || u?.name || 'Santri Tanpa Nama');
       const custKey = `${u?.id || 0}_${santriName}_${isTeacherOrder ? 'guru' : 'santri'}`;
-      const gender = isTeacherOrder ? 'guru' : getSantriGender(santriName, u?.santri_room);
+      const gender = isTeacherOrder ? 'guru' : getSantriGender(santriName, order.recipient_santri_room || u?.santri_room);
 
-      let santriClass = isTeacherOrder ? `Unit ${u?.teacher_unit || 'Yayasan'}` : (u?.santri_class || '');
-      let santriLevel = isTeacherOrder ? (u?.niy ? `NIY: ${u.niy}` : 'Staff') : (u?.santri_level || '');
-      let santriRoom = order.delivery_location || (isTeacherOrder ? `Ruang Guru / Kantor ${u?.teacher_unit || ''}` : (u?.santri_room || 'Kamar belum diisi'));
+      let santriClass = isTeacherOrder ? `Unit ${u?.teacher_unit || 'Yayasan'}` : (order.recipient_santri_class || u?.santri_class || '');
+      let santriLevel = isTeacherOrder ? (u?.niy ? `NIY: ${u.niy}` : 'Staff') : (order.recipient_santri_level || u?.santri_level || '');
+      let santriRoom = order.delivery_location || (isTeacherOrder ? `Ruang Guru / Kantor ${u?.teacher_unit || ''}` : (order.recipient_santri_room || u?.santri_room || 'Kamar belum diisi'));
 
       if (!isTeacherOrder && santriName && santriData?.data) {
         const sName = santriName.toLowerCase().trim();
@@ -1400,11 +1400,11 @@ export default function TugasKurir() {
                   const isMyTask = order.courier_id === currentUser?.id;
                   const isTeacherOrder = checkIsTeacherOrder(order);
                   const isPriority = order.is_priority || isTeacherOrder;
-                  const santriName = order.user?.santri_name || order.user?.name || 'Santri';
+                  const santriName = order.recipient_santri_name || order.user?.santri_name || order.user?.name || 'Santri';
                   const waliName = order.user?.name || 'Wali';
-                  let santriClass = order.user?.santri_class || '';
-                  let santriLevel = order.user?.santri_level || '';
-                  let santriRoom = order.delivery_location || order.user?.santri_room || '';
+                  let santriClass = order.recipient_santri_class || order.user?.santri_class || '';
+                  let santriLevel = order.recipient_santri_level || order.user?.santri_level || '';
+                  let santriRoom = order.delivery_location || order.recipient_santri_room || order.user?.santri_room || '';
 
                   // Fallback match from santri.json if class/level missing
                   if (!isTeacherOrder && santriName && santriData?.data) {
@@ -2528,7 +2528,7 @@ export default function TugasKurir() {
               </div>
 
               <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
-                Upload <span className="font-bold text-gray-900 dark:text-white">{uploadType === 'delivery' ? 'Bukti Serah Terima' : 'Struk Pembelian'}</span> untuk <span className="font-bold text-green-700 dark:text-green-400">{checkIsTeacherOrder(selectedOrder) ? (selectedOrder.user?.name || 'Guru') : (selectedOrder.user?.santri_name || selectedOrder.user?.name)}</span> ({checkIsTeacherOrder(selectedOrder) ? (selectedOrder.delivery_location || `Ruang Guru ${selectedOrder.user?.teacher_unit || ''}`) : (selectedOrder.user?.santri_room || 'Asrama')}).
+                Upload <span className="font-bold text-gray-900 dark:text-white">{uploadType === 'delivery' ? 'Bukti Serah Terima' : 'Struk Pembelian'}</span> untuk <span className="font-bold text-green-700 dark:text-green-400">{checkIsTeacherOrder(selectedOrder) ? (selectedOrder.user?.name || 'Guru') : (selectedOrder.recipient_santri_name || selectedOrder.user?.santri_name || selectedOrder.user?.name)}</span> ({checkIsTeacherOrder(selectedOrder) ? (selectedOrder.delivery_location || `Ruang Guru ${selectedOrder.user?.teacher_unit || ''}`) : (selectedOrder.recipient_santri_room || selectedOrder.user?.santri_room || 'Asrama')}).
               </p>
 
               {/* CURRENTLY SAVED PHOTOS FOR THIS TYPE */}
@@ -2834,7 +2834,7 @@ export default function TugasKurir() {
               </p>
             ) : (
               <p className="text-xs text-gray-600 dark:text-gray-300">
-                Pesanan atas nama <strong className="text-gray-900 dark:text-white">{confirmCompleteOrder.user?.santri_name || confirmCompleteOrder.user?.name}</strong> akan ditandai selesai.
+                Pesanan atas nama <strong className="text-gray-900 dark:text-white">{confirmCompleteOrder.recipient_santri_name || confirmCompleteOrder.user?.santri_name || confirmCompleteOrder.user?.name}</strong> akan ditandai selesai.
               </p>
             )}
 
@@ -2875,7 +2875,7 @@ export default function TugasKurir() {
             </h3>
             
             <p className="text-xs text-gray-600 dark:text-gray-300">
-              Pesanan atas nama <strong>{confirmCancelOrder.user?.santri_name || confirmCancelOrder.user?.name}</strong> akan diubah statusnya menjadi <strong className="text-red-600">Dibatalkan</strong>.
+              Pesanan atas nama <strong>{confirmCancelOrder.recipient_santri_name || confirmCancelOrder.user?.santri_name || confirmCancelOrder.user?.name}</strong> akan diubah statusnya menjadi <strong className="text-red-600">Dibatalkan</strong>.
             </p>
 
             <div className="flex gap-2 pt-1">

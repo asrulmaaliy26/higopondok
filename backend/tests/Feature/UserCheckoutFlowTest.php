@@ -459,4 +459,35 @@ class UserCheckoutFlowTest extends TestCase
         $order->refresh();
         $this->assertEquals('cancelled', $order->status);
     }
+
+    /**
+     * 12. Snapshot Identitas Santri: Identitas penerima terkunci di order dan tidak berubah saat profil wali diedit
+     */
+    public function test_order_preserves_recipient_snapshot_when_user_profile_changes(): void
+    {
+        $response = $this->actingAs($this->santriUser)->postJson('/api/orders', [
+            'canteen_id' => $this->canteenA->id,
+            'delivery_location' => 'Kamar Abu Bakar 01',
+            'items' => [
+                ['product_id' => $this->productA->id, 'quantity' => 1]
+            ]
+        ]);
+        $response->assertStatus(201);
+        $orderId = $response->json('order.id');
+
+        $order = Order::findOrFail($orderId);
+        $this->assertEquals('Ahmad Santri', $order->recipient_santri_name);
+        $this->assertEquals('Kamar Abu Bakar 01', $order->recipient_santri_room);
+
+        // User/Wali mengubah profil santri menjadi nama anak lain
+        $this->santriUser->update([
+            'santri_name' => 'Zetta Arzagnafia',
+            'santri_room' => 'Kamar Asmah 02',
+        ]);
+
+        // Pesanan lama tetap memiliki snapshot nama asli
+        $order->refresh();
+        $this->assertEquals('Ahmad Santri', $order->recipient_santri_name);
+        $this->assertEquals('Kamar Abu Bakar 01', $order->recipient_santri_room);
+    }
 }

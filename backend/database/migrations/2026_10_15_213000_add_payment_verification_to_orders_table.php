@@ -12,9 +12,15 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('orders', function (Blueprint $table) {
-            $table->string('payment_verified_by')->nullable()->after('payment_status'); // 'ai_gemini', 'manual_admin', 'manual_canteen'
-            $table->string('payment_ref_number')->nullable()->index()->after('payment_verified_by'); // No ref transfer / QRIS
-            $table->json('payment_ocr_data')->nullable()->after('payment_ref_number'); // Hasil pembacaan AI Vision
+            if (!Schema::hasColumn('orders', 'payment_verified_by')) {
+                $table->string('payment_verified_by')->nullable()->after('payment_status'); // 'ai_gemini', 'manual_admin', 'manual_canteen'
+            }
+            if (!Schema::hasColumn('orders', 'payment_ref_number')) {
+                $table->string('payment_ref_number')->nullable()->index()->after('payment_verified_by'); // No ref transfer / QRIS
+            }
+            if (!Schema::hasColumn('orders', 'payment_ocr_data')) {
+                $table->json('payment_ocr_data')->nullable()->after('payment_ref_number'); // Hasil pembacaan AI Vision
+            }
         });
     }
 

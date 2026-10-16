@@ -64,6 +64,11 @@ class Order extends Model
         'payment_verified_by',
         'payment_ref_number',
         'payment_ocr_data',
+        'recipient_santri_name',
+        'recipient_santri_room',
+        'recipient_santri_class',
+        'recipient_santri_level',
+        'recipient_phone',
     ];
 
     protected $casts = [

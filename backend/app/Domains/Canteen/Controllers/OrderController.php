@@ -87,6 +87,11 @@ class OrderController extends Controller
                     'delivery_location' => $defaultLocation,
                     'order_for' => $orderFor,
                     'is_priority' => $isPriority,
+                    'recipient_santri_name' => $user->is_teacher ? $user->name : ($user->santri_name ?: $user->name),
+                    'recipient_santri_room' => $user->is_teacher ? ($user->teacher_unit ?: $defaultLocation) : ($user->santri_room ?: $defaultLocation),
+                    'recipient_santri_class' => $user->is_teacher ? null : $user->santri_class,
+                    'recipient_santri_level' => $user->is_teacher ? null : $user->santri_level,
+                    'recipient_phone' => $user->phone,
                 ]);
 
                 DB::commit();
@@ -122,6 +127,11 @@ class OrderController extends Controller
                 'delivery_location' => $defaultLocation,
                 'order_for' => $orderFor,
                 'is_priority' => $isPriority,
+                'recipient_santri_name' => $user->is_teacher ? $user->name : ($user->santri_name ?: $user->name),
+                'recipient_santri_room' => $user->is_teacher ? ($user->teacher_unit ?: $defaultLocation) : ($user->santri_room ?: $defaultLocation),
+                'recipient_santri_class' => $user->is_teacher ? null : $user->santri_class,
+                'recipient_santri_level' => $user->is_teacher ? null : $user->santri_level,
+                'recipient_phone' => $user->phone,
             ]);
 
             $subtotal_items = 0;
@@ -306,6 +316,11 @@ class OrderController extends Controller
                     'delivery_location' => $defaultLocation,
                     'order_for' => $orderFor,
                     'is_priority' => $isPriority,
+                    'recipient_santri_name' => $user->is_teacher ? $user->name : ($user->santri_name ?: $user->name),
+                    'recipient_santri_room' => $user->is_teacher ? ($user->teacher_unit ?: $defaultLocation) : ($user->santri_room ?: $defaultLocation),
+                    'recipient_santri_class' => $user->is_teacher ? null : $user->santri_class,
+                    'recipient_santri_level' => $user->is_teacher ? null : $user->santri_level,
+                    'recipient_phone' => $user->phone,
                 ]);
 
                 $subtotal_items = 0;
@@ -473,6 +488,11 @@ class OrderController extends Controller
                 'proof_courier_paid',
                 'custom_notes',
                 'is_custom',
+                'recipient_santri_name',
+                'recipient_santri_room',
+                'recipient_santri_class',
+                'recipient_santri_level',
+                'recipient_phone',
                 'created_at',
                 'updated_at',
             ])
@@ -1079,6 +1099,8 @@ class OrderController extends Controller
         if ($search) {
             $query->where(function ($q) use ($search) {
                 $q->where('id', 'like', "%{$search}%")
+                  ->orWhere('recipient_santri_name', 'like', "%{$search}%")
+                  ->orWhere('recipient_santri_room', 'like', "%{$search}%")
                   ->orWhere('custom_notes', 'like', "%{$search}%")
                   ->orWhere('delivery_location', 'like', "%{$search}%")
                   ->orWhere('order_for', 'like', "%{$search}%")
@@ -1842,6 +1864,11 @@ class OrderController extends Controller
             'admin_fee' => $admin_fee,
             'delivery_fee' => $delivery_fee,
             'delivery_location' => $deliveryLocation,
+            'recipient_santri_name' => $targetUser->is_teacher ? $targetUser->name : ($targetUser->santri_name ?: $targetUser->name),
+            'recipient_santri_room' => $targetUser->is_teacher ? ($targetUser->teacher_unit ?: $deliveryLocation) : ($targetUser->santri_room ?: $deliveryLocation),
+            'recipient_santri_class' => $targetUser->is_teacher ? null : $targetUser->santri_class,
+            'recipient_santri_level' => $targetUser->is_teacher ? null : $targetUser->santri_level,
+            'recipient_phone' => $targetUser->phone,
         ]);
 
         return response()->json(['message' => 'Pesanan manual berhasil dibuat untuk santri!', 'order' => $order], 201);
