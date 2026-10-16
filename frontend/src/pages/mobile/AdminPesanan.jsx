@@ -250,14 +250,6 @@ export default function AdminPesanan() {
     }));
   };
 
-  // Accordion state untuk minimize / expand detail produk per pesanan
-  const [expandedProducts, setExpandedProducts] = useState({});
-  const toggleExpandOrderProducts = (orderId) => {
-    setExpandedProducts(prev => ({
-      ...prev,
-      [orderId]: !prev[orderId]
-    }));
-  };
 
   // Admin Notes Modal States
   const [orderToEditNotes, setOrderToEditNotes] = useState(null);
@@ -1784,88 +1776,60 @@ export default function AdminPesanan() {
                                 </button>
                               </div>
 
-                              {/* Items List Toko (Collapsible / Minimized by Default) */}
-                              {(() => {
-                                const isExpanded = !!expandedProducts[order.id];
-                                const itemsCount = order.items?.length || 1;
-                                const firstItemName = order.items?.[0]?.product?.name || (order.items?.length ? 'Pesanan' : 'Pesanan Khusus');
-                                const previewSummary = itemsCount > 1
-                                  ? `${order.items[0]?.quantity || 1}x ${firstItemName} +${itemsCount - 1} item lainnya`
-                                  : `${order.items?.[0]?.quantity || 1}x ${firstItemName}`;
+                              {/* Items List Toko (Langsung Ditampilkan Saat Rincian Pesanan Dibuka) */}
+                              <div className="border border-gray-200/80 dark:border-gray-700/80 bg-white dark:bg-gray-900 rounded-none overflow-hidden">
+                                {/* Header Rincian Produk */}
+                                <div className="px-2 py-1 bg-gray-50/70 dark:bg-gray-800/50 flex items-center gap-1.5 border-b border-gray-100 dark:border-gray-800">
+                                  <Package className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400 shrink-0" />
+                                  <span className="text-[11px] font-bold text-gray-900 dark:text-white">
+                                    Rincian Produk ({order.items?.length || 1} Item):
+                                  </span>
+                                </div>
 
-                                return (
-                                  <div className="border border-gray-200/80 dark:border-gray-700/80 bg-white dark:bg-gray-900 rounded-none overflow-hidden">
-                                    {/* Tombol Header Minimize / Expand Detail Produk */}
-                                    <button
-                                      type="button"
-                                      onClick={() => toggleExpandOrderProducts(order.id)}
-                                      className="w-full px-2 py-1.5 flex items-center justify-between text-left hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors cursor-pointer select-none"
-                                      title={isExpanded ? 'Tutup rincian produk' : 'Klik untuk membuka rincian produk'}
-                                    >
-                                      <div className="flex items-center gap-1.5 min-w-0 pr-1">
-                                        <Package className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400 shrink-0" />
-                                        <span className="text-[11px] font-bold text-gray-900 dark:text-white truncate">
-                                          {isExpanded ? `Rincian Produk (${itemsCount} Item):` : previewSummary}
+                                {/* Konten Rincian Produk */}
+                                <div className="p-1.5 pt-1 space-y-0.5 text-xs bg-white dark:bg-gray-900">
+                                  {order.custom_notes && (
+                                    <div className="text-[10px] font-medium text-purple-800 dark:text-purple-300 pb-0.5 border-b border-purple-100 dark:border-purple-900/40">
+                                      ✨ {order.custom_notes}
+                                    </div>
+                                  )}
+                                  {order.admin_notes && (
+                                    <div className="text-[10px] font-semibold text-amber-900 dark:text-amber-200 bg-amber-50/80 dark:bg-amber-950/60 p-1 border border-amber-200 dark:border-amber-800 flex items-start justify-between gap-1">
+                                      <div className="flex items-start gap-1 min-w-0">
+                                        <FileText className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                                        <span className="break-words"><strong>Catatan:</strong> {order.admin_notes}</span>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenEditNotesModal(order)}
+                                        className="text-[9.5px] text-amber-700 dark:text-amber-300 hover:underline shrink-0 font-bold ml-1 cursor-pointer"
+                                      >
+                                        Edit
+                                      </button>
+                                    </div>
+                                  )}
+                                  {order.items && order.items.length > 0 ? (
+                                    order.items.map((item) => (
+                                      <div key={item.id} className="flex justify-between items-center text-[10.5px]">
+                                        <span className="text-gray-700 dark:text-gray-300 truncate pr-2">
+                                          <strong className="text-gray-900 dark:text-white font-bold">{item.quantity}x</strong> {item.product?.name || 'Produk'}
+                                          {item.notes && <span className="text-gray-400 italic text-[10px]"> ({cleanItemNotes(item.notes)})</span>}
+                                        </span>
+                                        <span className="font-bold text-gray-900 dark:text-white shrink-0 font-mono">
+                                          Rp {parseFloat(item.subtotal).toLocaleString('id-ID')}
                                         </span>
                                       </div>
-                                      <div className="flex items-center gap-1 shrink-0 text-emerald-700 dark:text-emerald-400 font-bold text-[10px]">
-                                        <span>{isExpanded ? 'Tutup' : 'Lihat Produk'}</span>
-                                        <ChevronDown
-                                          className={`w-3.5 h-3.5 transition-transform duration-200 ${
-                                            isExpanded ? 'rotate-180 text-emerald-600' : 'text-gray-400'
-                                          }`}
-                                        />
-                                      </div>
-                                    </button>
-
-                                    {/* Konten Rincian Produk (Hanya Tampil Saat Dibuka / Expand) */}
-                                    {isExpanded && (
-                                      <div className="p-1.5 pt-1 space-y-0.5 text-xs border-t border-gray-100 dark:border-gray-800 bg-gray-50/40 dark:bg-gray-900/40 animate-in fade-in duration-150">
-                                        {order.custom_notes && (
-                                          <div className="text-[10px] font-medium text-purple-800 dark:text-purple-300 pb-0.5 border-b border-purple-100 dark:border-purple-900/40">
-                                            ✨ {order.custom_notes}
-                                          </div>
-                                        )}
-                                        {order.admin_notes && (
-                                          <div className="text-[10px] font-semibold text-amber-900 dark:text-amber-200 bg-amber-50/80 dark:bg-amber-950/60 p-1 border border-amber-200 dark:border-amber-800 flex items-start justify-between gap-1">
-                                            <div className="flex items-start gap-1 min-w-0">
-                                              <FileText className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                                              <span className="break-words"><strong>Catatan:</strong> {order.admin_notes}</span>
-                                            </div>
-                                            <button
-                                              type="button"
-                                              onClick={() => handleOpenEditNotesModal(order)}
-                                              className="text-[9.5px] text-amber-700 dark:text-amber-300 hover:underline shrink-0 font-bold ml-1 cursor-pointer"
-                                            >
-                                              Edit
-                                            </button>
-                                          </div>
-                                        )}
-                                        {order.items && order.items.length > 0 ? (
-                                          order.items.map((item) => (
-                                            <div key={item.id} className="flex justify-between items-center text-[10.5px]">
-                                              <span className="text-gray-700 dark:text-gray-300 truncate pr-2">
-                                                <strong className="text-gray-900 dark:text-white font-bold">{item.quantity}x</strong> {item.product?.name || 'Produk'}
-                                                {item.notes && <span className="text-gray-400 italic text-[10px]"> ({cleanItemNotes(item.notes)})</span>}
-                                              </span>
-                                              <span className="font-bold text-gray-900 dark:text-white shrink-0 font-mono">
-                                                Rp {parseFloat(item.subtotal).toLocaleString('id-ID')}
-                                              </span>
-                                            </div>
-                                          ))
-                                        ) : (
-                                          <div className="flex justify-between items-center text-[10.5px] text-gray-500">
-                                            <span>1x Pesanan Khusus</span>
-                                            <span className="font-bold text-gray-900 dark:text-white font-mono">
-                                              Rp {parseFloat(order.total_price || 0).toLocaleString('id-ID')}
-                                            </span>
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })()}
+                                    ))
+                                  ) : (
+                                    <div className="flex justify-between items-center text-[10.5px] text-gray-500">
+                                      <span>1x Pesanan Khusus</span>
+                                      <span className="font-bold text-gray-900 dark:text-white font-mono">
+                                        Rp {parseFloat(order.total_price || 0).toLocaleString('id-ID')}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
 
                               {/* Bukti Khusus Toko Ini (Struk & Antar) */}
                               <div className="flex gap-1 flex-wrap items-center">
