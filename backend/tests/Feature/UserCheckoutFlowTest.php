@@ -236,7 +236,7 @@ class UserCheckoutFlowTest extends TestCase
 
         $response->assertStatus(400);
         $response->assertJsonFragment([
-            'message' => 'Maaf, Kantin sedang tutup. Tidak dapat memesan.'
+            'message' => "Maaf, Toko 'Kantin A Flow Test' saat ini sedang tutup. Pemesanan hanya dapat dilakukan saat jam operasional toko buka (01:00 - 01:05 WIB)."
         ]);
     }
 
@@ -264,8 +264,14 @@ class UserCheckoutFlowTest extends TestCase
      */
     public function test_user_can_checkout_custom_order_even_when_canteen_is_closed(): void
     {
-        // Pastikan kantin tutup
-        Cache::forever('canteen_force_closed_' . $this->canteenA->id, true);
+        // Pastikan force-close key dari test sebelumnya dibersihkan
+        Cache::forget('canteen_force_closed_' . $this->canteenA->id);
+
+        // Tutup kantin via jam operasional (bukan force-close) agar is_custom masih bisa lolos
+        $this->canteenA->update([
+            'open_time' => '01:00:00',
+            'close_time' => '01:05:00',
+        ]);
         $this->assertFalse($this->canteenA->fresh()->is_open);
 
         $response = $this->actingAs($this->santriUser)->postJson('/api/orders', [

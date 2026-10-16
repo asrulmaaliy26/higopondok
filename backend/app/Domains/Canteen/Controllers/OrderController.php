@@ -9,6 +9,7 @@ use App\Domains\Canteen\OrderItem;
 use App\Domains\Canteen\Canteen;
 use App\Domains\Canteen\Product;
 use App\Domains\Auth\User;
+use App\Domains\Admin\ActivityLog;
 use Illuminate\Support\Facades\DB;
 
 class OrderController extends Controller
@@ -28,7 +29,7 @@ class OrderController extends Controller
 
         $canteen = Canteen::findOrFail($request->canteen_id);
         $isCustom = (bool) $request->is_custom;
-        if (!$canteen->is_open) {
+        if (!$canteen->is_open && !$isCustom) {
             $openTime = $canteen->open_time ? substr($canteen->open_time, 0, 5) : '07:00';
             $closeTime = $canteen->close_time ? substr($canteen->close_time, 0, 5) : '17:00';
             return response()->json([
@@ -1471,7 +1472,7 @@ class OrderController extends Controller
             'proof_of_payment.*' => 'required|file|max:15360',
         ]);
 
-        $order = DB::transaction(function () use ($request, $id) {
+        $uploadResult = DB::transaction(function () use ($request, $id) {
             $user = $request->user();
             if ($user->hasRole('admin') || $user->hasRole('super_admin')) {
                 $order = Order::lockForUpdate()->findOrFail($id);
@@ -1552,13 +1553,48 @@ class OrderController extends Controller
             }
         }
 
+        // --- Catat Activity Log hasil verifikasi AI ---
+        $uploaderUser = $request->user();
+        $freshOrder   = $order->fresh()->load(['canteen', 'user']);
+        $customerName = $freshOrder->user ? ($freshOrder->user->santri_name ?: $freshOrder->user->name) : "User #{$freshOrder->user_id}";
+        $canteenName  = $freshOrder->canteen ? $freshOrder->canteen->name : "Kantin #{$freshOrder->canteen_id}";
+        $orderIds     = $targetOrders->pluck('id')->implode(', ');
+        $totalFmt     = number_format($targetOrders->sum('total_price'), 0, ',', '.');
+        $scanData     = $aiResult['scan'] ?? [];
+        $refNo        = $scanData['ref_number'] ?? ($scanData['proofs'][0]['ref_number'] ?? null);
+        $bank         = $scanData['source_bank'] ?? ($scanData['proofs'][0]['source_bank'] ?? null);
+        $refInfo      = $refNo ? " | Ref: {$refNo}" : '';
+        $bankInfo     = $bank ? " | Bank: {$bank}" : '';
+
+        if (!empty($aiResult)) {
+            if ($aiResult['verified'] ?? false) {
+                ActivityLog::create([
+                    'user_id'     => $uploaderUser->id,
+                    'action'      => 'ai_payment_verified',
+                    'model_type'  => Order::class,
+                    'model_id'    => $freshOrder->id,
+                    'description' => "✅ AI Gemini MEMVERIFIKASI & MELUNASI pesanan #{$orderIds} ({$canteenName} - {$customerName}) senilai Rp {$totalFmt}{$bankInfo}{$refInfo}. Diunggah oleh: {$uploaderUser->name}.",
+                ]);
+            } else {
+                $failReason = $aiResult['message'] ?? 'Tidak diketahui';
+                ActivityLog::create([
+                    'user_id'     => $uploaderUser->id,
+                    'action'      => 'ai_payment_unverified',
+                    'model_type'  => Order::class,
+                    'model_id'    => $freshOrder->id,
+                    'description' => "⏳ AI Gemini GAGAL memverifikasi pesanan #{$orderIds} ({$canteenName} - {$customerName}) senilai Rp {$totalFmt}{$bankInfo}{$refInfo}. Alasan: {$failReason}. Menunggu konfirmasi manual admin. Diunggah oleh: {$uploaderUser->name}.",
+                ]);
+            }
+        }
+        // --- Akhir Activity Log AI ---
+
         $responseMsg = $aiResult['message'] ?? 'Bukti transfer berhasil diunggah! Menunggu konfirmasi & validasi pembayaran.';
 
         return response()->json([
-            'message' => $responseMsg,
+            'message'     => $responseMsg,
             'ai_verified' => $aiResult['verified'] ?? false,
             'ai_ocr_data' => $aiResult['scan'] ?? null,
-            'order' => $order->fresh()->load(['canteen', 'user', 'items.product', 'courier'])
+            'order'       => $freshOrder->load(['canteen', 'user', 'items.product', 'courier'])
         ]);
     }
 
@@ -1644,15 +1680,50 @@ class OrderController extends Controller
             }
         }
 
-        $responseMsg = $aiResult['message'] ?? 'Bukti transfer berhasil diunggah untuk seluruh pesanan dalam checkout ini!';
+        // --- Catat Activity Log hasil verifikasi AI (Checkout Batch) ---
+        $uploaderUser  = $request->user();
+        $firstOrder    = $orders->first();
+        $customerName  = $firstOrder && $firstOrder->user ? ($firstOrder->user->santri_name ?: $firstOrder->user->name) : "User";
+        $canteenNames  = $orders->map(fn($o) => $o->canteen ? $o->canteen->name : "Kantin #{$o->canteen_id}")->unique()->implode(', ');
+        $orderIdsList  = $orders->pluck('id')->implode(', ');
+        $totalFmt      = number_format($orders->sum('total_price'), 0, ',', '.');
+        $scanData      = $aiResult['scan'] ?? [];
+        $refNo         = $scanData['ref_number'] ?? ($scanData['proofs'][0]['ref_number'] ?? null);
+        $bank          = $scanData['source_bank'] ?? ($scanData['proofs'][0]['source_bank'] ?? null);
+        $refInfo       = $refNo ? " | Ref: {$refNo}" : '';
+        $bankInfo      = $bank ? " | Bank: {$bank}" : '';
+
+        if (!empty($aiResult)) {
+            if ($aiResult['verified'] ?? false) {
+                ActivityLog::create([
+                    'user_id'     => $uploaderUser->id,
+                    'action'      => 'ai_payment_verified',
+                    'model_type'  => Order::class,
+                    'model_id'    => $firstOrder?->id,
+                    'description' => "✅ AI Gemini MEMVERIFIKASI & MELUNASI checkout #{$checkoutId} (Pesanan #{$orderIdsList}) [{$canteenNames} - {$customerName}] senilai Rp {$totalFmt}{$bankInfo}{$refInfo}. Diunggah oleh: {$uploaderUser->name}.",
+                ]);
+            } else {
+                $failReason = $aiResult['message'] ?? 'Tidak diketahui';
+                ActivityLog::create([
+                    'user_id'     => $uploaderUser->id,
+                    'action'      => 'ai_payment_unverified',
+                    'model_type'  => Order::class,
+                    'model_id'    => $firstOrder?->id,
+                    'description' => "⏳ AI Gemini GAGAL memverifikasi checkout #{$checkoutId} (Pesanan #{$orderIdsList}) [{$canteenNames} - {$customerName}] senilai Rp {$totalFmt}{$bankInfo}{$refInfo}. Alasan: {$failReason}. Menunggu konfirmasi manual admin. Diunggah oleh: {$uploaderUser->name}.",
+                ]);
+            }
+        }
+        // --- Akhir Activity Log AI (Checkout Batch) ---
+
+        $responseMsg     = $aiResult['message'] ?? 'Bukti transfer berhasil diunggah untuk seluruh pesanan dalam checkout ini!';
         $refreshedOrders = Order::where('checkout_id', $checkoutId)->get();
 
         return response()->json([
-            'message' => $responseMsg,
+            'message'     => $responseMsg,
             'ai_verified' => $aiResult['verified'] ?? false,
             'ai_ocr_data' => $aiResult['scan'] ?? null,
             'checkout_id' => $checkoutId,
-            'orders' => $refreshedOrders->load(['canteen', 'user', 'items.product', 'courier'])
+            'orders'      => $refreshedOrders->load(['canteen', 'user', 'items.product', 'courier'])
         ]);
     }
 
