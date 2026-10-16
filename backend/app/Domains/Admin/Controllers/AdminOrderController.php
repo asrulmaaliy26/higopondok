@@ -68,6 +68,9 @@ class AdminOrderController extends Controller
         if ($search) {
             $query->where(function ($q) use ($search) {
                 $q->where('id', 'like', "%{$search}%")
+                  ->orWhere('recipient_santri_name', 'like', "%{$search}%")
+                  ->orWhere('recipient_santri_room', 'like', "%{$search}%")
+                  ->orWhere('recipient_phone', 'like', "%{$search}%")
                   ->orWhere('custom_notes', 'like', "%{$search}%")
                   ->orWhere('delivery_location', 'like', "%{$search}%")
                   ->orWhere('order_for', 'like', "%{$search}%")

@@ -1155,11 +1155,11 @@ export default function AdminPesanan() {
                 const firstOrder = group.orders[0];
                 const isTeacherOrder = group.order_for === 'guru' || (group.is_priority && !group.user?.santri_name);
                 const isPriority = group.is_priority || isTeacherOrder;
-                const santriName = isTeacherOrder ? (group.user?.name || 'Guru / Staff') : (group.user?.santri_name || group.user?.name || 'Santri');
+                const santriName = isTeacherOrder ? (group.user?.name || 'Guru / Staff') : (firstOrder?.recipient_santri_name || group.user?.santri_name || group.user?.name || 'Santri');
                 const waliName = isTeacherOrder ? 'Guru / Staff Yayasan' : (group.user?.name || 'Wali');
-                let santriClass = isTeacherOrder ? `Unit ${group.user?.teacher_unit || 'Yayasan'}` : (group.user?.santri_class || '');
-                let santriLevel = isTeacherOrder ? (group.user?.niy ? `NIY: ${group.user.niy}` : 'Staff') : (group.user?.santri_level || '');
-                let santriRoom = group.delivery_location || (isTeacherOrder ? `Ruang Guru ${group.user?.teacher_unit || ''}` : (group.user?.santri_room || ''));
+                let santriClass = isTeacherOrder ? `Unit ${group.user?.teacher_unit || 'Yayasan'}` : (firstOrder?.recipient_santri_class || group.user?.santri_class || '');
+                let santriLevel = isTeacherOrder ? (group.user?.niy ? `NIY: ${group.user.niy}` : 'Staff') : (firstOrder?.recipient_santri_level || group.user?.santri_level || '');
+                let santriRoom = firstOrder?.recipient_santri_room || group.delivery_location || (isTeacherOrder ? `Ruang Guru ${group.user?.teacher_unit || ''}` : (group.user?.santri_room || ''));
 
                 if (!isTeacherOrder && santriName && santriData?.data) {
                   const sName = santriName.toLowerCase().trim();
