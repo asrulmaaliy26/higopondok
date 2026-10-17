@@ -358,6 +358,22 @@ class Order extends Model
     }
 
     /**
+     * Cek apakah pesanan merupakan pindahan dari tanggal sebelumnya (checkout_id berbeda tanggal dari created_at)
+     */
+    public function isPindahan(): bool
+    {
+        if (empty($this->checkout_id)) {
+            return false;
+        }
+        if (preg_match('/CHK-(\d{4})(\d{2})(\d{2})/', $this->checkout_id, $matches)) {
+            $checkoutDate = "{$matches[1]}-{$matches[2]}-{$matches[3]}";
+            $orderDate = $this->created_at ? $this->created_at->format('Y-m-d') : null;
+            return $orderDate && ($checkoutDate !== $orderDate);
+        }
+        return false;
+    }
+
+    /**
      * Hitung rekapitulasi penjualan & keuangan kolektif terpusat
      * Digunakan secara konsisten oleh AdminOrderController dan OrderController (Kantin)
      */
@@ -372,10 +388,37 @@ class Order extends Model
         $totalVoucherDiscount = 0;
         $grandTotal = 0;
 
+        $todayOrdersCount = 0;
+        $pindahanOrdersCount = 0;
+        $todayProducts = 0;
+        $todayHpp = 0;
+        $todayProfit = 0;
+        $pindahanProducts = 0;
+        $pindahanHpp = 0;
+        $pindahanProfit = 0;
+
+        $todayDeliveryFee = 0;
+        $todayCourierNetDeliveryFee = 0;
+        $todayCourierCutToAdmin = 0;
+        $todayAdminFee = 0;
+        $todayBaseAdminFee = 0;
+        $todayVoucherDiscount = 0;
+        $todayGrandTotal = 0;
+
+        $pindahanDeliveryFee = 0;
+        $pindahanCourierNetDeliveryFee = 0;
+        $pindahanCourierCutToAdmin = 0;
+        $pindahanAdminFee = 0;
+        $pindahanBaseAdminFee = 0;
+        $pindahanVoucherDiscount = 0;
+        $pindahanGrandTotal = 0;
+
         $canteenRecap = [];
         $userRecap = [];
         $courierRecap = [];
         $productBreakdown = [];
+        $todayProductBreakdown = [];
+        $pindahanProductBreakdown = [];
         $voucherBreakdown = [];
 
         // Lacak nomor urut pesanan per toko/kantin per tanggal (dalam 1 hari)
@@ -384,6 +427,7 @@ class Order extends Model
         $canteenDailyOrderCounts = [];
 
         foreach ($orders as $order) {
+            $isPindahan = $order->isPindahan();
             $cId = $order->canteen_id;
             $userId = $order->user_id;
             $orderDate = $order->created_at ? $order->created_at->format('Y-m-d') : date('Y-m-d');
@@ -415,6 +459,32 @@ class Order extends Model
             $totalCourierCutToAdmin += $courierCutToAdmin;
             $totalVoucherDiscount += $voucherDiscount;
             $grandTotal += $totalPrice;
+
+            if ($isPindahan) {
+                $pindahanOrdersCount++;
+                $pindahanProducts += $productsSubtotal;
+                $pindahanHpp += $orderHpp;
+                $pindahanProfit += ($productsSubtotal - $orderHpp);
+                $pindahanDeliveryFee += $deliveryFee;
+                $pindahanCourierNetDeliveryFee += $deliveryFee;
+                $pindahanCourierCutToAdmin += $courierCutToAdmin;
+                $pindahanAdminFee += $adminFee;
+                $pindahanBaseAdminFee += $baseAdminFee;
+                $pindahanVoucherDiscount += $voucherDiscount;
+                $pindahanGrandTotal += $totalPrice;
+            } else {
+                $todayOrdersCount++;
+                $todayProducts += $productsSubtotal;
+                $todayHpp += $orderHpp;
+                $todayProfit += ($productsSubtotal - $orderHpp);
+                $todayDeliveryFee += $deliveryFee;
+                $todayCourierNetDeliveryFee += $deliveryFee;
+                $todayCourierCutToAdmin += $courierCutToAdmin;
+                $todayAdminFee += $adminFee;
+                $todayBaseAdminFee += $baseAdminFee;
+                $todayVoucherDiscount += $voucherDiscount;
+                $todayGrandTotal += $totalPrice;
+            }
 
             // 1. Group by Canteen / Toko
             $cName = $order->canteen ? $order->canteen->name : 'Toko #' . $cId;
@@ -551,6 +621,48 @@ class Order extends Model
                     $productBreakdown[$prodId]['total_subtotal'] += $itemSubtotal;
                     $productBreakdown[$prodId]['total_hpp'] += $itemTotalHpp;
                     $productBreakdown[$prodId]['total_profit'] += $itemProfit;
+
+                    if ($isPindahan) {
+                        if (!isset($pindahanProductBreakdown[$prodId])) {
+                            $pindahanProductBreakdown[$prodId] = [
+                                'product_id' => $prodId,
+                                'name' => $prodName,
+                                'canteen_name' => $cName,
+                                'hpp' => $itemHpp,
+                                'hpj' => $itemHpj,
+                                'total_quantity' => 0,
+                                'total_subtotal' => 0,
+                                'total_hpp' => 0,
+                                'total_profit' => 0,
+                                'is_custom' => false,
+                                'is_pindahan' => true,
+                            ];
+                        }
+                        $pindahanProductBreakdown[$prodId]['total_quantity'] += $itemQty;
+                        $pindahanProductBreakdown[$prodId]['total_subtotal'] += $itemSubtotal;
+                        $pindahanProductBreakdown[$prodId]['total_hpp'] += $itemTotalHpp;
+                        $pindahanProductBreakdown[$prodId]['total_profit'] += $itemProfit;
+                    } else {
+                        if (!isset($todayProductBreakdown[$prodId])) {
+                            $todayProductBreakdown[$prodId] = [
+                                'product_id' => $prodId,
+                                'name' => $prodName,
+                                'canteen_name' => $cName,
+                                'hpp' => $itemHpp,
+                                'hpj' => $itemHpj,
+                                'total_quantity' => 0,
+                                'total_subtotal' => 0,
+                                'total_hpp' => 0,
+                                'total_profit' => 0,
+                                'is_custom' => false,
+                                'is_pindahan' => false,
+                            ];
+                        }
+                        $todayProductBreakdown[$prodId]['total_quantity'] += $itemQty;
+                        $todayProductBreakdown[$prodId]['total_subtotal'] += $itemSubtotal;
+                        $todayProductBreakdown[$prodId]['total_hpp'] += $itemTotalHpp;
+                        $todayProductBreakdown[$prodId]['total_profit'] += $itemProfit;
+                    }
                 }
             } else {
                 $customNotes = trim($order->custom_notes ?? '');
@@ -577,11 +689,55 @@ class Order extends Model
                 $productBreakdown[$prodKey]['total_subtotal'] += $productsSubtotal;
                 $productBreakdown[$prodKey]['total_hpp'] += $customHpp;
                 $productBreakdown[$prodKey]['total_profit'] += $customProfit;
+
+                if ($isPindahan) {
+                    if (!isset($pindahanProductBreakdown[$prodKey])) {
+                        $pindahanProductBreakdown[$prodKey] = [
+                            'product_id' => $prodKey,
+                            'name' => $prodName,
+                            'canteen_name' => $cName,
+                            'hpp' => $customHpp,
+                            'hpj' => $productsSubtotal,
+                            'total_quantity' => 0,
+                            'total_subtotal' => 0,
+                            'total_hpp' => 0,
+                            'total_profit' => 0,
+                            'is_custom' => true,
+                            'is_pindahan' => true,
+                        ];
+                    }
+                    $pindahanProductBreakdown[$prodKey]['total_quantity'] += 1;
+                    $pindahanProductBreakdown[$prodKey]['total_subtotal'] += $productsSubtotal;
+                    $pindahanProductBreakdown[$prodKey]['total_hpp'] += $customHpp;
+                    $pindahanProductBreakdown[$prodKey]['total_profit'] += $customProfit;
+                } else {
+                    if (!isset($todayProductBreakdown[$prodKey])) {
+                        $todayProductBreakdown[$prodKey] = [
+                            'product_id' => $prodKey,
+                            'name' => $prodName,
+                            'canteen_name' => $cName,
+                            'hpp' => $customHpp,
+                            'hpj' => $productsSubtotal,
+                            'total_quantity' => 0,
+                            'total_subtotal' => 0,
+                            'total_hpp' => 0,
+                            'total_profit' => 0,
+                            'is_custom' => true,
+                            'is_pindahan' => false,
+                        ];
+                    }
+                    $todayProductBreakdown[$prodKey]['total_quantity'] += 1;
+                    $todayProductBreakdown[$prodKey]['total_subtotal'] += $productsSubtotal;
+                    $todayProductBreakdown[$prodKey]['total_hpp'] += $customHpp;
+                    $todayProductBreakdown[$prodKey]['total_profit'] += $customProfit;
+                }
             }
         }
 
         // Sort breakdowns
         usort($productBreakdown, fn($a, $b) => $b['total_quantity'] <=> $a['total_quantity'] ?: $b['total_subtotal'] <=> $a['total_subtotal']);
+        usort($todayProductBreakdown, fn($a, $b) => $b['total_quantity'] <=> $a['total_quantity'] ?: $b['total_subtotal'] <=> $a['total_subtotal']);
+        usort($pindahanProductBreakdown, fn($a, $b) => $b['total_quantity'] <=> $a['total_quantity'] ?: $b['total_subtotal'] <=> $a['total_subtotal']);
         usort($canteenRecap, fn($a, $b) => $b['grand_total'] <=> $a['grand_total']);
         usort($userRecap, fn($a, $b) => $b['grand_total'] <=> $a['grand_total']);
         usort($courierRecap, fn($a, $b) => $b['order_count'] <=> $a['order_count'] ?: $b['net_delivery_fee'] <=> $a['net_delivery_fee']);
@@ -593,6 +749,7 @@ class Order extends Model
                 'total_hpp' => $totalHpp,
                 'total_profit' => ($totalProducts - $totalHpp),
                 'total_delivery_fee' => $totalDeliveryFee,
+                'total_courier_net_delivery_fee' => $totalDeliveryFee,
                 'total_admin_fee' => $totalAdminFee,
                 'total_base_admin_fee' => $totalBaseAdminFee,
                 'total_courier_cut_to_admin' => $totalCourierCutToAdmin,
@@ -600,11 +757,48 @@ class Order extends Model
                 'net_admin_fee' => max(0, $totalAdminFee - $totalVoucherDiscount),
                 'grand_total' => $grandTotal,
                 'total_orders' => count($orders),
+                'today_orders_count' => $todayOrdersCount,
+                'pindahan_orders_count' => $pindahanOrdersCount,
+                'today_products' => $todayProducts,
+                'pindahan_products' => $pindahanProducts,
+                'today_profit' => $todayProfit,
+                'pindahan_profit' => $pindahanProfit,
+                'has_pindahan' => $pindahanOrdersCount > 0,
+                'today_summary' => [
+                    'total_orders' => $todayOrdersCount,
+                    'total_products' => $todayProducts,
+                    'total_hpp' => $todayHpp,
+                    'total_profit' => $todayProfit,
+                    'total_delivery_fee' => $todayDeliveryFee,
+                    'total_courier_net_delivery_fee' => $todayCourierNetDeliveryFee,
+                    'total_courier_cut_to_admin' => $todayCourierCutToAdmin,
+                    'total_admin_fee' => $todayAdminFee,
+                    'total_base_admin_fee' => $todayBaseAdminFee,
+                    'total_voucher_discount' => $todayVoucherDiscount,
+                    'net_admin_fee' => max(0, $todayAdminFee - $todayVoucherDiscount),
+                    'grand_total' => $todayGrandTotal,
+                ],
+                'pindahan_summary' => [
+                    'total_orders' => $pindahanOrdersCount,
+                    'total_products' => $pindahanProducts,
+                    'total_hpp' => $pindahanHpp,
+                    'total_profit' => $pindahanProfit,
+                    'total_delivery_fee' => $pindahanDeliveryFee,
+                    'total_courier_net_delivery_fee' => $pindahanCourierNetDeliveryFee,
+                    'total_courier_cut_to_admin' => $pindahanCourierCutToAdmin,
+                    'total_admin_fee' => $pindahanAdminFee,
+                    'total_base_admin_fee' => $pindahanBaseAdminFee,
+                    'total_voucher_discount' => $pindahanVoucherDiscount,
+                    'net_admin_fee' => max(0, $pindahanAdminFee - $pindahanVoucherDiscount),
+                    'grand_total' => $pindahanGrandTotal,
+                ],
             ],
             'canteen_recap' => array_values($canteenRecap),
             'user_recap' => array_values($userRecap),
             'courier_recap' => array_values($courierRecap),
             'product_breakdown' => array_values($productBreakdown),
+            'today_product_breakdown' => array_values($todayProductBreakdown),
+            'pindahan_product_breakdown' => array_values($pindahanProductBreakdown),
             'voucher_breakdown' => array_values($voucherBreakdown),
         ];
     }

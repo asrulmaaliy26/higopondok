@@ -14,7 +14,7 @@ import { useAuthStore } from '../../store/authStore';
 import { getFileType, isImageFile, isHeifFile, isPdfFile, formatFileSize, getFileNameFromPath, compressImageFiles } from '../../lib/fileUtils';
 import ThermalReceiptModal, { cleanItemNotes } from '../../components/receipt/ThermalReceiptModal';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
-import { renderOrderDateTime } from '../../lib/orderUtils';
+import { renderOrderDateTime, isOrderPindahan, getOrderOrigDate } from '../../lib/orderUtils';
 import santriData from '../../data/santri.json';
 
 function getSantriGender(santriName = '', santriRoom = '') {
@@ -761,15 +761,24 @@ export default function TugasKurir() {
           orders: [],
           customersMap: {},
           itemRecap: {},
+          todayItemRecap: {},
+          pindahanItemRecap: {},
           categoryStats: { makanan: 0, minuman: 0, camilan: 0, custom: 0 },
           totalCost: 0,
+          todayCost: 0,
+          pindahanCost: 0,
           totalDeliveryFee: 0,
           totalItemCount: 0,
           hasPending: false,
           hasProcessing: false,
           allCompleted: true,
+          hasPindahan: false,
         };
       }
+
+      // Deteksi apakah pesanan ini merupakan pesanan pindahan dari tanggal sebelumnya
+      const isPindahan = isOrderPindahan(order);
+      const orderOrigDate = isPindahan ? getOrderOrigDate(order) : null;
 
       // Pure product modal cost (total modal belanja at store)
       const orderModalCost = getOrderModalBelanja(order);
@@ -777,6 +786,13 @@ export default function TugasKurir() {
       map[canteenId].orders.push(order);
       map[canteenId].totalCost += orderModalCost;
       map[canteenId].totalDeliveryFee += parseFloat(order.delivery_fee || 0);
+
+      if (isPindahan) {
+        map[canteenId].hasPindahan = true;
+        map[canteenId].pindahanCost += orderModalCost;
+      } else {
+        map[canteenId].todayCost += orderModalCost;
+      }
 
       if (order.status === 'pending') {
         map[canteenId].hasPending = true;
@@ -839,11 +855,49 @@ export default function TugasKurir() {
           items: [],
           totalCost: 0,
           totalItemCount: 0,
+          hasPindahan: false,
+          pindahanOrigDate: null,
         };
+      }
+
+      if (isPindahan) {
+        map[canteenId].customersMap[custKey].hasPindahan = true;
+        if (orderOrigDate) {
+          map[canteenId].customersMap[custKey].pindahanOrigDate = orderOrigDate;
+        }
       }
 
       map[canteenId].customersMap[custKey].orders.push(order);
       map[canteenId].customersMap[custKey].totalCost += orderModalCost;
+
+      // Helper untuk menambahkan item ke target recap map
+      const pushItemToRecap = (targetMap, name, itemCat, qty, costTotal, variantLabel, buyerName) => {
+        if (!targetMap[name]) {
+          targetMap[name] = { 
+            name, 
+            category: itemCat,
+            quantity: 0, 
+            total: 0,
+            variants: {} 
+          };
+        }
+        targetMap[name].quantity += qty;
+        targetMap[name].total += costTotal;
+
+        if (!targetMap[name].variants[variantLabel]) {
+          targetMap[name].variants[variantLabel] = {
+            label: variantLabel,
+            quantity: 0,
+            total: 0,
+            santriNames: []
+          };
+        }
+        targetMap[name].variants[variantLabel].quantity += qty;
+        targetMap[name].variants[variantLabel].total += costTotal;
+        if (!targetMap[name].variants[variantLabel].santriNames.includes(buyerName)) {
+          targetMap[name].variants[variantLabel].santriNames.push(buyerName);
+        }
+      };
 
       if (order.items && order.items.length > 0) {
         order.items.forEach(item => {
@@ -862,32 +916,17 @@ export default function TugasKurir() {
             variantLabel,
             orderId: order.id,
             orderStatus: order.status,
+            isPindahan,
           });
 
-          if (!map[canteenId].itemRecap[name]) {
-            map[canteenId].itemRecap[name] = { 
-              name, 
-              category: itemCat,
-              quantity: 0, 
-              total: 0,
-              variants: {} 
-            };
-          }
-          map[canteenId].itemRecap[name].quantity += qty;
-          map[canteenId].itemRecap[name].total += itemHppTotal;
+          // 1. Masukkan ke rekap gabungan
+          pushItemToRecap(map[canteenId].itemRecap, name, itemCat, qty, itemHppTotal, variantLabel, santriName);
 
-          if (!map[canteenId].itemRecap[name].variants[variantLabel]) {
-            map[canteenId].itemRecap[name].variants[variantLabel] = {
-              label: variantLabel,
-              quantity: 0,
-              total: 0,
-              santriNames: []
-            };
-          }
-          map[canteenId].itemRecap[name].variants[variantLabel].quantity += qty;
-          map[canteenId].itemRecap[name].variants[variantLabel].total += itemHppTotal;
-          if (!map[canteenId].itemRecap[name].variants[variantLabel].santriNames.includes(santriName)) {
-            map[canteenId].itemRecap[name].variants[variantLabel].santriNames.push(santriName);
+          // 2. Masukkan ke rekap spesifik: Pindahan vs Hari Ini
+          if (isPindahan) {
+            pushItemToRecap(map[canteenId].pindahanItemRecap, name, itemCat, qty, itemHppTotal, variantLabel, santriName);
+          } else {
+            pushItemToRecap(map[canteenId].todayItemRecap, name, itemCat, qty, itemHppTotal, variantLabel, santriName);
           }
         });
       } else if (order.is_custom || order.custom_notes) {
@@ -905,32 +944,18 @@ export default function TugasKurir() {
           subtotal: customModalPrice,
           notes: 'Pesanan Khusus',
           category: 'custom',
-          variantLabel: 'Pesanan Khusus'
+          variantLabel: 'Pesanan Khusus',
+          isPindahan,
         };
         map[canteenId].customersMap[custKey].items.push(customItem);
 
         const customName = `Titip Beli: ${order.custom_notes || 'Pesanan Khusus'}`;
-        if (!map[canteenId].itemRecap[customName]) {
-          map[canteenId].itemRecap[customName] = { 
-            name: customName, 
-            category: 'custom',
-            quantity: 0, 
-            total: 0,
-            variants: {}
-          };
-        }
-        map[canteenId].itemRecap[customName].quantity += 1;
-        map[canteenId].itemRecap[customName].total += customModalPrice;
-        if (!map[canteenId].itemRecap[customName].variants['Pesanan Khusus']) {
-          map[canteenId].itemRecap[customName].variants['Pesanan Khusus'] = {
-            label: 'Pesanan Khusus',
-            quantity: 1,
-            total: customModalPrice,
-            santriNames: [santriName]
-          };
+        pushItemToRecap(map[canteenId].itemRecap, customName, 'custom', 1, customModalPrice, 'Pesanan Khusus', santriName);
+
+        if (isPindahan) {
+          pushItemToRecap(map[canteenId].pindahanItemRecap, customName, 'custom', 1, customModalPrice, 'Pesanan Khusus', santriName);
         } else {
-          map[canteenId].itemRecap[customName].variants['Pesanan Khusus'].quantity += 1;
-          map[canteenId].itemRecap[customName].variants['Pesanan Khusus'].total += customModalPrice;
+          pushItemToRecap(map[canteenId].todayItemRecap, customName, 'custom', 1, customModalPrice, 'Pesanan Khusus', santriName);
         }
       }
     });
@@ -950,31 +975,39 @@ export default function TugasKurir() {
       const customersPutra = customers.filter(cust => !cust.isTeacher && cust.gender === 'putra');
       const customersPutri = customers.filter(cust => !cust.isTeacher && cust.gender === 'putri');
 
-      // Build item recap list
-      let itemRecapList = Object.keys(c.itemRecap).map(k => {
-        const item = c.itemRecap[k];
-        const variantsList = Object.values(item.variants || {}).sort((va, vb) => {
-          const lvA = getSpicyLevelNumber(va.label);
-          const lvB = getSpicyLevelNumber(vb.label);
-          if (lvA !== null && lvB !== null) return lvA - lvB;
-          if (lvA !== null) return -1;
-          if (lvB !== null) return 1;
-          return vb.quantity - va.quantity;
-        });
+      // Helper untuk membangun dan memfilter daftar rekap item
+      const buildRecapList = (recapSource) => {
+        let list = Object.keys(recapSource).map(k => {
+          const item = recapSource[k];
+          const variantsList = Object.values(item.variants || {}).sort((va, vb) => {
+            const lvA = getSpicyLevelNumber(va.label);
+            const lvB = getSpicyLevelNumber(vb.label);
+            if (lvA !== null && lvB !== null) return lvA - lvB;
+            if (lvA !== null) return -1;
+            if (lvB !== null) return 1;
+            return vb.quantity - va.quantity;
+          });
 
-        return {
-          name: k,
-          ...item,
-          variantsList
-        };
-      }).sort((a, b) => b.quantity - a.quantity);
+          return {
+            name: k,
+            ...item,
+            variantsList
+          };
+        }).sort((a, b) => b.quantity - a.quantity);
 
-      if (selectedCategoryFilter !== 'all') {
-        itemRecapList = itemRecapList.filter(it => {
-          if (selectedCategoryFilter === 'custom') return it.category === 'custom';
-          return it.category === selectedCategoryFilter;
-        });
-      }
+        if (selectedCategoryFilter !== 'all') {
+          list = list.filter(it => {
+            if (selectedCategoryFilter === 'custom') return it.category === 'custom';
+            return it.category === selectedCategoryFilter;
+          });
+        }
+        return list;
+      };
+
+      // Build item recap lists
+      const itemRecapList = buildRecapList(c.itemRecap);
+      const todayItemRecapList = buildRecapList(c.todayItemRecap);
+      const pindahanItemRecapList = buildRecapList(c.pindahanItemRecap);
 
       return {
         ...c,
@@ -982,7 +1015,10 @@ export default function TugasKurir() {
         customersGuru,
         customersPutra,
         customersPutri,
-        itemRecapList
+        itemRecapList,
+        todayItemRecapList,
+        pindahanItemRecapList,
+        hasPindahan: c.hasPindahan && pindahanItemRecapList.length > 0
       };
     }).filter(c => {
       // If category filter is active, only show canteens that have items matching the category
@@ -1934,107 +1970,193 @@ export default function TugasKurir() {
                     {isExpanded && (
                       <div className="p-2 sm:p-2.5 bg-gray-50/70 dark:bg-gray-800/40 border-t border-gray-300 dark:border-gray-700 space-y-2.5">
                         
-                        {/* 1. REKAP TOTAL MAKANAN DI TOKO INI DENGAN RINCIAN VARIAN / LEVEL */}
-                        <div className="bg-white dark:bg-gray-900 p-2 sm:p-2.5 rounded-none border border-gray-300 dark:border-gray-700 shadow-xs space-y-1.5">
-                          <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-800 pb-1 flex-wrap gap-1">
-                            <h4 className="text-[11px] font-bold text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                              🍽️ Total Menu yang Harus Diambil di {canteen.canteenName}:
-                            </h4>
-                            <span className="text-[10px] text-gray-500 font-mono">
-                              {canteen.itemRecapList.length} Menu Berbeda
-                            </span>
-                          </div>
-
-                          <div className="divide-y divide-gray-200 dark:divide-gray-800">
-                            {canteen.itemRecapList.map((item, idx) => (
-                              <div key={idx} className="py-2 first:pt-1 last:pb-1 space-y-1.5">
-                                {/* Main Product Row */}
-                                <div className="flex items-center justify-between gap-2">
-                                  <div className="flex items-center gap-2 min-w-0">
-                                    <span className="px-2 py-0.5 bg-green-700 text-white text-xs font-mono font-black shrink-0 rounded-none">
-                                      {item.quantity}x
-                                    </span>
-                                    <div className="min-w-0">
-                                      <div className="flex items-center gap-1.5 flex-wrap">
-                                        <span className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-tight">
-                                          {item.name}
+                        {/* 1. REKAP TOTAL MAKANAN DI TOKO INI (DIPISAHKAN ANTARA PESANAN HARI INI & PINDAHAN) */}
+                        {(() => {
+                          const renderRecapItemsList = (itemsList, isPindahanSection = false) => {
+                            return (
+                              <div className="divide-y divide-gray-200 dark:divide-gray-800">
+                                {itemsList.map((item, idx) => (
+                                  <div key={idx} className="py-2 first:pt-1 last:pb-1 space-y-1.5">
+                                    {/* Main Product Row */}
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className="flex items-center gap-2 min-w-0">
+                                        <span className={`px-2 py-0.5 text-xs font-mono font-black shrink-0 rounded-none ${
+                                          isPindahanSection ? 'bg-amber-600 text-white' : 'bg-green-700 text-white'
+                                        }`}>
+                                          {item.quantity}x
                                         </span>
-                                        <span className="text-[9px] font-bold px-1.5 py-0.2 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-700 uppercase">
-                                          {item.category}
+                                        <div className="min-w-0">
+                                          <div className="flex items-center gap-1.5 flex-wrap">
+                                            <span className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-tight">
+                                              {item.name}
+                                            </span>
+                                            <span className="text-[9px] font-bold px-1.5 py-0.2 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-700 uppercase">
+                                              {item.category}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                      <div className="text-right shrink-0">
+                                        <span className="text-xs font-black font-mono text-gray-900 dark:text-white">
+                                          Rp {formatRupiah(item.total)}
                                         </span>
                                       </div>
                                     </div>
+
+                                    {/* Variant / Spicy Level Breakdown Grid / Table */}
+                                    {item.variantsList && item.variantsList.length > 0 && (
+                                      <div className="pl-6 sm:pl-7">
+                                        <div className="bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 p-1.5 rounded-none space-y-1">
+                                          <div className="text-[9px] font-bold text-gray-500 uppercase tracking-wider flex items-center justify-between px-1">
+                                            <span>Rincian Varian / Level ({item.variantsList.length} Pilihan):</span>
+                                            <span className="font-mono text-gray-400">Klik varian untuk filter santri</span>
+                                          </div>
+
+                                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1">
+                                            {item.variantsList.map((v, vIdx) => {
+                                              const badgeStyle = getVariantBadgeStyle(v.label);
+                                              const isVariantActive = activeVariant === v.label;
+
+                                              return (
+                                                <button
+                                                  key={vIdx}
+                                                  type="button"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setSelectedVariantFilter(prev => ({
+                                                      ...prev,
+                                                      [canteen.canteenId]: prev[canteen.canteenId] === v.label ? null : v.label
+                                                    }));
+                                                  }}
+                                                  className={`px-1.5 py-1 text-left border rounded-none flex items-center justify-between gap-1 transition-all ${
+                                                    isVariantActive 
+                                                      ? 'bg-amber-100 dark:bg-amber-950/80 border-amber-500 ring-1 ring-amber-500 font-bold' 
+                                                      : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-750 hover:border-gray-400'
+                                                  }`}
+                                                  title={`Klik untuk filter santri pemesan ${v.label}`}
+                                                >
+                                                  <div className="flex items-center gap-1 min-w-0">
+                                                    <span className="text-xs shrink-0">{badgeStyle.icon}</span>
+                                                    <span className={`text-[10px] truncate ${isVariantActive ? 'text-amber-950 dark:text-amber-200 font-black' : 'text-gray-800 dark:text-gray-200'}`}>
+                                                      {v.label}
+                                                    </span>
+                                                  </div>
+                                                  <div className="flex items-center gap-1 shrink-0">
+                                                    <span className={`px-1 py-0.2 text-[10px] font-mono font-black rounded-none ${
+                                                      isVariantActive ? 'bg-amber-500 text-gray-950' : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white'
+                                                    }`}>
+                                                      {v.quantity}x
+                                                    </span>
+                                                  </div>
+                                                </button>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )}
                                   </div>
-                                  <div className="text-right shrink-0">
-                                    <span className="text-xs font-black font-mono text-gray-900 dark:text-white">
-                                      Rp {formatRupiah(item.total)}
+                                ))}
+                              </div>
+                            );
+                          };
+
+                          if (canteen.hasPindahan && canteen.pindahanItemRecapList.length > 0) {
+                            return (
+                              <div className="space-y-2">
+                                {/* BAGIAN ATAS: REKAP MENU HARI INI */}
+                                <div className="bg-white dark:bg-gray-900 p-2 sm:p-2.5 rounded-none border border-gray-300 dark:border-gray-700 shadow-xs space-y-1.5">
+                                  <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-800 pb-1 flex-wrap gap-1">
+                                    <div className="flex items-center gap-1.5">
+                                      <h4 className="text-[11px] font-bold text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-1">
+                                        🍽️ Menu Pesanan Hari Ini di {canteen.canteenName}:
+                                      </h4>
+                                      <span className="px-1.5 py-0.2 text-[9px] font-bold bg-green-100 text-green-800 dark:bg-green-950/60 dark:text-green-300 border border-green-300 dark:border-green-800 rounded-none">
+                                        Hari Ini
+                                      </span>
+                                    </div>
+                                    <span className="text-[10px] text-gray-500 font-mono">
+                                      {canteen.todayItemRecapList.length} Menu
+                                    </span>
+                                  </div>
+
+                                  {renderRecapItemsList(canteen.todayItemRecapList, false)}
+
+                                  <div className="pt-1.5 border-t border-gray-200 dark:border-gray-800 flex items-center justify-between text-[11px] font-bold">
+                                    <span className="text-gray-500">Subtotal Modal Hari Ini:</span>
+                                    <span className="text-green-700 dark:text-green-400 font-mono font-black">
+                                      Rp {formatRupiah(canteen.todayCost)}
                                     </span>
                                   </div>
                                 </div>
 
-                                {/* Variant / Spicy Level Breakdown Grid / Table */}
-                                {item.variantsList && item.variantsList.length > 0 && (
-                                  <div className="pl-6 sm:pl-7">
-                                    <div className="bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 p-1.5 rounded-none space-y-1">
-                                      <div className="text-[9px] font-bold text-gray-500 uppercase tracking-wider flex items-center justify-between px-1">
-                                        <span>Rincian Varian / Level ({item.variantsList.length} Pilihan):</span>
-                                        <span className="font-mono text-gray-400">Klik varian untuk filter santri</span>
-                                      </div>
-
-                                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1">
-                                        {item.variantsList.map((v, vIdx) => {
-                                          const badgeStyle = getVariantBadgeStyle(v.label);
-                                          const isVariantActive = activeVariant === v.label;
-
-                                          return (
-                                            <button
-                                              key={vIdx}
-                                              type="button"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                setSelectedVariantFilter(prev => ({
-                                                  ...prev,
-                                                  [canteen.canteenId]: prev[canteen.canteenId] === v.label ? null : v.label
-                                                }));
-                                              }}
-                                              className={`px-1.5 py-1 text-left border rounded-none flex items-center justify-between gap-1 transition-all ${
-                                                isVariantActive 
-                                                  ? 'bg-amber-100 dark:bg-amber-950/80 border-amber-500 ring-1 ring-amber-500 font-bold' 
-                                                  : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-750 hover:border-gray-400'
-                                              }`}
-                                              title={`Klik untuk filter santri pemesan ${v.label}`}
-                                            >
-                                              <div className="flex items-center gap-1 min-w-0">
-                                                <span className="text-xs shrink-0">{badgeStyle.icon}</span>
-                                                <span className={`text-[10px] truncate ${isVariantActive ? 'text-amber-950 dark:text-amber-200 font-black' : 'text-gray-800 dark:text-gray-200'}`}>
-                                                  {v.label}
-                                                </span>
-                                              </div>
-                                              <div className="flex items-center gap-1 shrink-0">
-                                                <span className={`px-1 py-0.2 text-[10px] font-mono font-black rounded-none ${
-                                                  isVariantActive ? 'bg-amber-500 text-gray-950' : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white'
-                                                }`}>
-                                                  {v.quantity}x
-                                                </span>
-                                              </div>
-                                            </button>
-                                          );
-                                        })}
-                                      </div>
+                                {/* BAGIAN BAWAH: REKAP PESANAN PINDAHAN (DIPISAHKAN AGAR TIDAK JADI SATU) */}
+                                <div className="bg-amber-50/70 dark:bg-amber-950/30 p-2 sm:p-2.5 rounded-none border-2 border-amber-400 dark:border-amber-700 shadow-xs space-y-1.5">
+                                  <div className="flex items-center justify-between border-b border-amber-200 dark:border-amber-800/80 pb-1 flex-wrap gap-1">
+                                    <div className="flex items-center gap-1.5">
+                                      <h4 className="text-[11px] font-black text-amber-950 dark:text-amber-200 uppercase tracking-wider flex items-center gap-1">
+                                        📅 Rekap Pesanan Pindahan (Dari Tanggal Lain):
+                                      </h4>
+                                      <span className="px-1.5 py-0.2 text-[9px] font-black bg-amber-400 text-gray-950 rounded-none uppercase">
+                                        Pindahan
+                                      </span>
                                     </div>
+                                    <span className="text-[10px] text-amber-800 dark:text-amber-300 font-mono font-bold">
+                                      {canteen.pindahanItemRecapList.length} Menu Pindahan
+                                    </span>
                                   </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
+                                  <p className="text-[10px] text-amber-800/90 dark:text-amber-300/90 italic">
+                                    💡 Pesanan pindahan dari kemarin/sebelumnya dipisahkan di bawah agar kantin tidak salah menyiapkan stok porsi hari ini.
+                                  </p>
 
-                          <div className="pt-2 border-t border-gray-200 dark:border-gray-800 flex items-center justify-between text-xs font-bold">
-                            <span className="text-gray-600 dark:text-gray-400">Total Modal Belanja Toko:</span>
-                            <span className="text-green-700 dark:text-green-400 text-sm font-mono font-black">
-                              Rp {formatRupiah(canteen.totalCost)}
-                            </span>
-                          </div>
-                        </div>
+                                  {renderRecapItemsList(canteen.pindahanItemRecapList, true)}
+
+                                  <div className="pt-1.5 border-t border-amber-200 dark:border-amber-800 flex items-center justify-between text-[11px] font-bold">
+                                    <span className="text-amber-900 dark:text-amber-300">Subtotal Modal Pindahan:</span>
+                                    <span className="text-amber-900 dark:text-amber-300 font-mono font-black">
+                                      Rp {formatRupiah(canteen.pindahanCost)}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* TOTAL KESELURUHAN MODAL BELANJA TOKO */}
+                                <div className="p-2 bg-gray-100 dark:bg-gray-800/80 border border-gray-300 dark:border-gray-700 flex items-center justify-between text-xs font-bold rounded-none">
+                                  <div>
+                                    <span className="text-gray-700 dark:text-gray-300">Total Seluruh Modal Belanja Toko:</span>
+                                    <span className="text-[10px] text-gray-400 font-normal block font-mono">
+                                      (Hari Ini: Rp {formatRupiah(canteen.todayCost)} + Pindahan: Rp {formatRupiah(canteen.pindahanCost)})
+                                    </span>
+                                  </div>
+                                  <span className="text-green-700 dark:text-green-400 text-sm font-mono font-black">
+                                    Rp {formatRupiah(canteen.totalCost)}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <div className="bg-white dark:bg-gray-900 p-2 sm:p-2.5 rounded-none border border-gray-300 dark:border-gray-700 shadow-xs space-y-1.5">
+                              <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-800 pb-1 flex-wrap gap-1">
+                                <h4 className="text-[11px] font-bold text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                                  🍽️ Total Menu yang Harus Diambil di {canteen.canteenName}:
+                                </h4>
+                                <span className="text-[10px] text-gray-500 font-mono">
+                                  {canteen.itemRecapList.length} Menu Berbeda
+                                </span>
+                              </div>
+
+                              {renderRecapItemsList(canteen.itemRecapList, false)}
+
+                              <div className="pt-2 border-t border-gray-200 dark:border-gray-800 flex items-center justify-between text-xs font-bold">
+                                <span className="text-gray-600 dark:text-gray-400">Total Modal Belanja Toko:</span>
+                                <span className="text-green-700 dark:text-green-400 text-sm font-mono font-black">
+                                  Rp {formatRupiah(canteen.totalCost)}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })()}
 
                         {/* 2. SIAPA AJA YANG PESAN DI TOKO INI (DIPISAHKAN PUTRA & PUTRI) */}
                         <div className="space-y-2 pt-0.5">
@@ -2109,6 +2231,11 @@ export default function TugasKurir() {
                                             <h5 className="font-extrabold text-gray-900 dark:text-white text-xs">
                                               {cust.santriName}
                                             </h5>
+                                            {cust.hasPindahan && (
+                                              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-none bg-amber-100 text-amber-900 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
+                                                📅 Pindahan ({cust.pindahanOrigDate || 'Kemarin'})
+                                              </span>
+                                            )}
                                             <span className="text-[9px] font-bold px-1 py-0.2 rounded-none bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300 border border-purple-200">
                                               Unit {cust.teacherUnit || 'Yayasan'}
                                             </span>
@@ -2246,6 +2373,11 @@ export default function TugasKurir() {
                                             <span className="text-[9px] text-gray-500 bg-gray-100 dark:bg-gray-800 px-1 py-0.2 rounded-none">
                                               Wali: {cust.waliName}
                                             </span>
+                                            {cust.hasPindahan && (
+                                              <span className="text-[9px] font-bold px-1 py-0.2 rounded-none bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border border-amber-300">
+                                                📅 Pindahan ({cust.pindahanOrigDate || 'Kemarin'})
+                                              </span>
+                                            )}
                                           </div>
                                           <p className="text-[10px] text-gray-600 dark:text-gray-400 mt-0.5">
                                             🏠 {cust.santriRoom} {cust.santriClass ? `• Kelas ${cust.santriClass}` : ''}
@@ -2374,6 +2506,11 @@ export default function TugasKurir() {
                                             <span className="text-[9px] text-gray-500 bg-gray-100 dark:bg-gray-800 px-1 py-0.2 rounded-none">
                                               Wali: {cust.waliName}
                                             </span>
+                                            {cust.hasPindahan && (
+                                              <span className="text-[9px] font-bold px-1 py-0.2 rounded-none bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border border-amber-300">
+                                                📅 Pindahan ({cust.pindahanOrigDate || 'Kemarin'})
+                                              </span>
+                                            )}
                                           </div>
                                           <p className="text-[10px] text-gray-600 dark:text-gray-400 mt-0.5">
                                             🏠 {cust.santriRoom} {cust.santriClass ? `• Kelas ${cust.santriClass}` : ''}

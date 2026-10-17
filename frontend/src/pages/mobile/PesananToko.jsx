@@ -2517,37 +2517,126 @@ ${itemsListText}
                   </button>
                 </div>
 
-                {/* Summary Metric Cards (Khusus Kantin: Total Belanja, Total Modal, Laba Toko, Total Ongkir) */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-1.5 sm:gap-2">
-                  <div className="bg-white dark:bg-gray-900 p-2 sm:p-2.5 rounded-none border border-gray-200 dark:border-gray-800 shadow-xs">
-                    <span className="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider block">Omzet Menu (HPJ)</span>
-                    <span className="text-sm sm:text-base font-black font-mono text-gray-900 dark:text-white block mt-0.5">
-                      Rp {(recapData?.summary?.total_products || 0).toLocaleString('id-ID')}
-                    </span>
-                    <span className="text-[9.5px] text-gray-400 block mt-0.5">Penjualan Makanan</span>
-                  </div>
-                  <div className="bg-amber-50/60 dark:bg-amber-950/20 p-2 sm:p-2.5 rounded-none border border-amber-200/80 dark:border-amber-800/40 shadow-xs">
-                    <span className="text-[10px] text-amber-700 dark:text-amber-400 font-bold uppercase tracking-wider block">Total Modal (HPP)</span>
-                    <span className="text-sm sm:text-base font-black font-mono text-amber-700 dark:text-amber-300 block mt-0.5">
-                      Rp {(recapData?.summary?.total_hpp || 0).toLocaleString('id-ID')}
-                    </span>
-                    <span className="text-[9.5px] text-amber-600/80 dark:text-amber-400/80 block mt-0.5">Modal Belanja Riil</span>
-                  </div>
-                  <div className="bg-emerald-50 dark:bg-emerald-950/40 p-2 sm:p-2.5 rounded-none border border-emerald-200 dark:border-emerald-800/50 shadow-xs">
-                    <span className="text-[10px] text-emerald-700 dark:text-emerald-300 font-bold uppercase tracking-wider block">Laba Bersih Toko</span>
-                    <span className="text-sm sm:text-base font-black font-mono text-emerald-700 dark:text-emerald-300 block mt-0.5">
-                      Rp {(recapData?.summary?.total_profit || 0).toLocaleString('id-ID')}
-                    </span>
-                    <span className="text-[9.5px] text-emerald-600/80 dark:text-emerald-400/80 block mt-0.5">100% Hak Toko</span>
-                  </div>
-                  <div className="bg-blue-50/60 dark:bg-blue-950/20 p-2 sm:p-2.5 rounded-none border border-blue-200/80 dark:border-blue-800/40 shadow-xs">
-                    <span className="text-[10px] text-blue-700 dark:text-blue-400 font-bold uppercase tracking-wider block">Total Ongkir Kurir</span>
-                    <span className="text-sm sm:text-base font-black font-mono text-blue-600 dark:text-blue-400 block mt-0.5">
-                      Rp {(recapData?.summary?.total_delivery_fee || 0).toLocaleString('id-ID')}
-                    </span>
-                    <span className="text-[9.5px] text-blue-600/80 dark:text-blue-400/80 block mt-0.5">Hak Driver/Kurir</span>
-                  </div>
-                </div>
+                {/* Summary Metric Cards (Terpisah Hari Ini dan Pindahan jika ada) */}
+                {(() => {
+                  const hasPindahan = Boolean(recapData?.summary?.has_pindahan);
+                  const todaySummary = recapData?.summary?.today_summary || {
+                    total_orders: recapData?.summary?.today_orders_count ?? recapData?.summary?.total_orders,
+                    total_products: recapData?.summary?.today_products ?? recapData?.summary?.total_products,
+                    total_hpp: recapData?.summary?.today_hpp ?? (recapData?.summary?.total_hpp - (recapData?.summary?.pindahan_hpp || 0)),
+                    total_profit: recapData?.summary?.today_profit ?? recapData?.summary?.total_profit,
+                    total_delivery_fee: recapData?.summary?.today_delivery_fee ?? recapData?.summary?.total_delivery_fee,
+                  };
+
+                  const pindahanSummary = recapData?.summary?.pindahan_summary || {
+                    total_orders: recapData?.summary?.pindahan_orders_count || 0,
+                    total_products: recapData?.summary?.pindahan_products || 0,
+                    total_hpp: recapData?.summary?.pindahan_hpp || 0,
+                    total_profit: recapData?.summary?.pindahan_profit || 0,
+                    total_delivery_fee: recapData?.summary?.pindahan_delivery_fee || 0,
+                  };
+
+                  const renderCanteenCardsGrid = (s, isPind = false, label = null) => (
+                    <div className={`space-y-1.5 ${isPind ? 'p-2 sm:p-2.5 bg-amber-50/40 dark:bg-amber-950/20 border-2 border-amber-300 dark:border-amber-700/80 rounded-none' : ''}`}>
+                      {label && (
+                        <div className="flex items-center justify-between pb-1 border-b border-gray-200 dark:border-gray-800">
+                          <h3 className={`text-xs sm:text-sm font-bold flex items-center gap-1.5 ${isPind ? 'text-amber-900 dark:text-amber-200 font-extrabold' : 'text-gray-900 dark:text-white'}`}>
+                            {isPind ? <span>📅</span> : <span>🍽️</span>}
+                            <span>{label}</span>
+                          </h3>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-none font-mono ${
+                            isPind 
+                              ? 'bg-amber-200 text-amber-900 dark:bg-amber-900/60 dark:text-amber-200 border border-amber-400' 
+                              : 'bg-green-100 text-green-800 dark:bg-green-900/60 dark:text-green-300 border border-green-300'
+                          }`}>
+                            {s.total_orders || 0} Order
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-1.5 sm:gap-2">
+                        <div className="bg-white dark:bg-gray-900 p-2 sm:p-2.5 rounded-none border border-gray-200 dark:border-gray-800 shadow-xs">
+                          <span className="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider block truncate">
+                            {isPind ? 'Omzet Menu Pindahan (HPJ)' : 'Omzet Menu (HPJ)'}
+                          </span>
+                          <span className="text-sm sm:text-base font-black font-mono text-gray-900 dark:text-white block mt-0.5">
+                            Rp {(s.total_products || 0).toLocaleString('id-ID')}
+                          </span>
+                          <span className="text-[9.5px] text-gray-400 block mt-0.5">
+                            {isPind ? 'Pesanan Dari Tanggal Lain' : 'Penjualan Makanan'}
+                          </span>
+                        </div>
+
+                        <div className="bg-amber-50/60 dark:bg-amber-950/20 p-2 sm:p-2.5 rounded-none border border-amber-200/80 dark:border-amber-800/40 shadow-xs">
+                          <span className="text-[10px] text-amber-700 dark:text-amber-400 font-bold uppercase tracking-wider block truncate">
+                            {isPind ? 'Modal Pindahan (HPP)' : 'Total Modal (HPP)'}
+                          </span>
+                          <span className="text-sm sm:text-base font-black font-mono text-amber-700 dark:text-amber-300 block mt-0.5">
+                            Rp {(s.total_hpp || 0).toLocaleString('id-ID')}
+                          </span>
+                          <span className="text-[9.5px] text-amber-600/80 dark:text-amber-400/80 block mt-0.5">Modal Belanja Riil</span>
+                        </div>
+
+                        <div className="bg-emerald-50 dark:bg-emerald-950/40 p-2 sm:p-2.5 rounded-none border border-emerald-200 dark:border-emerald-800/50 shadow-xs">
+                          <span className="text-[10px] text-emerald-700 dark:text-emerald-300 font-bold uppercase tracking-wider block truncate">
+                            {isPind ? 'Laba Bersih Pindahan' : 'Laba Bersih Toko'}
+                          </span>
+                          <span className="text-sm sm:text-base font-black font-mono text-emerald-700 dark:text-emerald-300 block mt-0.5">
+                            Rp {(s.total_profit || 0).toLocaleString('id-ID')}
+                          </span>
+                          <span className="text-[9.5px] text-emerald-600/80 dark:text-emerald-400/80 block mt-0.5">100% Hak Toko</span>
+                        </div>
+
+                        <div className="bg-blue-50/60 dark:bg-blue-950/20 p-2 sm:p-2.5 rounded-none border border-blue-200/80 dark:border-blue-800/40 shadow-xs">
+                          <span className="text-[10px] text-blue-700 dark:text-blue-400 font-bold uppercase tracking-wider block truncate">
+                            {isPind ? 'Ongkir Kurir Pindahan' : 'Total Ongkir Kurir'}
+                          </span>
+                          <span className="text-sm sm:text-base font-black font-mono text-blue-600 dark:text-blue-400 block mt-0.5">
+                            Rp {(s.total_delivery_fee || 0).toLocaleString('id-ID')}
+                          </span>
+                          <span className="text-[9.5px] text-blue-600/80 dark:text-blue-400/80 block mt-0.5">Hak Driver/Kurir</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+
+                  return (
+                    <div className="space-y-2">
+                      {/* Blok 1: Rekapan Hari Ini / Reguler */}
+                      {renderCanteenCardsGrid(
+                        hasPindahan ? todaySummary : (recapData?.summary || todaySummary), 
+                        false, 
+                        hasPindahan ? "Rekapitulasi Penjualan Hari Ini (Reguler)" : null
+                      )}
+
+                      {/* Blok 2: Rekapan Khusus Pindahan (Kemarin / Dari Tanggal Lain) */}
+                      {hasPindahan && (
+                        renderCanteenCardsGrid(
+                          pindahanSummary, 
+                          true, 
+                          `Rekapitulasi Pesanan Pindahan (Dari Tanggal Lain / Kemarin)`
+                        )
+                      )}
+
+                      {/* Blok 3: Total Akumulasi Gabungan */}
+                      {hasPindahan && (
+                        <div className="bg-gray-100 dark:bg-gray-800/80 p-2 border border-gray-300 dark:border-gray-700 rounded-none flex flex-wrap items-center justify-between gap-1.5 text-xs font-mono shadow-xs">
+                          <div className="flex items-center gap-1.5 font-bold text-gray-800 dark:text-gray-200">
+                            <span>📊 TOTAL AKUMULASI (HARI INI + PINDAHAN):</span>
+                            <span className="text-gray-500 font-normal font-sans">({recapData.summary.total_orders} Total Pesanan)</span>
+                          </div>
+                          <div className="flex items-center gap-2 flex-wrap text-[11px] font-bold">
+                            <span className="text-gray-700 dark:text-gray-300">Omzet: Rp {recapData.summary.total_products.toLocaleString('id-ID')}</span>
+                            <span>•</span>
+                            <span className="text-amber-700 dark:text-amber-400">Modal: Rp {recapData.summary.total_hpp.toLocaleString('id-ID')}</span>
+                            <span>•</span>
+                            <span className="text-emerald-700 dark:text-emerald-400">Laba: +Rp {recapData.summary.total_profit.toLocaleString('id-ID')}</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {/* Rekap Per Toko / Kantin */}
                 {recapData?.canteen_recap && recapData.canteen_recap.length > 0 && (
@@ -2639,18 +2728,27 @@ ${itemsListText}
                   </div>
                 </div>
 
-                {/* Rekap Per Produk */}
+                {/* Rekap Per Produk (Hari Ini) */}
                 <div className="bg-white dark:bg-gray-900 rounded-none shadow-xs border border-gray-200 dark:border-gray-800 overflow-hidden">
-                  <div className="p-2 sm:p-2.5 border-b border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30">
-                    <h3 className="font-bold text-gray-900 dark:text-white text-xs sm:text-sm">
-                      Rekap Kuantitas & Laba Per Produk
-                    </h3>
+                  <div className="p-2 sm:p-2.5 border-b border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30 flex items-center justify-between">
+                    <div>
+                      <h3 className="font-bold text-gray-900 dark:text-white text-xs sm:text-sm flex items-center gap-1.5">
+                        <span>🍽️</span>
+                        <span>Rekap Kuantitas & Laba Produk (Pesanan Hari Ini)</span>
+                      </h3>
+                      <p className="text-[10px] text-gray-500">Khusus menu dari pesanan reguler hari ini</p>
+                    </div>
+                    {recapData?.summary?.today_products !== undefined && (
+                      <span className="text-[10px] font-mono font-bold text-green-700 dark:text-green-300 bg-green-50 dark:bg-green-900/40 px-2 py-0.5 rounded-none border border-green-200 dark:border-green-800">
+                        Total: Rp {(recapData.summary.today_products || 0).toLocaleString('id-ID')}
+                      </span>
+                    )}
                   </div>
                   <div className="divide-y divide-gray-200 dark:divide-gray-800">
-                    {(!recapData?.product_breakdown || recapData.product_breakdown.length === 0) ? (
-                      <div className="p-4 text-center text-gray-500 text-xs">Belum ada produk terjual.</div>
+                    {(!(recapData?.today_product_breakdown || recapData?.product_breakdown) || (recapData?.today_product_breakdown || recapData?.product_breakdown).length === 0) ? (
+                      <div className="p-4 text-center text-gray-500 text-xs">Belum ada produk pesanan hari ini yang terjual.</div>
                     ) : (
-                      recapData.product_breakdown.map(p => (
+                      (recapData.today_product_breakdown || recapData.product_breakdown).map(p => (
                         <div key={p.product_id} className="p-2 sm:p-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 text-xs">
                           <div>
                             <div className="flex items-center gap-1.5 flex-wrap">
@@ -2688,6 +2786,73 @@ ${itemsListText}
                     )}
                   </div>
                 </div>
+
+                {/* Rekap Per Produk (KHUSUS PESANAN PINDAHAN DARI TANGGAL LAIN) */}
+                {recapData?.pindahan_product_breakdown && recapData.pindahan_product_breakdown.length > 0 && (
+                  <div className="bg-amber-50/30 dark:bg-amber-950/20 rounded-none shadow-xs border-2 border-amber-300 dark:border-amber-700/80 overflow-hidden">
+                    <div className="p-2 sm:p-2.5 border-b border-amber-200 dark:border-amber-800/80 bg-amber-100/70 dark:bg-amber-900/40 flex items-center justify-between">
+                      <div>
+                        <h3 className="font-extrabold text-amber-900 dark:text-amber-200 text-xs sm:text-sm flex items-center gap-1.5">
+                          <span>📅</span>
+                          <span>Rekap Produk Pesanan Pindahan (Dari Tanggal Lain)</span>
+                        </h3>
+                        <p className="text-[10px] text-amber-800 dark:text-amber-300">
+                          Pesanan yang dibuat pada tanggal/hari sebelumnya namun dijadwalkan ulang/diproses di periode ini
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[10px] font-mono font-bold text-amber-900 dark:text-amber-200 bg-amber-200/80 dark:bg-amber-800/60 px-2 py-0.5 rounded-none border border-amber-400 dark:border-amber-600 block">
+                          Rp {(recapData.summary?.pindahan_products || 0).toLocaleString('id-ID')}
+                        </span>
+                        {recapData.summary?.pindahan_profit > 0 && (
+                          <span className="text-[9px] font-mono text-emerald-700 dark:text-emerald-400 font-bold block mt-0.5">
+                            Laba: +Rp {(recapData.summary.pindahan_profit || 0).toLocaleString('id-ID')}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="divide-y divide-amber-200/60 dark:divide-amber-900/40">
+                      {recapData.pindahan_product_breakdown.map(p => (
+                        <div key={p.product_id} className="p-2 sm:p-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 text-xs bg-white/60 dark:bg-gray-900/60">
+                          <div>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-bold text-gray-800 dark:text-gray-200">{p.name}</span>
+                              <span className="text-[9px] bg-amber-200 text-amber-900 dark:bg-amber-900/60 dark:text-amber-300 font-bold px-1.5 py-0.2 rounded-none border border-amber-300">
+                                📅 Pindahan
+                              </span>
+                              {p.is_custom && (
+                                <span className="text-[9.5px] bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 px-1 py-0.2 rounded-none font-bold border border-purple-200 dark:border-purple-800">
+                                  Titip Beli
+                                </span>
+                              )}
+                              {p.canteen_name && (
+                                <span className="text-[9.5px] text-gray-500 dark:text-gray-400 font-normal bg-gray-100 dark:bg-gray-800 px-1 py-0.2 rounded-none border border-gray-200 dark:border-gray-700">
+                                  {p.canteen_name}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 flex items-center gap-1.5 font-mono">
+                              <span>HPJ: <strong className="text-gray-700 dark:text-gray-300">Rp {(p.hpj || 0).toLocaleString('id-ID')}</strong></span>
+                              <span>•</span>
+                              <span>HPP: <strong className="text-amber-700 dark:text-amber-400">Rp {(p.hpp || 1000).toLocaleString('id-ID')}</strong></span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-bold text-amber-800 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 rounded-none text-[11px] font-mono border border-amber-300 dark:border-amber-700">
+                              {p.total_quantity}x terjual
+                            </span>
+                            <span className="bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 px-1.5 py-0.5 rounded-none text-[11px] font-semibold font-mono border border-gray-200 dark:border-gray-700">
+                              Rp {p.total_subtotal.toLocaleString('id-ID')}
+                            </span>
+                            <span className="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/40 px-1.5 py-0.5 rounded-none text-[11px] font-bold font-mono">
+                              +Rp {(p.total_profit || 0).toLocaleString('id-ID')}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </>
             )}
           </div>

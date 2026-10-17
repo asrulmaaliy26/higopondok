@@ -2,6 +2,7 @@ import React, { useRef, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Printer, X, CheckCircle, FileText, ShoppingBag, Store, User, MapPin, Building2, Calendar, Phone, CheckSquare } from 'lucide-react';
 import santriData from '../../data/santri.json';
+import { isOrderPindahan, getOrderOrigDate } from '../../lib/orderUtils';
 
 const formatRupiah = (num) => {
   return Math.round(Number(num) || 0).toLocaleString('id-ID', { maximumFractionDigits: 0 });
@@ -225,6 +226,39 @@ export default function ThermalReceiptModal({
     });
     
     return Array.from(userGroups.values());
+  }, [filteredBatchOrders]);
+
+  // Pisahkan santri pesanan hari ini dan santri pesanan pindahan
+  const { todayUserGroups, pindahanUserGroups } = useMemo(() => {
+    const today = [];
+    const pindahan = [];
+    groupedOrdersByUser.forEach(group => {
+      const isPind = group.orders.some(o => isOrderPindahan(o));
+      if (isPind) {
+        pindahan.push({
+          ...group,
+          isPindahan: true,
+          pindahanOrigDate: getOrderOrigDate(group.primaryOrder || group.orders[0])
+        });
+      } else {
+        today.push(group);
+      }
+    });
+    return { todayUserGroups: today, pindahanUserGroups: pindahan };
+  }, [groupedOrdersByUser]);
+
+  // Pisahkan daftar order individual untuk manifes A4
+  const { todayOrders, pindahanOrders } = useMemo(() => {
+    const today = [];
+    const pindahan = [];
+    filteredBatchOrders.forEach(o => {
+      if (isOrderPindahan(o)) {
+        pindahan.push(o);
+      } else {
+        today.push(o);
+      }
+    });
+    return { todayOrders: today, pindahanOrders: pindahan };
   }, [filteredBatchOrders]);
 
   // Calculate single order summary
@@ -1040,124 +1074,161 @@ export default function ThermalReceiptModal({
                             Tidak ada data pesanan aktif untuk filter saat ini.
                           </div>
                         ) : (
-                          groupedOrdersByUser.map((group, idx) => {
-                            const info = group.info;
-                            const primaryOrder = group.primaryOrder;
-                            const asrama = (info.santriRoom && info.santriRoom !== '-') ? info.santriRoom : (primaryOrder?.delivery_location || '-');
-                            const kelas = info.santriClass || (info.santriLevel ? `Kelas ${info.santriLevel}` : (info.isTeacher ? 'Guru / Staff' : '-'));
-                            const orderCodes = group.orders.map(o => `#ORD-${o.id}`).join(', ');
+                          <>
+                            {(() => {
+                              const renderA4Card = (group, key, isPind) => {
+                                const info = group.info;
+                                const primaryOrder = group.primaryOrder;
+                                const asrama = (info.santriRoom && info.santriRoom !== '-') ? info.santriRoom : (primaryOrder?.delivery_location || '-');
+                                const kelas = info.santriClass || (info.santriLevel ? `Kelas ${info.santriLevel}` : (info.isTeacher ? 'Guru / Staff' : '-'));
+                                const orderCodes = group.orders.map(o => `#ORD-${o.id}`).join(', ');
 
-                            return (
-                              <div 
-                                key={idx} 
-                                className="a4-receipt-card border-2 border-dashed border-black rounded-none p-5 sm:p-6 bg-white text-black font-mono shadow-sm relative flex flex-col space-y-3 w-full"
-                              >
-                                {/* HEADER STRUK */}
-                                <div className="text-center pb-3 border-b-2 border-dashed border-black">
-                                  <div className="flex justify-between items-center text-xs sm:text-sm font-bold text-gray-700">
-                                    <span className="bg-black text-white px-2.5 py-0.5 rounded-none text-xs sm:text-sm font-black tracking-wider">
-                                      {group.orders.length > 1 ? `WADAH (${group.orders.length} TOKO)` : orderCodes}
-                                    </span>
-                                    <span className="font-mono">{formatDateTime(primaryOrder.created_at)}</span>
-                                  </div>
-                                  <h3 className="font-black text-xl sm:text-2xl uppercase tracking-widest text-black mt-2">
-                                    HIGO PONDOK
-                                  </h3>
-                                  <p className="text-xs sm:text-sm font-bold text-gray-700 tracking-wide mt-0.5">
-                                    {info.isTeacher ? 'LAYANAN PESAN ANTAR GURU & STAFF' : 'LAYANAN PESAN ANTAR SANTRI'}
-                                  </p>
-                                </div>
-
-                                {/* DATA SANTRI & TUJUAN ANTAR */}
-                                <div className="py-2 border-b-2 border-dashed border-black space-y-1.5 text-xs sm:text-sm">
-                                  <div className="flex items-start justify-between gap-2">
-                                    <span className="shrink-0 text-gray-700 font-bold">
-                                      {info.isTeacher ? 'Penerima / Guru :' : 'Penerima / Santri :'}
-                                    </span>
-                                    <span className="font-black text-right break-words text-black text-sm sm:text-base uppercase">
-                                      {info.santriName}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-start justify-between gap-2">
-                                    <span className="shrink-0 text-gray-700 font-bold">
-                                      {info.isTeacher ? 'Ruang / Meja      :' : 'Kamar / Asrama     :'}
-                                    </span>
-                                    <span className="font-black text-right break-words text-black text-sm sm:text-base">
-                                      📍 {asrama}
-                                    </span>
-                                  </div>
-                                  {(info.santriClass || info.santriLevel) && (
-                                    <div className="flex items-start justify-between gap-2 text-xs text-gray-600">
-                                      <span className="shrink-0">
-                                        {info.isTeacher ? 'Unit / Identitas  :' : 'Kelas / Jenjang   :'}
-                                      </span>
-                                      <span className="text-right font-bold">{kelas}</span>
-                                    </div>
-                                  )}
-                                  {info.waliName && info.waliName !== '-' && (
-                                    <div className="flex items-start justify-between gap-2 text-xs text-gray-600">
-                                      <span className="shrink-0">Wali Santri       :</span>
-                                      <span className="text-right font-bold">{info.waliName}</span>
-                                    </div>
-                                  )}
-                                  {primaryOrder?.delivery_location && primaryOrder.delivery_location !== asrama && (
-                                    <div className="flex items-start justify-between gap-2 text-xs text-gray-800">
-                                      <span className="shrink-0">Tujuan Antar      :</span>
-                                      <span className="text-right font-bold">{primaryOrder.delivery_location}</span>
-                                    </div>
-                                  )}
-                                </div>
-
-                                {/* DAFTAR MENU DARI SELURUH TOKO */}
-                                <div className="py-2 border-b-2 border-dashed border-black text-xs sm:text-sm space-y-3">
-                                  <div className="font-black text-xs sm:text-sm text-black pb-1.5 border-b border-black tracking-wider uppercase">
-                                    RINCIAN MENU ({group.orders.length} TOKO):
-                                  </div>
-                                  {group.orders.map((o, storeIdx) => (
-                                    <div key={storeIdx} className="space-y-1">
-                                      <div className="flex justify-between items-center bg-gray-100 px-2 py-1 border border-black text-xs sm:text-sm font-black">
-                                        <span>🏪 {o.canteen?.name || 'Kantin'}</span>
-                                        <span className="font-mono text-xs">#ORD-{o.id}</span>
+                                return (
+                                  <div 
+                                    key={key} 
+                                    className={`a4-receipt-card border-2 border-dashed ${isPind ? 'border-amber-600 bg-amber-50/20' : 'border-black bg-white'} rounded-none p-5 sm:p-6 text-black font-mono shadow-sm relative flex flex-col space-y-3 w-full`}
+                                  >
+                                    {/* HEADER STRUK */}
+                                    <div className="text-center pb-3 border-b-2 border-dashed border-black">
+                                      <div className="flex justify-between items-center text-xs sm:text-sm font-bold text-gray-700 flex-wrap gap-1">
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          <span className="bg-black text-white px-2.5 py-0.5 rounded-none text-xs sm:text-sm font-black tracking-wider">
+                                            {group.orders.length > 1 ? `WADAH (${group.orders.length} TOKO)` : orderCodes}
+                                          </span>
+                                          {isPind && (
+                                            <span className="bg-amber-200 text-amber-900 border border-amber-400 px-2 py-0.5 text-[10px] font-black uppercase">
+                                              📅 Pindahan ({group.pindahanOrigDate || 'Kemarin'})
+                                            </span>
+                                          )}
+                                        </div>
+                                        <span className="font-mono">{formatDateTime(primaryOrder.created_at)}</span>
                                       </div>
-                                      <div className="pl-2 space-y-1 pt-1">
-                                        {o.items && o.items.length > 0 ? (
-                                          o.items.map((item, itIdx) => {
-                                            const qty = item.quantity || 1;
-                                            return (
-                                              <div key={itIdx} className="space-y-0.5">
-                                                <div className="flex justify-between items-start gap-2 text-sm sm:text-base font-black">
-                                                  <span className="break-words leading-tight">{qty}x {item.product?.name || 'Produk'}</span>
-                                                </div>
-                                                {item.notes && (
-                                                  <div className="text-xs italic text-gray-800 pl-2 border-l-2 border-black ml-1">
-                                                    Catatan: {cleanItemNotes(item.notes)}
-                                                  </div>
-                                                )}
-                                              </div>
-                                            );
-                                          })
-                                        ) : (
-                                          <div className="text-sm sm:text-base font-black">
-                                            • 1x {o.custom_notes || 'Pesanan Khusus / Titip Beli'}
+                                      <h3 className="font-black text-xl sm:text-2xl uppercase tracking-widest text-black mt-2">
+                                        HIGO PONDOK
+                                      </h3>
+                                      <p className="text-xs sm:text-sm font-bold text-gray-700 tracking-wide mt-0.5">
+                                        {info.isTeacher ? 'LAYANAN PESAN ANTAR GURU & STAFF' : 'LAYANAN PESAN ANTAR SANTRI'}
+                                      </p>
+                                    </div>
+
+                                    {/* DATA SANTRI & TUJUAN ANTAR */}
+                                    <div className="py-2 border-b-2 border-dashed border-black space-y-1.5 text-xs sm:text-sm">
+                                      <div className="flex items-start justify-between gap-2">
+                                        <span className="shrink-0 text-gray-700 font-bold">
+                                          {info.isTeacher ? 'Penerima / Guru :' : 'Penerima / Santri :'}
+                                        </span>
+                                        <span className="font-black text-right break-words text-black text-sm sm:text-base uppercase">
+                                          {info.santriName}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-start justify-between gap-2">
+                                        <span className="shrink-0 text-gray-700 font-bold">
+                                          {info.isTeacher ? 'Ruang / Meja      :' : 'Kamar / Asrama     :'}
+                                        </span>
+                                        <span className="font-black text-right break-words text-black text-sm sm:text-base">
+                                          📍 {asrama}
+                                        </span>
+                                      </div>
+                                      {(info.santriClass || info.santriLevel) && (
+                                        <div className="flex items-start justify-between gap-2 text-xs text-gray-600">
+                                          <span className="shrink-0">
+                                            {info.isTeacher ? 'Unit / Identitas  :' : 'Kelas / Jenjang   :'}
+                                          </span>
+                                          <span className="text-right font-bold">{kelas}</span>
+                                        </div>
+                                      )}
+                                      {info.waliName && info.waliName !== '-' && (
+                                        <div className="flex items-start justify-between gap-2 text-xs text-gray-600">
+                                          <span className="shrink-0">Wali Santri       :</span>
+                                          <span className="text-right font-bold">{info.waliName}</span>
+                                        </div>
+                                      )}
+                                      {primaryOrder?.delivery_location && primaryOrder.delivery_location !== asrama && (
+                                        <div className="flex items-start justify-between gap-2 text-xs text-gray-800">
+                                          <span className="shrink-0">Tujuan Antar      :</span>
+                                          <span className="text-right font-bold">{primaryOrder.delivery_location}</span>
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* DAFTAR MENU DARI SELURUH TOKO */}
+                                    <div className="py-2 border-b-2 border-dashed border-black text-xs sm:text-sm space-y-3">
+                                      <div className="font-black text-xs sm:text-sm text-black pb-1.5 border-b border-black tracking-wider uppercase">
+                                        RINCIAN MENU ({group.orders.length} TOKO):
+                                      </div>
+                                      {group.orders.map((o, storeIdx) => (
+                                        <div key={storeIdx} className="space-y-1">
+                                          <div className="flex justify-between items-center bg-gray-100 px-2 py-1 border border-black text-xs sm:text-sm font-black">
+                                            <span>🏪 {o.canteen?.name || 'Kantin'}</span>
+                                            <span className="font-mono text-xs">#ORD-{o.id}</span>
                                           </div>
-                                        )}
+                                          <div className="pl-2 space-y-1 pt-1">
+                                            {o.items && o.items.length > 0 ? (
+                                              o.items.map((item, itIdx) => {
+                                                const qty = item.quantity || 1;
+                                                return (
+                                                  <div key={itIdx} className="space-y-0.5">
+                                                    <div className="flex justify-between items-start gap-2 text-sm sm:text-base font-black">
+                                                      <span className="break-words leading-tight">{qty}x {item.product?.name || 'Produk'}</span>
+                                                    </div>
+                                                    {item.notes && (
+                                                      <div className="text-xs italic text-gray-800 pl-2 border-l-2 border-black ml-1">
+                                                        Catatan: {cleanItemNotes(item.notes)}
+                                                      </div>
+                                                    )}
+                                                  </div>
+                                                );
+                                              })
+                                            ) : (
+                                              <div className="text-sm sm:text-base font-black">
+                                                • 1x {o.custom_notes || 'Pesanan Khusus / Titip Beli'}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+
+                                    {/* FOOTER CUT MARK */}
+                                    <div className="pt-3 border-t-2 border-dashed border-black text-center space-y-0.5">
+                                      <div className="text-xs sm:text-sm font-black tracking-widest text-black">
+                                        ✂️ ------------------ GUNTING / POTONG DI SINI ------------------ ✂️
+                                      </div>
+                                      <div className="text-[11px] font-bold text-gray-600 uppercase tracking-wider">
+                                        TEMPEL DI KANTONG / BUNGKUSAN SANTRI
                                       </div>
                                     </div>
-                                  ))}
-                                </div>
+                                  </div>
+                                );
+                              };
 
-                                {/* FOOTER CUT MARK */}
-                                <div className="pt-3 border-t-2 border-dashed border-black text-center space-y-0.5">
-                                  <div className="text-xs sm:text-sm font-black tracking-widest text-black">
-                                    ✂️ ------------------ GUNTING / POTONG DI SINI ------------------ ✂️
-                                  </div>
-                                  <div className="text-[11px] font-bold text-gray-600 uppercase tracking-wider">
-                                    TEMPEL DI KANTONG / BUNGKUSAN SANTRI
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })
+                              return (
+                                <>
+                                  {/* 1. Struk Santri Pesanan Hari Ini */}
+                                  {todayUserGroups.map((group, idx) => renderA4Card(group, `today-${idx}`, false))}
+
+                                  {/* 2. Pembatas & Struk Santri Pesanan Pindahan di Bawahnya */}
+                                  {pindahanUserGroups.length > 0 && (
+                                    <>
+                                      <div className="py-3 px-4 bg-amber-100 border-2 border-dashed border-amber-600 text-amber-950 font-mono text-center my-2 break-inside-avoid">
+                                        <div className="flex items-center justify-center gap-2">
+                                          <span className="text-base">📅</span>
+                                          <span className="font-black text-sm uppercase tracking-wider">
+                                            *** REKAP PESANAN PINDAHAN (DARI TANGGAL LAIN) ***
+                                          </span>
+                                          <span className="text-base">📅</span>
+                                        </div>
+                                        <p className="text-[11px] text-amber-900 font-bold mt-0.5">
+                                          Pesanan dari checkout hari sebelumnya yang diantar pada sesi ini ({pindahanUserGroups.length} Santri)
+                                        </p>
+                                      </div>
+                                      {pindahanUserGroups.map((group, idx) => renderA4Card(group, `pindahan-${idx}`, true))}
+                                    </>
+                                  )}
+                                </>
+                              );
+                            })()}
+                          </>
                         )}
                       </div>
                     </div>
@@ -1241,53 +1312,88 @@ export default function ThermalReceiptModal({
                                 </td>
                               </tr>
                             ) : (
-                              filteredBatchOrders.map((o, idx) => {
-                                const itemsSummary = o.items && o.items.length > 0
-                                  ? o.items.map(i => `${i.quantity}x ${i.product?.name || 'Produk'}`).join(', ')
-                                  : (o.custom_notes ? `Titip Beli: ${o.custom_notes}` : 'Pesanan Khusus / Titip Beli');
+                              <>
+                                {(() => {
+                                  const renderOrderRow = (o, displayNo, isPind) => {
+                                    const itemsSummary = o.items && o.items.length > 0
+                                      ? o.items.map(i => `${i.quantity}x ${i.product?.name || 'Produk'}`).join(', ')
+                                      : (o.custom_notes ? `Titip Beli: ${o.custom_notes}` : 'Pesanan Khusus / Titip Beli');
 
-                                return (
-                                  <tr key={idx} className="hover:bg-gray-50">
-                                    <td className="py-2 px-2 text-center border-r border-gray-300 text-gray-500 font-bold">{idx + 1}</td>
-                                    <td className="py-2 px-2 border-r border-gray-300 font-bold whitespace-nowrap">
-                                      #ORD-{o.id}
-                                      <span className="block text-[9px] text-gray-500 font-normal">
-                                        {formatDateTime(o.created_at).split(' ')[1] || ''}
-                                      </span>
-                                    </td>
-                                    <td className="py-2 px-2.5 border-r border-gray-300">
-                                      <span className="font-bold block text-gray-900 leading-tight">
-                                        {o.recipient_santri_name || o.user?.santri_name || o.user?.name || '-'}
-                                      </span>
-                                      <span className="text-[9.5px] text-gray-600 block mt-0.5 leading-tight">
-                                        📍 {o.recipient_santri_room || o.delivery_location || o.user?.santri_room || '-'}
-                                      </span>
-                                    </td>
-                                    <td className="py-2 px-2 border-r border-gray-300 font-semibold text-[10.5px] leading-tight">
-                                      {o.canteen?.name || 'Kantin'}
-                                    </td>
-                                    <td className="py-2 px-2.5 border-r border-gray-300 text-[10.5px] text-gray-700 leading-tight">
-                                      {itemsSummary}
-                                    </td>
-                                    <td className="py-2 px-2 border-r border-gray-300 text-right font-bold text-gray-900 whitespace-nowrap">
-                                      <span className="block text-green-800 font-extrabold">Rp {formatRupiah(getOrderModalBelanja(o))}</span>
-                                      <span className="block text-[9px] text-gray-400 font-normal">Santri: Rp {formatRupiah(o.total_price)}</span>
-                                    </td>
-                                    <td className="py-2 px-2 border-r border-gray-300 text-center whitespace-nowrap">
-                                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
-                                        o.payment_status === 'paid'
-                                          ? 'bg-green-100 text-green-800'
-                                          : 'bg-amber-100 text-amber-800'
-                                      }`}>
-                                        {o.payment_status === 'paid' ? 'LUNAS' : 'COD'}
-                                      </span>
-                                    </td>
-                                    <td className="py-2 px-2 text-center text-gray-400">
-                                      <div className="w-10 h-5 border border-dashed border-gray-400 rounded mx-auto"></div>
-                                    </td>
-                                  </tr>
-                                );
-                              })
+                                    return (
+                                      <tr key={o.id} className={isPind ? 'bg-amber-50/40 hover:bg-amber-100/40' : 'hover:bg-gray-50'}>
+                                        <td className="py-2 px-2 text-center border-r border-gray-300 text-gray-500 font-bold">{displayNo}</td>
+                                        <td className="py-2 px-2 border-r border-gray-300 font-bold whitespace-nowrap">
+                                          #ORD-{o.id}
+                                          {isPind && (
+                                            <span className="block text-[8.5px] font-bold text-amber-800 bg-amber-100 px-1 rounded-none border border-amber-300 mt-0.5">
+                                              📅 {getOrderOrigDate(o) || 'Pindahan'}
+                                            </span>
+                                          )}
+                                          <span className="block text-[9px] text-gray-500 font-normal">
+                                            {formatDateTime(o.created_at).split(' ')[1] || ''}
+                                          </span>
+                                        </td>
+                                        <td className="py-2 px-2.5 border-r border-gray-300">
+                                          <span className="font-bold block text-gray-900 leading-tight">
+                                            {o.recipient_santri_name || o.user?.santri_name || o.user?.name || '-'}
+                                          </span>
+                                          <span className="text-[9.5px] text-gray-600 block mt-0.5 leading-tight">
+                                            📍 {o.recipient_santri_room || o.delivery_location || o.user?.santri_room || '-'}
+                                          </span>
+                                        </td>
+                                        <td className="py-2 px-2 border-r border-gray-300 font-semibold text-[10.5px] leading-tight">
+                                          {o.canteen?.name || 'Kantin'}
+                                        </td>
+                                        <td className="py-2 px-2.5 border-r border-gray-300 text-[10.5px] text-gray-700 leading-tight">
+                                          {itemsSummary}
+                                        </td>
+                                        <td className="py-2 px-2 border-r border-gray-300 text-right font-bold text-gray-900 whitespace-nowrap">
+                                          <span className="block text-green-800 font-extrabold">Rp {formatRupiah(getOrderModalBelanja(o))}</span>
+                                          <span className="block text-[9px] text-gray-400 font-normal">Santri: Rp {formatRupiah(o.total_price)}</span>
+                                        </td>
+                                        <td className="py-2 px-2 border-r border-gray-300 text-center whitespace-nowrap">
+                                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                                            o.payment_status === 'paid'
+                                              ? 'bg-green-100 text-green-800'
+                                              : 'bg-amber-100 text-amber-800'
+                                          }`}>
+                                            {o.payment_status === 'paid' ? 'LUNAS' : 'COD'}
+                                          </span>
+                                        </td>
+                                        <td className="py-2 px-2 text-center text-gray-400">
+                                          <div className="w-10 h-5 border border-dashed border-gray-400 rounded mx-auto"></div>
+                                        </td>
+                                      </tr>
+                                    );
+                                  };
+
+                                  return (
+                                    <>
+                                      {/* 1. Baris Pesanan Reguler Hari Ini */}
+                                      {todayOrders.map((o, idx) => renderOrderRow(o, idx + 1, false))}
+
+                                      {/* 2. Baris Pemisah & Pesanan Pindahan di Bawahnya */}
+                                      {pindahanOrders.length > 0 && (
+                                        <>
+                                          <tr className="bg-amber-100 border-y-2 border-amber-500 text-amber-950 font-mono">
+                                            <td colSpan="8" className="py-2 px-3">
+                                              <div className="flex items-center justify-between">
+                                                <span className="font-extrabold text-xs uppercase tracking-wide">
+                                                  📅 *** REKAP PESANAN PINDAHAN (DARI TANGGAL LAIN) — {pindahanOrders.length} PESANAN ***
+                                                </span>
+                                                <span className="text-[10px] font-bold text-amber-800 bg-amber-200/80 px-2 py-0.5 border border-amber-400">
+                                                  Checkout Hari Sebelumnya
+                                                </span>
+                                              </div>
+                                            </td>
+                                          </tr>
+                                          {pindahanOrders.map((o, idx) => renderOrderRow(o, `P-${idx + 1}`, true))}
+                                        </>
+                                      )}
+                                    </>
+                                  );
+                                })()}
+                              </>
                             )}
                           </tbody>
                         </table>
@@ -1582,81 +1688,112 @@ export default function ThermalReceiptModal({
                           Tidak ada pesanan aktif pada daftar ini.
                         </div>
                       ) : (
-                        groupedOrdersByUser.map((group, grpIdx) => {
-                          const info = group.info;
-                          const primaryOrder = group.primaryOrder;
-                          const asrama = (info.santriRoom && info.santriRoom !== '-') ? info.santriRoom : (primaryOrder?.delivery_location || '-');
-                          const kelas = info.santriClass || (info.santriLevel ? `Kelas ${info.santriLevel}` : (info.isTeacher ? 'Guru / Staff' : '-'));
+                        <>
+                          {(() => {
+                            const renderThermalSantriGroup = (group, key, isPind) => {
+                              const info = group.info;
+                              const primaryOrder = group.primaryOrder;
+                              const asrama = (info.santriRoom && info.santriRoom !== '-') ? info.santriRoom : (primaryOrder?.delivery_location || '-');
+                              const kelas = info.santriClass || (info.santriLevel ? `Kelas ${info.santriLevel}` : (info.isTeacher ? 'Guru / Staff' : '-'));
 
-                          return (
-                            <div key={grpIdx} className="py-3 space-y-2 break-inside-avoid">
-                              {/* 1. DATA SANTRI (BESAR & TEBAL) */}
-                              <div className="space-y-0.5">
-                                <div className="thermal-santri-name text-base sm:text-lg font-black text-black uppercase leading-tight">
-                                  👤 {info.santriName}
-                                </div>
-                                <div className="thermal-santri-meta text-xs sm:text-sm font-bold text-black flex flex-wrap items-center gap-x-2 gap-y-0.5 leading-snug">
-                                  <span>🏫 Kelas: <strong className="font-black">{kelas}</strong></span>
-                                  <span>•</span>
-                                  <span>📍 Asrama: <strong className="font-black">{asrama}</strong></span>
-                                </div>
-                                {info.waliName && info.waliName !== '-' && (
-                                  <div className="text-xs sm:text-sm font-semibold text-gray-800">
-                                    Wali: {info.waliName}
-                                  </div>
-                                )}
-                                {primaryOrder?.delivery_location && primaryOrder.delivery_location !== asrama && (
-                                  <div className="text-xs font-semibold text-gray-800">
-                                    🎯 Tujuan: {primaryOrder.delivery_location}
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* 2. RINCIAN MENU DARI SEMUA TOKO SANTRI INI */}
-                              <div className="space-y-2">
-                                <div className="thermal-menu-header text-xs sm:text-sm font-black uppercase tracking-wider text-black border-b border-black pb-0.5">
-                                  RINCIAN MENU ({group.orders.length} TOKO):
-                                </div>
-                                {group.orders.map((o, storeIdx) => (
-                                  <div key={storeIdx} className="space-y-1">
-                                    {/* Header Toko */}
-                                    <div className="thermal-store-header flex items-center justify-between text-xs sm:text-sm font-black uppercase tracking-wider bg-gray-100 px-2 py-1 border border-black">
-                                      <span>🏪 {o.canteen?.name || 'Kantin'}</span>
-                                      <span className="font-mono text-xs">#ORD-{o.id}</span>
-                                    </div>
-
-                                    {/* Items Menu */}
-                                    <div className="pl-1 space-y-1 pt-0.5">
-                                      {o.items && o.items.length > 0 ? (
-                                        o.items.map((item, itIdx) => {
-                                          const qty = item.quantity || 1;
-                                          const prodName = item.product?.name || item.product_name || 'Produk';
-                                          return (
-                                            <div key={itIdx} className="space-y-0.5">
-                                              <div className="thermal-menu-item text-sm sm:text-base font-black text-black leading-tight flex items-start gap-1">
-                                                <span className="shrink-0 font-black">{qty}x</span>
-                                                <span className="break-words font-black">{prodName}</span>
-                                              </div>
-                                              {item.notes && (
-                                                <div className="thermal-menu-note text-xs sm:text-sm font-bold italic text-black pl-3 border-l-2 border-black ml-1">
-                                                  ↳ Catatan: {cleanItemNotes(item.notes)}
-                                                </div>
-                                              )}
-                                            </div>
-                                          );
-                                        })
-                                      ) : (
-                                        <div className="thermal-menu-item text-sm sm:text-base font-black text-black leading-tight">
-                                          • 1x {o.custom_notes || 'Pesanan Khusus / Titip Beli'}
-                                        </div>
+                              return (
+                                <div key={key} className="py-3 space-y-2 break-inside-avoid">
+                                  {/* 1. DATA SANTRI (BESAR & TEBAL) */}
+                                  <div className="space-y-0.5">
+                                    <div className="thermal-santri-name text-base sm:text-lg font-black text-black uppercase leading-tight">
+                                      👤 {info.santriName}
+                                      {isPind && (
+                                        <span className="block text-[11px] font-bold text-black border border-black px-1.5 py-0.2 mt-0.5 w-fit">
+                                          📅 PINDAHAN ({group.pindahanOrigDate || 'KEMARIN'})
+                                        </span>
                                       )}
                                     </div>
+                                    <div className="thermal-santri-meta text-xs sm:text-sm font-bold text-black flex flex-wrap items-center gap-x-2 gap-y-0.5 leading-snug">
+                                      <span>🏫 Kelas: <strong className="font-black">{kelas}</strong></span>
+                                      <span>•</span>
+                                      <span>📍 Asrama: <strong className="font-black">{asrama}</strong></span>
+                                    </div>
+                                    {info.waliName && info.waliName !== '-' && (
+                                      <div className="text-xs sm:text-sm font-semibold text-gray-800">
+                                        Wali: {info.waliName}
+                                      </div>
+                                    )}
+                                    {primaryOrder?.delivery_location && primaryOrder.delivery_location !== asrama && (
+                                      <div className="text-xs font-semibold text-gray-800">
+                                        🎯 Tujuan: {primaryOrder.delivery_location}
+                                      </div>
+                                    )}
                                   </div>
-                                ))}
-                              </div>
-                            </div>
-                          );
-                        })
+
+                                  {/* 2. RINCIAN MENU DARI SEMUA TOKO SANTRI INI */}
+                                  <div className="space-y-2">
+                                    <div className="thermal-menu-header text-xs sm:text-sm font-black uppercase tracking-wider text-black border-b border-black pb-0.5">
+                                      RINCIAN MENU ({group.orders.length} TOKO):
+                                    </div>
+                                    {group.orders.map((o, storeIdx) => (
+                                      <div key={storeIdx} className="space-y-1">
+                                        {/* Header Toko */}
+                                        <div className="thermal-store-header flex items-center justify-between text-xs sm:text-sm font-black uppercase tracking-wider bg-gray-100 px-2 py-1 border border-black">
+                                          <span>🏪 {o.canteen?.name || 'Kantin'}</span>
+                                          <span className="font-mono text-xs">#ORD-{o.id}</span>
+                                        </div>
+
+                                        {/* Items Menu */}
+                                        <div className="pl-1 space-y-1 pt-0.5">
+                                          {o.items && o.items.length > 0 ? (
+                                            o.items.map((item, itIdx) => {
+                                              const qty = item.quantity || 1;
+                                              const prodName = item.product?.name || item.product_name || 'Produk';
+                                              return (
+                                                <div key={itIdx} className="space-y-0.5">
+                                                  <div className="thermal-menu-item text-sm sm:text-base font-black text-black leading-tight flex items-start gap-1">
+                                                    <span className="shrink-0 font-black">{qty}x</span>
+                                                    <span className="break-words font-black">{prodName}</span>
+                                                  </div>
+                                                  {item.notes && (
+                                                    <div className="thermal-menu-note text-xs sm:text-sm font-bold italic text-black pl-3 border-l-2 border-black ml-1">
+                                                      ↳ Catatan: {cleanItemNotes(item.notes)}
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              );
+                                            })
+                                          ) : (
+                                            <div className="thermal-menu-item text-sm sm:text-base font-black text-black leading-tight">
+                                              • 1x {o.custom_notes || 'Pesanan Khusus / Titip Beli'}
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            };
+
+                            return (
+                              <>
+                                {/* 1. Daftar Antaran Hari Ini */}
+                                {todayUserGroups.map((group, grpIdx) => renderThermalSantriGroup(group, `today-${grpIdx}`, false))}
+
+                                {/* 2. Pemisah & Daftar Antaran Pindahan di Bawahnya */}
+                                {pindahanUserGroups.length > 0 && (
+                                  <>
+                                    <div className="py-2.5 px-2 border-y-2 border-black bg-gray-200 text-center space-y-0.5 my-3 break-inside-avoid">
+                                      <p className="thermal-menu-header font-black text-xs sm:text-sm tracking-wide uppercase">
+                                        *** REKAP PESANAN PINDAHAN ***
+                                      </p>
+                                      <p className="text-[10px] sm:text-xs font-bold text-gray-800">
+                                        ({pindahanUserGroups.length} SANTRI DARI CHECKOUT TGL LAIN)
+                                      </p>
+                                    </div>
+                                    {pindahanUserGroups.map((group, grpIdx) => renderThermalSantriGroup(group, `pind-${grpIdx}`, true))}
+                                  </>
+                                )}
+                              </>
+                            );
+                          })()}
+                        </>
                       )}
                     </div>
                   </div>
