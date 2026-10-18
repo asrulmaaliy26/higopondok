@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuthStore } from '../../store/authStore';
 import api from '../../lib/axios';
-import { useNavigate, Link, Navigate } from '@tanstack/react-router';
+import { useNavigate, Link, Navigate, useSearch } from '@tanstack/react-router';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,6 +12,8 @@ import AuthLayout from '../../components/layout/mobile/AuthLayout';
 
 export default function Login() {
   const token = useAuthStore((state) => state.token);
+  const search = useSearch({ strict: false });
+  const redirectTarget = search?.redirect || '/dashboard';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -21,7 +23,7 @@ export default function Login() {
   const navigate = useNavigate();
 
   if (token) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to={redirectTarget} replace />;
   }
 
   const handleLogin = async (e) => {
@@ -34,7 +36,7 @@ export default function Login() {
         password: password.trim() 
       });
       setAuth(response.data.user, response.data.access_token);
-      navigate({ to: '/dashboard' });
+      navigate({ to: redirectTarget });
     } catch (err) {
       setError(err.response?.data?.message || 'Login gagal. Periksa kembali kredensial Anda.');
     } finally {
@@ -50,7 +52,7 @@ export default function Login() {
         id_token: credentialResponse.credential
       });
       setAuth(response.data.user, response.data.access_token);
-      navigate({ to: '/dashboard' });
+      navigate({ to: redirectTarget });
     } catch (err) {
       setError(err.response?.data?.message || 'Login Google gagal. Coba lagi.');
     } finally {

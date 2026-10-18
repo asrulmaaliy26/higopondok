@@ -239,6 +239,10 @@ const publicPesanAiChatRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/pesan-chat',
   component: function PublicPesanAiChatRedirect() {
+    const token = useAuthStore((state) => state.token);
+    if (!token) {
+      return <Navigate to="/login" search={{ redirect: '/dashboard/pesan-chat' }} replace />;
+    }
     return <Navigate to="/dashboard/pesan-chat" replace />;
   },
 });
@@ -329,6 +333,9 @@ const dashboardRoute = createRoute({
       }
       if (location.pathname.startsWith('/dashboard/vouchers')) {
         return <Navigate to="/vouchers" replace />;
+      }
+      if (location.pathname.startsWith('/dashboard/pesan-chat')) {
+        return <Navigate to="/login" search={{ redirect: '/dashboard/pesan-chat' }} replace />;
       }
       return <Navigate to="/" replace />;
     }

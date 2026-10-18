@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link, useLocation } from '@tanstack/react-router';
 import { Store, Coffee, Ticket, ShoppingCart, User, LogIn, Bot, Sparkles } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { useAuthStore } from '../../../store/authStore';
 import { useCartStore } from '../../../store/cartStore';
 
@@ -47,7 +48,14 @@ export default function PublicBottomNav() {
 
         {/* 3. Chat Belanja AI (Elevated Floating Sharp Cube) */}
         <Link
-          to="/dashboard/pesan-chat"
+          to={token ? "/dashboard/pesan-chat" : "/login"}
+          search={!token ? { redirect: '/dashboard/pesan-chat' } : undefined}
+          onClick={!token ? () => {
+            toast('Silakan login terlebih dahulu untuk menggunakan Asisten AI.', {
+              icon: '🔒',
+              id: 'login-required-ai',
+            });
+          } : undefined}
           className="flex flex-col items-center justify-center w-full relative -mt-3.5 group cursor-pointer select-none"
         >
           {/* Floating Badge Tag "✨ AI" */}

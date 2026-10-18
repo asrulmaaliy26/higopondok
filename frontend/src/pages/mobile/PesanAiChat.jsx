@@ -135,6 +135,25 @@ export default function PesanAiChat() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
+  const token = useAuthStore((state) => state.token);
+
+  useEffect(() => {
+    if (!token || !user) {
+      toast.error('Silakan login terlebih dahulu untuk menggunakan Asisten AI.', {
+        id: 'auth-required-ai-chat',
+        duration: 3500,
+      });
+      navigate({
+        to: '/login',
+        search: { redirect: '/dashboard/pesan-chat' },
+        replace: true,
+      });
+    }
+  }, [token, user, navigate]);
+
+  if (!token || !user) {
+    return null;
+  }
 
   const defaultRoom = user?.santri_room ? `Kamar ${user.santri_room}` : 'Kamar Santri Al-Mannan';
 

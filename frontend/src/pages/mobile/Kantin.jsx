@@ -58,6 +58,7 @@ export default function Kantin() {
   const location = useLocation();
   const isInsideDashboard = location.pathname.startsWith('/dashboard');
   const user = useAuthStore((state) => state.user);
+  const token = useAuthStore((state) => state.token);
   const originalAdmin = useAuthStore((state) => state.originalAdmin);
   const getTotalItems = useCartStore((state) => state.getTotalItems);
   const totalCartItems = getTotalItems();
@@ -368,7 +369,14 @@ export default function Kantin() {
 
         {/* BANNER ASISTEN BELANJA AI (GEMINI) */}
         <Link
-          to="/dashboard/pesan-chat"
+          to={token ? "/dashboard/pesan-chat" : "/login"}
+          search={!token ? { redirect: '/dashboard/pesan-chat' } : undefined}
+          onClick={!token ? () => {
+            toast('Silakan login terlebih dahulu untuk menggunakan Asisten AI.', {
+              icon: '🔒',
+              id: 'login-required-ai-kantin',
+            });
+          } : undefined}
           className="flex items-center justify-between p-2.5 bg-gradient-to-r from-emerald-800 via-green-700 to-teal-800 text-white border border-green-700 shadow-xs hover:opacity-95 transition-all group"
         >
           <div className="flex items-center gap-2.5">
