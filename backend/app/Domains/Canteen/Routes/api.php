@@ -74,6 +74,11 @@ Route::middleware(['auth:sanctum', 'impersonate'])->group(function () {
     Route::put('/orders/{id}/cancel', [\App\Domains\Canteen\Controllers\OrderController::class, 'userCancelOrder']);
     Route::post('/orders/{id}/payment-proof', [\App\Domains\Canteen\Controllers\OrderController::class, 'uploadPaymentProof']);
     Route::post('/orders/checkout/{checkoutId}/payment-proof', [\App\Domains\Canteen\Controllers\OrderController::class, 'uploadPaymentProofByCheckout']);
+    Route::put('/orders/{id}/custom-items', [\App\Domains\Canteen\Controllers\OrderController::class, 'updateCustomItems']);
+    Route::post('/orders/{id}/parse-custom', [\App\Domains\Canteen\Controllers\OrderController::class, 'parseCustomOrderNotes']);
+    Route::post('/ai/chat-order', [\App\Domains\Canteen\Controllers\AiChatOrderController::class, 'chat']);
+    Route::post('/ai/confirm-order', [\App\Domains\Canteen\Controllers\AiChatOrderController::class, 'confirm']);
+    Route::get('/ai/santri-search', [\App\Domains\Canteen\Controllers\AiChatOrderController::class, 'searchSantri']);
 
     // User Voucher routes
     Route::get('/my-vouchers', [\App\Domains\Canteen\Controllers\VoucherController::class, 'myVouchers']);
@@ -83,3 +88,4 @@ Route::middleware(['auth:sanctum', 'impersonate'])->group(function () {
 Route::get('/vouchers', [\App\Domains\Canteen\Controllers\VoucherController::class, 'index']);
 Route::get('/banners', [\App\Domains\Canteen\Controllers\CanteenBannerController::class, 'index']);
 Route::get('/pricing-config', [\App\Domains\Canteen\Controllers\OrderController::class, 'pricingConfig']);
+Route::get('/ai/support-contacts', [\App\Domains\Canteen\Controllers\AiChatOrderController::class, 'supportContacts']);

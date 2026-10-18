@@ -18,6 +18,8 @@ class Order extends Model
     // Konstanta Bisnis Finansial & Tarif Higo Pondok (Opsi B)
     public const BASE_DELIVERY_FEE = 3000.0;
     public const BASE_ADMIN_FEE = 2000.0;
+    public const CUSTOM_DELIVERY_FEE = 3500.0; // Ongkir kurir pesanan khusus
+    public const CUSTOM_ADMIN_FEE = 2500.0;    // Biaya admin pesanan khusus
     public const EXTRA_DELIVERY_PER_5_ITEMS = 2000.0;
     public const EXTRA_ADMIN_PER_5_ITEMS = 3000.0;
     public const USER_THRESHOLD_COURIER_CUT = 1500.0; // Potongan ongkir dialihkan ke admin mulai user ke-2 dst (Kurir Rp 1.500, Admin Rp 3.500)
@@ -31,6 +33,8 @@ class Order extends Model
         return [
             'base_delivery_fee'          => (float) config('pricing.base_delivery_fee', self::BASE_DELIVERY_FEE),
             'base_admin_fee'             => (float) config('pricing.base_admin_fee', self::BASE_ADMIN_FEE),
+            'custom_delivery_fee'        => (float) config('pricing.custom_delivery_fee', self::CUSTOM_DELIVERY_FEE),
+            'custom_admin_fee'           => (float) config('pricing.custom_admin_fee', self::CUSTOM_ADMIN_FEE),
             'extra_delivery_per_5_items' => (float) config('pricing.extra_delivery_per_5_items', self::EXTRA_DELIVERY_PER_5_ITEMS),
             'extra_admin_per_5_items'    => (float) config('pricing.extra_admin_per_5_items', self::EXTRA_ADMIN_PER_5_ITEMS),
             'user_threshold_limit'       => (int) config('pricing.user_threshold_limit', self::USER_THRESHOLD_LIMIT),
@@ -55,6 +59,7 @@ class Order extends Model
         'is_courier_paid_by_canteen',
         'proof_courier_paid',
         'custom_notes',
+        'custom_items',
         'admin_notes',
         'is_custom',
         'created_at',
@@ -77,6 +82,7 @@ class Order extends Model
         'proof_of_purchase' => 'array',
         'proof_of_payment' => 'array',
         'payment_ocr_data' => 'array',
+        'custom_items' => 'array',
         'total_price' => 'float',
         'admin_fee' => 'float',
         'delivery_fee' => 'float',
@@ -259,8 +265,10 @@ class Order extends Model
         }
 
         $cfg = self::getPricingConfig();
-        $rawDelivery = (float) ($this->delivery_fee > 0 ? $this->delivery_fee : $cfg['base_delivery_fee']);
-        $rawAdmin = (float) ($this->admin_fee > 0 ? $this->admin_fee : $cfg['base_admin_fee']);
+        $defDelivery = $this->is_custom ? $cfg['custom_delivery_fee'] : $cfg['base_delivery_fee'];
+        $defAdmin = $this->is_custom ? $cfg['custom_admin_fee'] : $cfg['base_admin_fee'];
+        $rawDelivery = (float) ($this->delivery_fee > 0 ? $this->delivery_fee : $defDelivery);
+        $rawAdmin = (float) ($this->admin_fee > 0 ? $this->admin_fee : $defAdmin);
         return max(0, (float) $this->total_price - $rawDelivery - $rawAdmin);
     }
 
@@ -305,8 +313,8 @@ class Order extends Model
     public function getFinancialMetrics(int $userDailyIndex = 1): array
     {
         $cfg = self::getPricingConfig();
-        $baseAdminStandard = $cfg['base_admin_fee'];
-        $baseDeliveryStandard = $cfg['base_delivery_fee'];
+        $baseAdminStandard = $this->is_custom ? $cfg['custom_admin_fee'] : $cfg['base_admin_fee'];
+        $baseDeliveryStandard = $this->is_custom ? $cfg['custom_delivery_fee'] : $cfg['base_delivery_fee'];
 
         // 3 user pertama tidak terkena potongan (0), user ke-4 dst terkena potongan ke admin
         $discountRate = ($userDailyIndex > $cfg['user_threshold_limit']) ? $cfg['user_threshold_courier_cut'] : 0.0;

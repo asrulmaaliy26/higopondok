@@ -346,7 +346,8 @@ export default function Pembayaran() {
 
   const rawOrders = Array.isArray(ordersRes) ? ordersRes : (ordersRes?.data || []);
 
-  const filteredOrders = useMemo(() => {
+  // Orders yang sudah terfilter berdasarkan rentang periode (sebelum filter status)
+  const periodFilteredOrders = useMemo(() => {
     let list = [...rawOrders];
 
     // Client-side date filter (safety fallback in case backend sends all or cached)
@@ -360,12 +361,24 @@ export default function Pembayaran() {
       });
     }
 
-    if (activeFilter !== 'all') {
-      list = list.filter(o => o.status === activeFilter);
-    }
-
     return list;
-  }, [rawOrders, filterMode, currentParams.start_date, currentParams.end_date, activeFilter]);
+  }, [rawOrders, filterMode, currentParams.start_date, currentParams.end_date]);
+
+  // Hitung jumlah pesanan per status untuk badge filter
+  const statusCounts = useMemo(() => {
+    const counts = { all: periodFilteredOrders.length, pending: 0, processing: 0, completed: 0, cancelled: 0 };
+    periodFilteredOrders.forEach(o => {
+      if (counts[o.status] !== undefined) {
+        counts[o.status]++;
+      }
+    });
+    return counts;
+  }, [periodFilteredOrders]);
+
+  const filteredOrders = useMemo(() => {
+    if (activeFilter === 'all') return periodFilteredOrders;
+    return periodFilteredOrders.filter(o => o.status === activeFilter);
+  }, [periodFilteredOrders, activeFilter]);
 
   const checkoutGroups = useMemo(() => {
     const groups = [];
@@ -648,133 +661,193 @@ export default function Pembayaran() {
   return (
     <div className="bg-gray-50 h-full min-h-screen pb-24 dark:bg-gray-950 font-sans">
       {/* Top Header & Period Filter Controls (Ikut scroll ke atas, tidak stuck) */}
-      <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
-        <div className="px-4 py-3 flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-bold text-gray-900 dark:text-white">Aktivitas Transaksi</h1>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-              Pantau pesanan aktif, riwayat transaksi, & struk belanja santri.
-            </p>
+      <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 shadow-2xs">
+        {/* Header Ramping & Ringkas */}
+        <div className="px-3.5 py-2.5 flex items-center justify-between border-b border-gray-100 dark:border-gray-800/80">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-6 h-6 bg-green-600 text-white flex items-center justify-center shrink-0 rounded-none shadow-2xs">
+              <Calendar className="w-3.5 h-3.5" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-xs sm:text-sm font-black uppercase tracking-wider text-gray-900 dark:text-white truncate">
+                Aktivitas Transaksi
+              </h1>
+              <p className="text-[10px] text-gray-500 dark:text-gray-400 hidden xs:block truncate">
+                Pantau pesanan aktif & riwayat belanja santri
+              </p>
+            </div>
           </div>
-        </div>
 
-        {/* COMPACT FILTER BAR — Mode + Status dalam 1-2 baris */}
-        <div className="px-3 py-2 border-t border-gray-100 dark:border-gray-800 space-y-1.5">
-          {/* Baris 1: Label + Badge Periode + Mode Buttons dalam 1 baris scroll */}
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-            <span className="shrink-0 flex items-center gap-1 text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
-              <Calendar className="w-3 h-3 text-green-600" />
-              Periode:
-            </span>
-            {[
-              { id: 'month', label: 'Bulanan' },
-              { id: 'week', label: 'Mingguan' },
-              { id: 'day', label: 'Harian' },
-              { id: 'year', label: 'Tahunan' },
-              { id: 'all', label: 'Semua' }
-            ].map((m) => (
-              <button
-                key={m.id}
-                onClick={() => {
-                  setFilterMode(m.id);
-                  if (m.id === 'week') {
-                    setFilterWeekIndex(getCurrentWeekIndex(filterYear, filterMonth));
-                  }
-                }}
-                className={`shrink-0 px-2.5 py-1 rounded-none text-[11px] font-bold whitespace-nowrap transition-all ${
-                  filterMode === m.id
-                    ? 'bg-green-600 text-white shadow-xs'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300'
-                }`}
-              >
-                {m.label}
-              </button>
-            ))}
-            <span className="shrink-0 ml-auto text-[10px] font-bold px-2 py-0.5 bg-green-50 text-green-700 dark:bg-green-950/60 dark:text-green-300 border border-green-200 dark:border-green-800 whitespace-nowrap">
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="text-[10px] font-bold px-2 py-0.5 bg-green-50 text-green-700 dark:bg-green-950/70 dark:text-green-300 border border-green-200 dark:border-green-800 rounded-none font-mono">
               {getFilterLabel()}
             </span>
           </div>
+        </div>
 
-          {/* Baris 2 (Kondisional): Sub-filter tanggal dalam 1 baris */}
-          {filterMode === 'day' && (
-            <input
-              type="date"
-              value={filterDate}
-              onChange={(e) => setFilterDate(e.target.value)}
-              className="w-full px-3 py-1.5 border rounded-none text-xs bg-gray-50 dark:bg-gray-800 dark:border-gray-700 text-gray-800 dark:text-white font-semibold focus:ring-2 focus:ring-green-500 focus:outline-none"
-            />
-          )}
-
-          {filterMode === 'week' && (
-            <div className="flex gap-1.5">
-              <select
-                value={filterMonth}
-                onChange={(e) => { setFilterMonth(parseInt(e.target.value)); setFilterWeekIndex(0); }}
-                className="flex-1 min-w-0 px-2 py-1.5 rounded-none text-xs font-semibold bg-gray-50 text-gray-800 border border-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700"
-              >
-                {monthsList.map((m, idx) => <option key={idx} value={idx}>{m}</option>)}
-              </select>
-              <select
-                value={filterYear}
-                onChange={(e) => { setFilterYear(parseInt(e.target.value)); setFilterWeekIndex(0); }}
-                className="w-20 px-2 py-1.5 rounded-none text-xs font-semibold bg-gray-50 text-gray-800 border border-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700"
-              >
-                {yearsList.map((y) => <option key={y} value={y}>{y}</option>)}
-              </select>
-              <select
-                value={filterWeekIndex}
-                onChange={(e) => setFilterWeekIndex(parseInt(e.target.value))}
-                className="flex-1 min-w-0 px-2 py-1.5 rounded-none text-xs font-semibold bg-gray-50 text-gray-800 border border-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700"
-              >
-                {getWeeksInMonth(filterYear, filterMonth).map((w, idx) => <option key={idx} value={idx}>{w.name}</option>)}
-              </select>
+        {/* COMPACT FILTER BAR — Mode + Tanggal (Baris 1) & Status Tabs (Baris 2) */}
+        <div className="px-3 py-2 space-y-2">
+          {/* Baris 1: Mode Periode & Sub-filter Tanggal (Sejajar & Kompak 1 Baris) */}
+          <div className="grid grid-cols-12 gap-1.5 items-center">
+            {/* 1. Mode Periode Selector */}
+            <div className="col-span-4 sm:col-span-3">
+              <div className="relative">
+                <select
+                  value={filterMode}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFilterMode(val);
+                    if (val === 'week') {
+                      setFilterWeekIndex(getCurrentWeekIndex(filterYear, filterMonth));
+                    }
+                  }}
+                  className="w-full h-8 pl-2 pr-6 bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700 rounded-none text-xs font-bold focus:border-green-600 focus:ring-1 focus:ring-green-600 outline-none transition-colors appearance-none cursor-pointer"
+                >
+                  <option value="month">🗓️ Bulanan</option>
+                  <option value="week">📆 Mingguan</option>
+                  <option value="day">📅 Harian</option>
+                  <option value="year">📊 Tahunan</option>
+                  <option value="all">⏳ Semua</option>
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-2 top-2.5 pointer-events-none" />
+              </div>
             </div>
-          )}
 
-          {filterMode === 'month' && (
-            <div className="flex gap-1.5">
-              <select
-                value={filterMonth}
-                onChange={(e) => setFilterMonth(parseInt(e.target.value))}
-                className="flex-1 min-w-0 px-2 py-1.5 rounded-none text-xs font-semibold bg-gray-50 text-gray-800 border border-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700"
-              >
-                {monthsList.map((m, idx) => <option key={idx} value={idx}>{m}</option>)}
-              </select>
-              <select
-                value={filterYear}
-                onChange={(e) => setFilterYear(parseInt(e.target.value))}
-                className="w-24 px-2 py-1.5 rounded-none text-xs font-semibold bg-gray-50 text-gray-800 border border-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700"
-              >
-                {yearsList.map((y) => <option key={y} value={y}>{y}</option>)}
-              </select>
-            </div>
-          )}
+            {/* 2. Sub-Filter Input Sesuai Mode */}
+            {filterMode === 'month' && (
+              <div className="col-span-8 sm:col-span-9 grid grid-cols-12 gap-1.5">
+                <div className="col-span-7 sm:col-span-8 relative">
+                  <select
+                    value={filterMonth}
+                    onChange={(e) => setFilterMonth(parseInt(e.target.value))}
+                    className="w-full h-8 pl-2 pr-6 bg-white dark:bg-gray-800/90 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700 rounded-none text-xs font-semibold focus:border-green-600 focus:ring-1 focus:ring-green-600 outline-none transition-colors appearance-none cursor-pointer"
+                  >
+                    {monthsList.map((m, idx) => (
+                      <option key={idx} value={idx}>{m}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-2 top-2.5 pointer-events-none" />
+                </div>
+                <div className="col-span-5 sm:col-span-4 relative">
+                  <select
+                    value={filterYear}
+                    onChange={(e) => setFilterYear(parseInt(e.target.value))}
+                    className="w-full h-8 pl-2 pr-6 bg-white dark:bg-gray-800/90 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700 rounded-none text-xs font-semibold focus:border-green-600 focus:ring-1 focus:ring-green-600 outline-none transition-colors appearance-none cursor-pointer"
+                  >
+                    {yearsList.map((y) => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-2 top-2.5 pointer-events-none" />
+                </div>
+              </div>
+            )}
 
-          {filterMode === 'year' && (
-            <select
-              value={filterYear}
-              onChange={(e) => setFilterYear(parseInt(e.target.value))}
-              className="w-full px-2 py-1.5 rounded-none text-xs font-semibold bg-gray-50 text-gray-800 border border-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700"
-            >
-              {yearsList.map((y) => <option key={y} value={y}>Tahun {y}</option>)}
-            </select>
-          )}
+            {filterMode === 'day' && (
+              <div className="col-span-8 sm:col-span-9">
+                <input
+                  type="date"
+                  value={filterDate}
+                  onChange={(e) => setFilterDate(e.target.value)}
+                  className="w-full h-8 px-2.5 bg-white dark:bg-gray-800/90 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700 rounded-none text-xs font-semibold focus:border-green-600 focus:ring-1 focus:ring-green-600 outline-none transition-colors cursor-pointer"
+                />
+              </div>
+            )}
 
-          {/* Baris 3: Status chips */}
-          <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
-            {filters.map(f => (
-              <button
-                key={f.key}
-                onClick={() => setActiveFilter(f.key)}
-                className={`shrink-0 px-2.5 py-1 rounded-none text-[11px] font-semibold transition-colors border ${
-                  activeFilter === f.key
-                    ? 'bg-green-600 text-white border-green-600 shadow-2xs'
-                    : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-green-50 dark:hover:bg-green-900/20'
-                }`}
-              >
-                {f.label}
-              </button>
-            ))}
+            {filterMode === 'week' && (
+              <div className="col-span-8 sm:col-span-9 grid grid-cols-12 gap-1.5">
+                <div className="col-span-5 relative">
+                  <select
+                    value={filterWeekIndex}
+                    onChange={(e) => setFilterWeekIndex(parseInt(e.target.value))}
+                    className="w-full h-8 pl-2 pr-6 bg-white dark:bg-gray-800/90 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700 rounded-none text-xs font-semibold focus:border-green-600 focus:ring-1 focus:ring-green-600 outline-none transition-colors appearance-none cursor-pointer truncate"
+                  >
+                    {getWeeksInMonth(filterYear, filterMonth).map((w, idx) => (
+                      <option key={idx} value={idx}>{w.name}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-1.5 top-2.5 pointer-events-none" />
+                </div>
+                <div className="col-span-4 relative">
+                  <select
+                    value={filterMonth}
+                    onChange={(e) => { setFilterMonth(parseInt(e.target.value)); setFilterWeekIndex(0); }}
+                    className="w-full h-8 pl-2 pr-6 bg-white dark:bg-gray-800/90 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700 rounded-none text-xs font-semibold focus:border-green-600 focus:ring-1 focus:ring-green-600 outline-none transition-colors appearance-none cursor-pointer truncate"
+                  >
+                    {monthsList.map((m, idx) => (
+                      <option key={idx} value={idx}>{m.slice(0, 3)}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-1.5 top-2.5 pointer-events-none" />
+                </div>
+                <div className="col-span-3 relative">
+                  <select
+                    value={filterYear}
+                    onChange={(e) => { setFilterYear(parseInt(e.target.value)); setFilterWeekIndex(0); }}
+                    className="w-full h-8 pl-2 pr-6 bg-white dark:bg-gray-800/90 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700 rounded-none text-xs font-semibold focus:border-green-600 focus:ring-1 focus:ring-green-600 outline-none transition-colors appearance-none cursor-pointer"
+                  >
+                    {yearsList.map((y) => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-1.5 top-2.5 pointer-events-none" />
+                </div>
+              </div>
+            )}
+
+            {filterMode === 'year' && (
+              <div className="col-span-8 sm:col-span-9 relative">
+                <select
+                  value={filterYear}
+                  onChange={(e) => setFilterYear(parseInt(e.target.value))}
+                  className="w-full h-8 pl-2 pr-6 bg-white dark:bg-gray-800/90 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700 rounded-none text-xs font-semibold focus:border-green-600 focus:ring-1 focus:ring-green-600 outline-none transition-colors appearance-none cursor-pointer"
+                >
+                  {yearsList.map((y) => (
+                    <option key={y} value={y}>Tahun {y}</option>
+                  ))}
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-2 top-2.5 pointer-events-none" />
+              </div>
+            )}
+
+            {filterMode === 'all' && (
+              <div className="col-span-8 sm:col-span-9 h-8 px-2.5 bg-gray-50 dark:bg-gray-800/60 border border-dashed border-gray-300 dark:border-gray-700 flex items-center text-xs font-medium text-gray-500 dark:text-gray-400">
+                <span>Menampilkan Seluruh Riwayat</span>
+              </div>
+            )}
+          </div>
+
+          {/* Baris 2: Status Filter Chips dengan Count Badge Real-time */}
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-0.5">
+            {filters.map((f) => {
+              const isActive = activeFilter === f.key;
+              const count = statusCounts[f.key];
+              return (
+                <button
+                  key={f.key}
+                  type="button"
+                  onClick={() => setActiveFilter(f.key)}
+                  className={`shrink-0 flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold rounded-none transition-all cursor-pointer border ${
+                    isActive
+                      ? 'bg-green-600 border-green-600 text-white shadow-2xs'
+                      : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-green-50 dark:hover:bg-green-950/40 hover:text-green-700 dark:hover:text-green-300'
+                  }`}
+                >
+                  <span>{f.label}</span>
+                  {count !== undefined && (
+                    <span
+                      className={`text-[9.5px] px-1 py-0.2 font-mono font-bold rounded-none ${
+                        isActive
+                          ? 'bg-white/20 text-white'
+                          : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>

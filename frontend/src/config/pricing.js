@@ -18,6 +18,10 @@ export const PRICING_CONFIG = {
   EXTRA_DELIVERY_PER_5_ITEMS: 2000, // Tambahan ke kurir
   EXTRA_ADMIN_PER_5_ITEMS: 3000,    // Tambahan ke admin
 
+  // Tarif Pesanan Khusus / Titip Beli (Custom Order)
+  CUSTOM_DELIVERY_FEE: 3500, // Ongkir kurir pesanan khusus
+  CUSTOM_ADMIN_FEE: 2500,    // Biaya admin pondok pesanan khusus
+
   // Aturan pesanan bertingkat rombongan toko (Batch Order)
   // - Santri ke-1: Ongkir kurir utuh Rp 3.000 (Potongan Rp 0, Admin Rp 2.000)
   // - Santri ke-2 dst: Ongkir kurir Rp 1.500 (Potongan Rp 1.500 dialihkan ke kas admin, Admin Rp 3.500)

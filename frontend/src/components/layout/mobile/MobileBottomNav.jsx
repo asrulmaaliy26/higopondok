@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from '@tanstack/react-router';
+import { Sparkles, Bot } from 'lucide-react';
 import { useActiveOrdersCount } from '../../../hooks/useActiveOrdersCount';
 import { useCartStore } from '../../../store/cartStore';
 import { useAuthStore } from '../../../store/authStore';
@@ -22,6 +23,7 @@ export default function MobileBottomNav({ sidebarMenus, location }) {
       <div className="flex justify-around items-center h-16 px-1">
         {navItems.map((item) => {
           const isKeranjang = item.href === '/dashboard/keranjang';
+          const isChatAi = item.href === '/dashboard/pesan-chat';
           const isPesanan = 
             item.href === '/dashboard/toko-saya/pesanan' || 
             item.href === '/dashboard/admin/pesanan' || 
@@ -33,6 +35,38 @@ export default function MobileBottomNav({ sidebarMenus, location }) {
             badgeContent = totalCartItems > 99 ? '99+' : totalCartItems;
           } else if (isPesanan && activeOrdersCount > 0) {
             badgeContent = activeOrdersCount > 99 ? '99+' : activeOrdersCount;
+          }
+
+          // Tampilan Khusus Menonjol untuk Chat AI (Elevated Floating Sharp Cube)
+          if (isChatAi) {
+            const isCurrentlyActive = location.pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                to={item.href}
+                activeOptions={{ exact: true }}
+                className="flex flex-col items-center justify-center w-full relative -mt-4 group cursor-pointer select-none"
+              >
+                {/* Floating Badge Tag "✨ AI" */}
+                <div className="absolute -top-1.5 z-10 px-1.5 py-0.2 bg-emerald-400 text-gray-950 text-[8px] font-black uppercase tracking-wider rounded-none shadow-xs border border-white dark:border-gray-900 flex items-center gap-0.5 animate-pulse">
+                  <Sparkles className="w-2.5 h-2.5 text-gray-950" />
+                  <span>AI</span>
+                </div>
+
+                {/* Raised Elevated Cube (Square Flat Hijau Emerald Mengkilap) */}
+                <div className={`w-11 h-11 rounded-none border-2 border-white dark:border-gray-900 flex items-center justify-center text-white transition-all transform group-hover:scale-105 group-active:scale-95 shadow-[0_4px_16px_rgba(16,185,129,0.5)] ${
+                  isCurrentlyActive
+                    ? 'bg-gradient-to-tr from-green-700 via-green-600 to-emerald-400 ring-2 ring-green-500'
+                    : 'bg-gradient-to-tr from-green-800 via-green-600 to-emerald-500 hover:from-green-700 hover:to-emerald-400'
+                }`}>
+                  <Bot className="h-5 w-5 text-white animate-pulse" strokeWidth={2.5} />
+                </div>
+
+                <span className="text-[10px] font-black leading-none tracking-tight text-green-600 dark:text-green-400 mt-1">
+                  Chat AI
+                </span>
+              </Link>
+            );
           }
 
           return (

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from '@tanstack/react-router';
-import { Store, Coffee, Ticket, ShoppingCart, User, LogIn } from 'lucide-react';
+import { Store, Coffee, Ticket, ShoppingCart, User, LogIn, Bot, Sparkles } from 'lucide-react';
 import { useAuthStore } from '../../../store/authStore';
 import { useCartStore } from '../../../store/cartStore';
 
@@ -12,7 +12,7 @@ export default function PublicBottomNav() {
 
   const isHome = path === '/';
   const isKantin = path.startsWith('/kantin');
-  const isKeranjang = path === '/keranjang' || path === '/dashboard/keranjang';
+  const isChatAi = path === '/dashboard/pesan-chat' || path === '/pesan-chat';
   const isPromo = path.startsWith('/vouchers') || path.startsWith('/dashboard/vouchers') || path.startsWith('/promo') || path.startsWith('/dashboard/promo');
   const isProfile = path.startsWith('/dashboard/profile') || path === '/profile' || path === '/login';
 
@@ -45,24 +45,29 @@ export default function PublicBottomNav() {
           <span className="text-[10px] leading-none tracking-wide">Kantin</span>
         </Link>
 
-        {/* 3. Keranjang Belanja (Dengan Badge Jumlah Item) */}
+        {/* 3. Chat Belanja AI (Elevated Floating Sharp Cube) */}
         <Link
-          to={token ? "/dashboard/keranjang" : "/keranjang"}
-          className={`flex flex-col items-center justify-center w-full h-full space-y-0.5 transition-colors relative ${
-            isKeranjang
-              ? 'text-green-600 dark:text-green-400 font-bold'
-              : 'text-gray-400 hover:text-green-600 dark:text-gray-500 dark:hover:text-green-400 font-medium'
-          }`}
+          to="/dashboard/pesan-chat"
+          className="flex flex-col items-center justify-center w-full relative -mt-3.5 group cursor-pointer select-none"
         >
-          <div className="relative">
-            <ShoppingCart className="h-5 w-5" strokeWidth={isKeranjang ? 2.5 : 2} />
-            {totalCartItems > 0 && (
-              <span className="absolute -top-1.5 -right-2.5 bg-red-600 text-white font-mono text-[9px] font-black min-w-[15px] h-3.5 flex items-center justify-center rounded-none px-0.5 border border-white dark:border-gray-900 leading-none shadow-xs">
-                {totalCartItems > 99 ? '99+' : totalCartItems}
-              </span>
-            )}
+          {/* Floating Badge Tag "✨ AI" */}
+          <div className="absolute -top-1.5 z-10 px-1.5 py-0.2 bg-emerald-400 text-gray-950 text-[8px] font-black uppercase tracking-wider rounded-none shadow-xs border border-white dark:border-gray-900 flex items-center gap-0.5 animate-pulse">
+            <Sparkles className="w-2.5 h-2.5 text-gray-950" />
+            <span>AI</span>
           </div>
-          <span className="text-[10px] leading-none tracking-wide">Keranjang</span>
+
+          {/* Raised Elevated Cube (Square Flat Hijau Emerald Mengkilap) */}
+          <div className={`w-10 h-10 rounded-none border-2 border-white dark:border-gray-900 flex items-center justify-center text-white transition-all transform group-hover:scale-105 group-active:scale-95 shadow-[0_4px_14px_rgba(16,185,129,0.5)] ${
+            isChatAi
+              ? 'bg-gradient-to-tr from-green-700 via-green-600 to-emerald-400 ring-2 ring-green-500'
+              : 'bg-gradient-to-tr from-green-800 via-green-600 to-emerald-500 hover:from-green-700 hover:to-emerald-400'
+          }`}>
+            <Bot className="h-4.5 w-4.5 text-white animate-pulse" strokeWidth={2.5} />
+          </div>
+
+          <span className="text-[9.5px] font-black leading-none tracking-tight text-green-600 dark:text-green-400 mt-1">
+            Chat AI
+          </span>
         </Link>
 
         {/* 4. Promo & Voucher */}

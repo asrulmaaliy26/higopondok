@@ -69,8 +69,12 @@ class OrderController extends Controller
 
             if ($isCustom) {
                 $pricing = Order::getPricingConfig();
-                $base_delivery_fee = $pricing['base_delivery_fee'];
-                $admin_fee = $pricing['base_admin_fee'];
+                $base_delivery_fee = $pricing['custom_delivery_fee']; // 3500
+                $admin_fee = $pricing['custom_admin_fee'];           // 2500
+
+                // Parse catatan bebas titip beli menjadi checklist terstruktur
+                $parser = app(\App\Domains\Canteen\Services\CustomOrderParserService::class);
+                $customItems = $parser->parseNotes($request->custom_notes);
 
                 $order = Order::create([
                     'checkout_id' => $request->checkout_id ?: ('CHK-' . date('Ymd') . '-' . strtoupper(\Illuminate\Support\Str::random(6))),
@@ -79,6 +83,7 @@ class OrderController extends Controller
                     'courier_id' => null,
                     'is_custom' => true,
                     'custom_notes' => $request->custom_notes,
+                    'custom_items' => $customItems,
                     'status' => 'pending',
                     'payment_status' => 'unpaid',
                     'total_price' => 0, // Pending canteen setting price
@@ -1943,10 +1948,12 @@ class OrderController extends Controller
             : $order->canteen;
         $category = $canteen ? ($canteen->category ?? 'kauman') : 'kauman';
 
-        // ✅ Gunakan getPricingConfig() agar konsisten dengan seluruh sistem
+        // ✅ Gunakan getPricingConfig() dengan prioritas tarif pesanan khusus (Ongkir 3.500, Admin 2.500)
         $pricing = Order::getPricingConfig();
-        $admin_fee = ((float) $order->admin_fee > 0) ? (float) $order->admin_fee : $pricing['base_admin_fee'];
-        $delivery_fee = ((float) $order->delivery_fee > 0) ? (float) $order->delivery_fee : $pricing['base_delivery_fee'];
+        $defaultAdminFee = $order->is_custom ? $pricing['custom_admin_fee'] : $pricing['base_admin_fee'];
+        $defaultDeliveryFee = $order->is_custom ? $pricing['custom_delivery_fee'] : $pricing['base_delivery_fee'];
+        $admin_fee = ((float) $order->admin_fee > 0) ? (float) $order->admin_fee : $defaultAdminFee;
+        $delivery_fee = ((float) $order->delivery_fee > 0) ? (float) $order->delivery_fee : $defaultDeliveryFee;
 
         $total_price = $productPrice > 0 ? ($productPrice + $admin_fee + $delivery_fee) : 0;
 
@@ -2013,6 +2020,50 @@ class OrderController extends Controller
         return response()->json([
             'success' => true,
             'data'    => Order::getPricingConfig(),
+        ]);
+    }
+
+    /**
+     * Update checklist barang pesanan khusus (misal dicentang kurir saat belanja)
+     */
+    public function updateCustomItems(Request $request, $id): \Illuminate\Http\JsonResponse
+    {
+        $order = Order::findOrFail($id);
+
+        $customItems = $request->input('custom_items');
+        if (!is_array($customItems)) {
+            return response()->json(['message' => 'Format checklist tidak valid'], 422);
+        }
+
+        $order->update([
+            'custom_items' => $customItems,
+        ]);
+
+        return response()->json([
+            'message' => 'Checklist belanja berhasil diperbarui',
+            'custom_items' => $order->custom_items,
+        ]);
+    }
+
+    /**
+     * Parse ulang catatan titip beli menjadi checklist barang
+     */
+    public function parseCustomOrderNotes(Request $request, $id): \Illuminate\Http\JsonResponse
+    {
+        $order = Order::findOrFail($id);
+        $notes = $request->input('custom_notes', $order->custom_notes);
+
+        $parser = app(\App\Domains\Canteen\Services\CustomOrderParserService::class);
+        $customItems = $parser->parseNotes($notes);
+
+        $order->update([
+            'custom_notes' => $notes,
+            'custom_items' => $customItems,
+        ]);
+
+        return response()->json([
+            'message' => 'Catatan pesanan khusus berhasil diparsing menjadi checklist',
+            'custom_items' => $customItems,
         ]);
     }
 }

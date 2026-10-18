@@ -4066,6 +4066,28 @@ ${itemsListText}
                 </p>
               </div>
 
+              {/* CHECKLIST BELANJA HASIL PARSING AI / RULE-BASED */}
+              {activeOrderForSetPrice.custom_items && Array.isArray(activeOrderForSetPrice.custom_items) && activeOrderForSetPrice.custom_items.length > 0 && (
+                <div className="bg-amber-50/70 dark:bg-amber-950/40 p-2 border border-amber-200 dark:border-amber-800 space-y-1">
+                  <span className="text-[10px] font-bold text-amber-800 dark:text-amber-300 uppercase block">
+                    📋 Checklist Belanja ({activeOrderForSetPrice.custom_items.length} Item):
+                  </span>
+                  <div className="space-y-1">
+                    {activeOrderForSetPrice.custom_items.map((it, idx) => (
+                      <div key={idx} className="flex justify-between items-center text-xs bg-white dark:bg-gray-800 p-1.5 border border-amber-100 dark:border-gray-700">
+                        <div className="min-w-0">
+                          <span className="font-bold text-gray-900 dark:text-white">{it.item}</span>
+                          {it.notes && <span className="text-[10px] text-gray-500 italic block">{it.notes}</span>}
+                        </div>
+                        <span className="text-[11px] font-mono font-black px-1.5 py-0.2 bg-amber-100 dark:bg-amber-900 text-amber-900 dark:text-amber-200">
+                          {it.quantity}x {it.unit || 'pcs'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Pilihan Toko Pelaksana yang Dipilihkan Kantin */}
               <div>
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
@@ -4100,12 +4122,18 @@ ${itemsListText}
               {(() => {
                 const prodPrice = parseFloat(newPriceInput || 0);
                 const canteenCat = activeOrderForSetPrice.canteen?.category || 'kauman';
+                const defaultDelFee = activeOrderForSetPrice.is_custom 
+                  ? (PRICING_CONFIG.CUSTOM_DELIVERY_FEE || 3500) 
+                  : PRICING_CONFIG.BASE_DELIVERY_FEE;
+                const defaultAdmFee = activeOrderForSetPrice.is_custom 
+                  ? (PRICING_CONFIG.CUSTOM_ADMIN_FEE || 2500) 
+                  : PRICING_CONFIG.BASE_ADMIN_FEE;
                 const delFee = parseFloat(activeOrderForSetPrice.delivery_fee) > 0 
                   ? parseFloat(activeOrderForSetPrice.delivery_fee) 
-                  : PRICING_CONFIG.BASE_DELIVERY_FEE;
+                  : defaultDelFee;
                 const admFee = parseFloat(activeOrderForSetPrice.admin_fee) > 0 
                   ? parseFloat(activeOrderForSetPrice.admin_fee) 
-                  : PRICING_CONFIG.BASE_ADMIN_FEE;
+                  : defaultAdmFee;
                 const grandTotal = prodPrice > 0 ? (prodPrice + delFee + admFee) : 0;
 
                 return (

@@ -68,7 +68,7 @@ export default function ImpersonationBanner() {
   };
 
   return (
-    <div className="bg-amber-500 text-gray-950 px-3 py-1.5 sm:px-4 sm:py-2 border-b border-amber-600 shadow-md sticky top-0 z-40 flex items-center justify-between gap-2 text-xs font-semibold">
+    <div className="h-[38px] shrink-0 bg-amber-500 text-gray-950 px-3 sm:px-4 border-b border-amber-600 shadow-md sticky top-0 z-40 flex items-center justify-between gap-2 text-xs font-semibold">
       <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
         <span className="p-1 bg-amber-600/30 rounded-none shrink-0">
           <Shield className="w-3.5 h-3.5 text-gray-950" />

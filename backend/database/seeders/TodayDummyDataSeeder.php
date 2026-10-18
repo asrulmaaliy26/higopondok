@@ -154,21 +154,36 @@ class TodayDummyDataSeeder extends Seeder
             $gacoan->update([
                 'variant_config' => [
                     'spicy' => ['enabled' => true, 'label' => 'Level Pedas', 'options' => ['Lv 0', 'Lv 1', 'Lv 2', 'Lv 3', 'Lv 4', 'Lv 6', 'Lv 8']],
-                    'portion' => ['enabled' => true, 'label' => 'Porsi', 'options' => ['Biasa', 'Jumbo (+Rp 3.000)']],
+                    'portion' => ['enabled' => false],
                     'temperature' => ['enabled' => false],
                     'sugar' => ['enabled' => false],
-                    'custom' => [
-                        'enabled' => true,
-                        'groups' => [
-                            [
-                                'name' => 'Ekstra Topping',
-                                'options' => [
-                                    ['name' => 'Pangsit Goreng (+Rp 2.000)', 'price' => 2000],
-                                    ['name' => 'Udang Keju (+Rp 3.000)', 'price' => 3000]
-                                ]
-                            ]
-                        ]
-                    ]
+                    'custom' => ['enabled' => false, 'groups' => []]
+                ]
+            ]);
+        }
+
+        $hompimpa = Product::where('name', 'Mie Hompimpa')->first();
+        if ($hompimpa) {
+            $hompimpa->update([
+                'variant_config' => [
+                    'spicy' => ['enabled' => true, 'label' => 'Level Pedas', 'options' => ['Lv 0', 'Lv 1', 'Lv 2', 'Lv 3', 'Lv 4', 'Lv 6', 'Lv 8']],
+                    'portion' => ['enabled' => false],
+                    'temperature' => ['enabled' => false],
+                    'sugar' => ['enabled' => false],
+                    'custom' => ['enabled' => false, 'groups' => []]
+                ]
+            ]);
+        }
+
+        $suit = Product::where('name', 'Mie Suit')->first();
+        if ($suit) {
+            $suit->update([
+                'variant_config' => [
+                    'spicy' => ['enabled' => false],
+                    'portion' => ['enabled' => false],
+                    'temperature' => ['enabled' => false],
+                    'sugar' => ['enabled' => false],
+                    'custom' => ['enabled' => false, 'groups' => []]
                 ]
             ]);
         }

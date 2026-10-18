@@ -10,7 +10,8 @@ import {
   ShoppingCart,
   Ticket,
   Shield,
-  User
+  User,
+  Bot
 } from 'lucide-react';
 import { ROLES } from './roles';
 
@@ -130,13 +131,22 @@ export const allMenus = [
     showOnMobile: true,
   },
   {
+    name: 'Chat Belanja AI',
+    desktopName: 'Asisten Chat AI',
+    mobileName: 'Chat AI',
+    href: '/dashboard/pesan-chat',
+    icon: Bot,
+    roles: [ROLES.USER],
+    showOnMobile: true,
+  },
+  {
     name: 'Keranjang',
     desktopName: 'Keranjang Belanja',
     mobileName: 'Keranjang',
     href: '/dashboard/keranjang',
     icon: ShoppingCart,
     roles: [ROLES.USER],
-    showOnMobile: true,
+    showOnMobile: false, // Digantikan oleh Chat AI di tengah-tengah mobile navigation bar
   },
   {
     name: 'Voucher',

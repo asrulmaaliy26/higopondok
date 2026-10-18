@@ -49,6 +49,7 @@ const TugasKurir = React.lazy(() => import('./pages/mobile/TugasKurir'));
 const Keranjang = React.lazy(() => import('./pages/mobile/Keranjang'));
 const AdminVouchers = React.lazy(() => import('./pages/mobile/AdminVouchers'));
 const Vouchers = React.lazy(() => import('./pages/mobile/Vouchers'));
+const PesanAiChat = React.lazy(() => import('./pages/mobile/PesanAiChat'));
 
 // ==========================================
 // 2. ULTRA-FAST QUERY CLIENT CONFIGURATION (Caching 5-30m)
@@ -234,6 +235,14 @@ const publicAdminPesananRoute = createRoute({
   },
 });
 
+const publicPesanAiChatRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/pesan-chat',
+  component: function PublicPesanAiChatRedirect() {
+    return <Navigate to="/dashboard/pesan-chat" replace />;
+  },
+});
+
 // Wrapper components to avoid inline arrow functions in createRoute
 function UserManagementPage() {
   return <RoleGuard allowedRoles={[ROLES.SUPER_ADMIN]}><UserManagement /></RoleGuard>;
@@ -297,6 +306,10 @@ function AdminVouchersPage() {
 
 function VouchersPage() {
   return <Vouchers />;
+}
+
+function PesanAiChatPage() {
+  return <RoleGuard allowedRoles={[ROLES.USER, ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.KANTIN]}><PesanAiChat /></RoleGuard>;
 }
 
 const dashboardRoute = createRoute({
@@ -431,6 +444,12 @@ const vouchersRoute = createRoute({
   component: VouchersPage,
 });
 
+const pesanAiChatRoute = createRoute({
+  getParentRoute: () => dashboardRoute,
+  path: '/pesan-chat',
+  component: PesanAiChatPage,
+});
+
 const dashboardPromoRoute = createRoute({
   getParentRoute: () => dashboardRoute,
   path: '/promo',
@@ -466,6 +485,7 @@ const routeTree = rootRoute.addChildren([
   publicUsersRoute,
   publicPertokoanRoute,
   publicAdminPesananRoute,
+  publicPesanAiChatRoute,
   dashboardRoute.addChildren([
     dashboardIndexRoute, 
     userManagementRoute,
@@ -474,6 +494,7 @@ const routeTree = rootRoute.addChildren([
     adminLogsRoute,
     adminVouchersRoute,
     vouchersRoute,
+    pesanAiChatRoute,
     dashboardPromoRoute,
     panduanRoute,
     tokoSayaRoute,

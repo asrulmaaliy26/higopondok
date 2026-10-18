@@ -160,6 +160,25 @@ export const normalizeCategory = (category, productName = '') => {
   return 'makanan';
 };
 
+// Helper Normalisasi Label Varian (Cegah duplikasi seperti "[Lv 0] • LV 0" menjadi "[Lv 0]")
+export const cleanVariantLabel = (str = '') => {
+  if (!str) return 'Standar / Original';
+  let cleaned = str.trim();
+  const match = cleaned.match(/^\[(.*?)\]\s*(?:•\s*(.*))?$/);
+  if (match) {
+    const varPart = match[1].trim();
+    const notePart = (match[2] || '').trim();
+    if (notePart) {
+      const vNorm = varPart.toLowerCase().replace(/[\s_-]+/g, '');
+      const nNorm = notePart.toLowerCase().replace(/[\s_-]+/g, '').replace(/^level/i, 'lv');
+      if (vNorm === nNorm || vNorm.includes(nNorm) || nNorm.includes(vNorm)) {
+        return `[${varPart}]`;
+      }
+    }
+  }
+  return cleaned;
+};
+
 // Helper Level Kepedasan (e.g. Mie Gacoan Level 1, 2, 3, 4, 6, 8)
 export const getSpicyLevelNumber = (str = '') => {
   const match = (str || '').match(/(?:level|lv|lvl)\s*(\d+)/i) || (str || '').match(/\b(\d+)\b/);
@@ -564,6 +583,54 @@ export default function TugasKurir() {
     }
   });
 
+  // Update Checklist Barang Pesanan Khusus / Titip Beli
+  const updateCustomItemsMutation = useMutation({
+    mutationFn: async ({ orderId, customItems }) => {
+      const res = await api.put(`/orders/${orderId}/custom-items`, { custom_items: customItems });
+      return { orderId, customItems: res.data?.custom_items || customItems };
+    },
+    onMutate: async ({ orderId, customItems }) => {
+      return await mutateOrderInCaches(queryClient, 'courier_orders', orderId, (order) => ({
+        ...order,
+        custom_items: customItems
+      }));
+    },
+    onError: (err, variables, context) => {
+      rollbackCaches(queryClient, context);
+      toast.error('Gagal memperbarui checklist belanja');
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['courier_orders'] });
+    }
+  });
+
+  // Parse Ulang Catatan Titip Beli via AI / Rule-based Parser
+  const parseCustomNotesMutation = useMutation({
+    mutationFn: async (orderId) => {
+      const res = await api.post(`/orders/${orderId}/parse-custom`);
+      return res.data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['courier_orders'] });
+      toast.success(data?.message || 'Checklist belanja berhasil diparsing!');
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.message || 'Gagal mem-parsing catatan');
+    }
+  });
+
+  const handleToggleCustomCheck = (order, itemIdx, e) => {
+    e?.stopPropagation?.();
+    if (!order?.custom_items) return;
+    const currentItems = Array.isArray(order.custom_items) ? [...order.custom_items] : [];
+    if (!currentItems[itemIdx]) return;
+    currentItems[itemIdx] = {
+      ...currentItems[itemIdx],
+      is_checked: !currentItems[itemIdx].is_checked
+    };
+    updateCustomItemsMutation.mutate({ orderId: order.id, customItems: currentItems });
+  };
+
   const [isCompressing, setIsCompressing] = useState(false);
 
   const handleFileChange = async (e) => {
@@ -905,7 +972,7 @@ export default function TugasKurir() {
           const name = item.product?.name || 'Makanan';
           const itemCat = normalizeCategory(item.product?.category, item.product?.name);
           const itemHppTotal = getItemModalTotalHpp(item);
-          const variantLabel = (item.notes && item.notes.trim()) ? item.notes.trim() : 'Standar / Original';
+          const variantLabel = cleanVariantLabel(item.notes);
 
           map[canteenId].totalItemCount += qty;
           map[canteenId].categoryStats[itemCat] = (map[canteenId].categoryStats[itemCat] || 0) + qty;
@@ -946,6 +1013,9 @@ export default function TugasKurir() {
           category: 'custom',
           variantLabel: 'Pesanan Khusus',
           isPindahan,
+          custom_items: order.custom_items,
+          custom_notes: order.custom_notes,
+          order: order,
         };
         map[canteenId].customersMap[custKey].items.push(customItem);
 
@@ -1658,11 +1728,82 @@ export default function TugasKurir() {
                               </div>
                             ))
                           ) : (
-                            <div className="flex justify-between items-center text-[11px] text-gray-500">
-                              <span>1x Pesanan Khusus</span>
-                              <span className="font-bold text-gray-900 dark:text-white">
-                                Rp {formatRupiah(getOrderModalBelanja(order))}
-                              </span>
+                            <div className="space-y-1.5 pt-0.5">
+                              <div className="flex justify-between items-center text-[11px] text-amber-900 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 p-1.5 border border-amber-200 dark:border-amber-800">
+                                <span className="font-bold flex items-center gap-1">
+                                  <span>⚡ Titip Beli / Khusus</span>
+                                  <span className="text-[9px] font-normal text-amber-700 dark:text-amber-300">
+                                    (Ongkir Rp 3.500 • Admin Rp 2.500)
+                                  </span>
+                                </span>
+                                <span className="font-bold font-mono text-gray-900 dark:text-white">
+                                  Rp {formatRupiah(getOrderModalBelanja(order))}
+                                </span>
+                              </div>
+
+                              {/* CHECKLIST BELANJA TERSTRUKTUR */}
+                              {order.custom_items && Array.isArray(order.custom_items) && order.custom_items.length > 0 ? (
+                                <div className="space-y-1 bg-white dark:bg-gray-900 p-1.5 border border-amber-200 dark:border-amber-800/80 rounded-none">
+                                  <div className="flex items-center justify-between text-[10px] font-black uppercase text-amber-900 dark:text-amber-300 px-0.5">
+                                    <span>📋 Checklist Belanja ({order.custom_items.length} Item):</span>
+                                    <span className="text-[9px] text-gray-400 font-normal">Klik untuk centang</span>
+                                  </div>
+                                  <div className="space-y-1">
+                                    {order.custom_items.map((cItem, cIdx) => (
+                                      <label
+                                        key={cItem.id || cIdx}
+                                        onClick={(e) => e.stopPropagation()}
+                                        className={`flex items-start justify-between gap-2 p-1.5 border rounded-none cursor-pointer transition-colors ${
+                                          cItem.is_checked
+                                            ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-gray-400 dark:text-gray-500 line-through'
+                                            : 'bg-gray-50 dark:bg-gray-800/60 border-gray-200 dark:border-gray-750 text-gray-900 dark:text-white hover:border-amber-400'
+                                        }`}
+                                      >
+                                        <div className="flex items-start gap-1.5 min-w-0">
+                                          <input
+                                            type="checkbox"
+                                            checked={Boolean(cItem.is_checked)}
+                                            onChange={(e) => handleToggleCustomCheck(order, cIdx, e)}
+                                            className="mt-0.5 rounded-none text-green-600 focus:ring-0 cursor-pointer"
+                                          />
+                                          <div className="min-w-0">
+                                            <span className="text-xs font-bold leading-tight block">
+                                              {cItem.item}
+                                            </span>
+                                            {cItem.notes && (
+                                              <span className="text-[10px] text-gray-500 dark:text-gray-400 italic block">
+                                                {cItem.notes}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                        <span className="shrink-0 text-[10px] font-mono font-black px-1.5 py-0.2 bg-amber-100 dark:bg-amber-900/60 text-amber-950 dark:text-amber-200 border border-amber-300 dark:border-amber-700">
+                                          {cItem.quantity}x {cItem.unit || 'pcs'}
+                                        </span>
+                                      </label>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="flex items-center justify-between gap-1 p-1.5 bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700">
+                                  <span className="text-[11px] text-gray-600 dark:text-gray-300 truncate">
+                                    "{order.custom_notes || 'Belum ada catatan'}"
+                                  </span>
+                                  {order.custom_notes && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        parseCustomNotesMutation.mutate(order.id);
+                                      }}
+                                      disabled={parseCustomNotesMutation.isPending}
+                                      className="px-2 py-1 bg-amber-500 hover:bg-amber-600 text-gray-950 font-bold text-[10px] rounded-none shrink-0 flex items-center gap-1 cursor-pointer"
+                                    >
+                                      <span>🤖 Parse Checklist</span>
+                                    </button>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>

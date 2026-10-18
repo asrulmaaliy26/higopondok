@@ -58,12 +58,6 @@ export default function DetailKantin() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Custom Order state (HiSend Titip Barang)
-  const [showCustomModal, setShowCustomModal] = useState(false);
-  const [customNotes, setCustomNotes] = useState('');
-  const [customLocation, setCustomLocation] = useState(user?.santri_room || '');
-  const [isSubmittingCustom, setIsSubmittingCustom] = useState(false);
-  const [showProfileAlert, setShowProfileAlert] = useState(false);
 
   const { data: canteen, isLoading: isLoadingCanteen } = useQuery({
     queryKey: ['canteen', id],
@@ -362,26 +356,6 @@ export default function DetailKantin() {
           )}
         </div>
 
-        {/* 4. CUSTOM ORDER BANNER (HiSend Titip Barang Luar Menu) */}
-        <div className="bg-gradient-to-r from-green-800 via-green-700 to-emerald-800 border border-green-900 p-3 text-white flex items-center justify-between gap-3 shadow-xs">
-          <div>
-            <div className="flex items-center gap-1.5 mb-0.5">
-              <span className="text-[9px] font-black uppercase tracking-wider bg-white/20 px-1 py-0.2">
-                HiSend
-              </span>
-              <span className="text-[10px] text-green-200 font-bold">Titip Beli / Menu Khusus</span>
-            </div>
-            <h3 className="font-bold text-xs sm:text-sm">Mau titip beli barang luar menu?</h3>
-            <p className="text-[10px] text-green-100 line-clamp-1">Tulis catatan titipan, harga ditentukan oleh toko.</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowCustomModal(true)}
-            className="px-3 py-1.5 bg-white text-green-800 hover:bg-green-50 active:scale-95 text-xs font-bold rounded-none shrink-0 shadow-sm transition-all"
-          >
-            ＋ Titip Beli
-          </button>
-        </div>
 
         {/* CATEGORY TABS (Dinamis Sesuai Kategori Toko) */}
         {availableCategories.length > 2 && (
@@ -642,154 +616,6 @@ export default function DetailKantin() {
         </div>
       )}
 
-      {/* 7. CUSTOM ORDER MODAL (HiSend Titip Beli Dialog) */}
-      {showCustomModal &&
-        createPortal(
-          <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-xs flex items-center justify-center p-3">
-            <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-none w-full max-w-md p-4 space-y-3 shadow-2xl animate-in zoom-in-95 duration-150">
-              <div className="flex justify-between items-center pb-2 border-b border-gray-200 dark:border-gray-800">
-                <div className="flex items-center gap-1.5">
-                  <Bike className="w-4 h-4 text-green-600" />
-                  <h3 className="font-bold text-sm text-gray-900 dark:text-white">Titip Beli / Pesanan Khusus</h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowCustomModal(false)}
-                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-sm font-bold"
-                >
-                  ✕
-                </button>
-              </div>
-
-              <div className="bg-green-50 dark:bg-green-950/40 p-2.5 border border-green-200 dark:border-green-800 text-xs text-green-800 dark:text-green-300">
-                Tuliskan barang atau pesanan khusus yang Anda perlukan di toko <strong>{canteen.name}</strong>. Pihak toko akan memeriksa dan menentukan total harganya.
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
-                  Catatan Barang / Titipan <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  rows={3}
-                  value={customNotes}
-                  onChange={(e) => setCustomNotes(e.target.value)}
-                  placeholder="Contoh: Tolong belikan Obat Flu 1 strip di apotek, atau Nasi Bungkus Lauk Telur..."
-                  className="w-full p-2.5 border border-gray-300 dark:border-gray-700 rounded-none text-xs bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-green-600"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
-                  Lokasi Pengantaran (Kamar)
-                </label>
-                <input
-                  type="text"
-                  value={customLocation}
-                  onChange={(e) => setCustomLocation(e.target.value)}
-                  className="w-full p-2.5 border border-gray-300 dark:border-gray-700 rounded-none text-xs bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-green-600"
-                />
-              </div>
-
-              <div className="flex gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
-                <button
-                  type="button"
-                  onClick={() => setShowCustomModal(false)}
-                  className="flex-1 py-2 rounded-none font-bold text-xs text-gray-600 bg-gray-100 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-200 transition-colors border border-gray-200 dark:border-gray-700"
-                >
-                  Batal
-                </button>
-                <button
-                  type="button"
-                  disabled={!customNotes.trim() || isSubmittingCustom}
-                  onClick={async () => {
-                    if (!token || !user) {
-                      setShowCustomModal(false);
-                      toast.error('Silakan login terlebih dahulu untuk membuat pesanan titipan/khusus.');
-                      navigate({ to: '/login' });
-                      return;
-                    }
-                    const isTeacherOrder = user?.is_teacher;
-                    if (isTeacherOrder) {
-                      if (!user?.phone || !user?.niy || !user?.teacher_unit) {
-                        setShowCustomModal(false);
-                        setShowProfileAlert(true);
-                        return;
-                      }
-                    } else {
-                      if (!user?.phone || !user?.santri_name || !user?.santri_room || !user?.santri_class || !user?.santri_level) {
-                        setShowCustomModal(false);
-                        setShowProfileAlert(true);
-                        return;
-                      }
-                    }
-                    if (!canteen.is_open) {
-                      toast.error('Kantin sedang tutup');
-                      return;
-                    }
-                    try {
-                      setIsSubmittingCustom(true);
-                      await api.post('/orders', {
-                        canteen_id: canteen.id,
-                        is_custom: true,
-                        order_for: isTeacherOrder ? 'guru' : 'santri',
-                        custom_notes: customNotes,
-                        delivery_location: customLocation || (isTeacherOrder ? `Ruang Guru / Kantor ${user?.teacher_unit || 'Yayasan'}` : '')
-                      });
-                      toast.success('Pesanan khusus berhasil dibuat! Menunggu penentuan harga toko.');
-                      setShowCustomModal(false);
-                      setCustomNotes('');
-                      navigate({ to: '/dashboard/pembayaran' });
-                    } catch (err) {
-                      toast.error(err.response?.data?.message || 'Gagal membuat pesanan khusus');
-                    } finally {
-                      setIsSubmittingCustom(false);
-                    }
-                  }}
-                  className="flex-[2] py-2 rounded-none font-bold text-xs text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 transition-colors"
-                >
-                  {isSubmittingCustom ? 'Mengirim...' : 'Kirim Titipan'}
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
-
-      {/* 8. PROFIL ALERT MODAL */}
-      {showProfileAlert &&
-        createPortal(
-          <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-xs flex items-center justify-center p-3">
-            <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-none w-full max-w-sm p-4 text-center space-y-3 shadow-2xl">
-              <div className="w-12 h-12 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-none flex items-center justify-center mx-auto">
-                <AlertCircle className="w-6 h-6 text-amber-600" />
-              </div>
-              <h3 className="font-bold text-sm text-gray-900 dark:text-white">Profil Santri Belum Lengkap</h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                Silakan lengkapi kamar santri dan WhatsApp di Profil sebelum mengirim pesanan.
-              </p>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowProfileAlert(false)}
-                  className="flex-1 py-1.5 text-xs font-bold text-gray-600 bg-gray-100 dark:bg-gray-800 dark:text-gray-300 rounded-none border border-gray-200 dark:border-gray-700"
-                >
-                  Nanti Saja
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowProfileAlert(false);
-                    navigate({ to: '/dashboard/profile' });
-                  }}
-                  className="flex-1 py-1.5 text-xs font-bold text-white bg-green-600 hover:bg-green-700 rounded-none"
-                >
-                  Ke Profil
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
 
       {/* 9. PRODUCT OPTION MODAL (Varian Dinamis & Preset) */}
       <ProductOptionModal

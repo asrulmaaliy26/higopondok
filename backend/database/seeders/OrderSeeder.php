@@ -104,6 +104,7 @@ class OrderSeeder extends Seeder
                             'courier_id' => $courierId,
                             'is_custom' => false,
                             'custom_notes' => $sampleCustomNotes[array_rand($sampleCustomNotes)],
+                            'custom_items' => null,
                             'status' => $orderNum === 1 ? 'pending' : 'processing',
                             'payment_status' => ($orderNum === 1) ? 'paid' : 'unpaid',
                             'proof_of_payment' => $orderNum === 1 ? ["{$dateFolder}/{$userName}/proof/sample_payment.jpg"] : null,

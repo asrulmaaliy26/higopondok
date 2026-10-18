@@ -23,7 +23,8 @@ import {
   ShieldCheck,
   Bike,
   Ticket,
-  Activity
+  Activity,
+  Bot
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import axios, { getStorageUrl } from '../../lib/axios';
@@ -365,7 +366,32 @@ export default function Home() {
           </button>
         </div>
 
-        {/* 6. VOUCHER PROMO STRIP (ala Gojek Banner di Foto 4) */}
+        {/* 6. AI SMART ORDERING BANNER CARD */}
+        <Link
+          to="/dashboard/pesan-chat"
+          className="flex items-center justify-between p-3 bg-gradient-to-r from-emerald-800 via-green-700 to-teal-800 text-white border border-green-700 shadow-sm cursor-pointer hover:opacity-95 transition-all group"
+        >
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 bg-white text-green-700 flex items-center justify-center font-bold shrink-0 shadow-xs group-hover:scale-105 transition-transform">
+              <Bot className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-black uppercase tracking-tight">Chat Asisten Belanja AI</span>
+                <span className="px-1 py-0.2 bg-emerald-400 text-gray-900 text-[9px] font-black uppercase font-mono">Baru</span>
+              </div>
+              <p className="text-[11px] text-green-100 leading-tight mt-0.5">
+                Cukup ketik santai seperti chat WA, AI langsung buatkan pesanan ke kamarmu!
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 bg-white/20 hover:bg-white/30 px-2 py-1.5 text-[11px] font-bold shrink-0 transition-colors">
+            <span>Chat</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </div>
+        </Link>
+
+        {/* 7. VOUCHER PROMO STRIP (ala Gojek Banner di Foto 4) */}
         <Link
           to="/vouchers"
           className="flex items-center justify-between p-2.5 bg-gradient-to-r from-green-700 via-emerald-600 to-green-800 text-white border border-green-800 shadow-xs cursor-pointer hover:opacity-95 transition-opacity"

@@ -27,6 +27,10 @@ return [
     'user_rank_2_courier_cut'      => (float) env('PRICING_USER_RANK_2_COURIER_CUT', 1500.0),
     'user_rank_3_plus_courier_cut' => (float) env('PRICING_USER_RANK_3_PLUS_COURIER_CUT', 1500.0),
 
+    // Tarif Khusus untuk Pesanan Khusus / Titip Beli (Custom Order)
+    'custom_delivery_fee'          => (float) env('PRICING_CUSTOM_DELIVERY_FEE', 3500.0),
+    'custom_admin_fee'             => (float) env('PRICING_CUSTOM_ADMIN_FEE', 2500.0),
+
     // Aturan Aktif: Santri ke-1 ongkir utuh Rp 3.000 (limit 1), mulai santri ke-2 dst dipotong 1.500 dialihkan ke kas admin (Kurir dapat Rp 1.500, Admin Rp 3.500)
     'user_threshold_limit'         => 1,
     'user_threshold_courier_cut'   => (float) env('PRICING_USER_RANK_3_PLUS_COURIER_CUT', 1500.0),

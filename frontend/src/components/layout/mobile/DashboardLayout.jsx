@@ -28,25 +28,27 @@ export default function DashboardLayout() {
   const isPerkuriran = location.pathname.startsWith('/dashboard/perkuriran') || location.pathname.startsWith('/dashboard/tugas-kurir');
   const isKeranjang = location.pathname === '/dashboard/keranjang';
   const isVouchers = location.pathname.startsWith('/dashboard/vouchers') || location.pathname === '/vouchers';
+  const isPesanChat = location.pathname === '/dashboard/pesan-chat';
   
   // All mobile pages in Higo Pondok manage their own high-density container & padding
   const isEdgeToEdgePage = true;
-  const hideBottomNav = isKantinDetail || isKeranjang;
+  // Sembunyikan bottom navigation pada detail kantin, keranjang, dan asisten chat (karena masing-masing punya bottom action bar sendiri)
+  const hideBottomNav = isKantinDetail || isKeranjang || isPesanChat;
 
   return (
-    <div className="flex w-full h-screen bg-slate-50 dark:bg-gray-950 overflow-hidden">
+    <div className={`flex w-full ${originalAdmin ? 'h-[calc(100dvh-38px)] max-h-[calc(100dvh-38px)]' : 'h-screen h-[100dvh]'} bg-slate-50 dark:bg-gray-950 overflow-hidden`}>
       {/* Desktop Sidebar */}
       <DesktopSidebar sidebarMenus={sidebarMenus} />
 
       {/* Main Content */}
-      <div className="flex flex-1 flex-col overflow-hidden relative">
+      <div className="flex flex-1 flex-col min-h-0 overflow-hidden relative">
 
         {/* Top Header */}
         <TopHeader user={user} isNoTopHeaderPage={isNoTopHeaderPage} />
 
         {/* Main Content Area */}
-        <main className="flex-1 overflow-y-auto bg-slate-50 dark:bg-gray-950">
-          <div className="min-h-full">
+        <main className={`flex-1 min-h-0 bg-slate-50 dark:bg-gray-950 ${isPesanChat ? 'overflow-hidden flex flex-col' : 'overflow-y-auto'}`}>
+          <div className={isPesanChat ? 'h-full flex-1 min-h-0 flex flex-col overflow-hidden' : 'min-h-full'}>
             <Outlet />
           </div>
         </main>

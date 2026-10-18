@@ -19,7 +19,8 @@ import {
   Package,
   CheckCircle,
   AlertCircle,
-  LayoutDashboard
+  LayoutDashboard,
+  Bot
 } from 'lucide-react';
 import { Link, useNavigate, useLocation } from '@tanstack/react-router';
 import toast from 'react-hot-toast';
@@ -365,6 +366,31 @@ export default function Kantin() {
           )}
         </div>
 
+        {/* BANNER ASISTEN BELANJA AI (GEMINI) */}
+        <Link
+          to="/dashboard/pesan-chat"
+          className="flex items-center justify-between p-2.5 bg-gradient-to-r from-emerald-800 via-green-700 to-teal-800 text-white border border-green-700 shadow-xs hover:opacity-95 transition-all group"
+        >
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 bg-white text-green-700 flex items-center justify-center font-bold shrink-0 shadow-xs group-hover:scale-105 transition-transform">
+              <Bot className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-black uppercase tracking-tight">Mau Cepat? Chat Asisten AI</span>
+                <span className="px-1 py-0.2 bg-emerald-400 text-gray-900 text-[8.5px] font-black uppercase font-mono">Auto Order</span>
+              </div>
+              <p className="text-[10.5px] text-green-100 leading-tight">
+                Ketik pesananmu santai di chat, AI otomatis buatkan pesanan ke kamarmu
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 bg-white/20 hover:bg-white/30 px-2 py-1 text-[11px] font-bold shrink-0 transition-colors">
+            <span>Chat</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </div>
+        </Link>
+
         {/* BARIS FILTER KATEGORI (DROPDOWN) & TOMBOL PESANAN KHUSUS (UNGU) */}
         <div className="flex items-center gap-2">
           {/* Dropdown Kategori */}
@@ -671,6 +697,16 @@ export default function Kantin() {
                   placeholder="Contoh: 30000 atau Rp 50.000"
                   className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100 text-xs py-2 px-3 rounded-none outline-none focus:border-purple-600 focus:bg-white dark:focus:bg-gray-900"
                 />
+              </div>
+
+              {/* Ketentuan Tarif Titip Beli */}
+              <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 p-2 text-xs text-amber-900 dark:text-amber-200 space-y-0.5 rounded-none">
+                <span className="font-bold flex items-center gap-1 text-[11px]">
+                  <span>💡 Ketentuan Biaya Titip Beli:</span>
+                </span>
+                <p className="text-[10px] leading-relaxed text-amber-800 dark:text-amber-300">
+                  Pesanan khusus dikenakan tarif <strong>Ongkir Kurir Rp 3.500</strong> & <strong>Biaya Layanan Admin Rp 2.500</strong>. Harga produk akan ditentukan oleh toko setelah dibelanjakan.
+                </p>
               </div>
 
               {/* Tombol Aksi */}
