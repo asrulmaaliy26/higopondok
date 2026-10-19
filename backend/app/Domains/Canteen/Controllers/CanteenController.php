@@ -148,10 +148,15 @@ class CanteenController extends Controller
         $data = $request->validated();
         
         if ($request->hasFile('image')) {
+            $defaultDisk = config('filesystems.default', 'public');
             if ($canteen->image) {
-                Storage::disk('public')->delete($canteen->image);
+                try {
+                    Storage::disk($defaultDisk)->delete($canteen->image);
+                    Storage::disk('public')->delete($canteen->image);
+                } catch (\Throwable $e) {}
             }
-            $path = $this->storeOptimizedImage($request->file('image'), $request->user(), 'canteens');
+            $targetUser = $canteen->user ?: $request->user();
+            $path = $this->storeOptimizedImage($request->file('image'), $targetUser, 'canteens');
             $data['image'] = $path;
         }
 

@@ -26,3 +26,5 @@ Homestead.json
 Homestead.yaml
 Thumbs.db
 /scratch
+/storage/app/*.json
+*service-account*.json

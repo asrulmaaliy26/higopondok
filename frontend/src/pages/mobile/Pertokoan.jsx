@@ -143,6 +143,10 @@ export default function Pertokoan() {
   const [newBannerPreview, setNewBannerPreview] = useState(null);
   const [showBannerForm, setShowBannerForm] = useState(false);
 
+  // Canteen Main Photo states for selected canteen
+  const [canteenPhotoFile, setCanteenPhotoFile] = useState(null);
+  const [canteenPhotoPreview, setCanteenPhotoPreview] = useState(null);
+
   // 1. Fetch Canteens List
   const { data: canteens, isLoading } = useQuery({
     queryKey: ['admin-canteens'],
@@ -417,6 +421,32 @@ export default function Pertokoan() {
     },
     onError: (err) => {
       toast.error(err.response?.data?.message || 'Gagal menghapus banner');
+    }
+  });
+
+  // Update Canteen Main Photo (Super Admin / Admin)
+  const updateCanteenPhotoMutation = useMutation({
+    mutationFn: async ({ id, file }) => {
+      const formData = new FormData();
+      formData.append('canteen_id', id);
+      formData.append('name', selectedCanteen.name);
+      formData.append('image', file);
+      const res = await axios.post(`/my-canteen?canteen_id=${id}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      return res.data;
+    },
+    onSuccess: (data) => {
+      toast.success('Foto utama toko berhasil diperbarui ke Google Drive!');
+      invalidateAllCanteenQueries();
+      if (selectedCanteen && data.canteen) {
+        setSelectedCanteen(prev => ({ ...prev, image: data.canteen.image }));
+      }
+      setCanteenPhotoFile(null);
+      setCanteenPhotoPreview(null);
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.message || 'Gagal mengunggah foto toko');
     }
   });
 
@@ -1666,6 +1696,8 @@ export default function Pertokoan() {
                   setNewBannerFile(null);
                   setNewBannerPreview(null);
                   setShowBannerForm(false);
+                  setCanteenPhotoFile(null);
+                  setCanteenPhotoPreview(null);
                 }}
                 className="w-7 h-7 flex items-center justify-center rounded-none hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors border border-gray-200 dark:border-gray-700 cursor-pointer shrink-0"
                 title="Kembali"
@@ -1865,6 +1897,96 @@ export default function Pertokoan() {
                 <div className="bg-gray-50 dark:bg-gray-800/40 p-1 px-1.5 rounded-none border border-gray-200 dark:border-gray-700/60">
                   <span className="block text-gray-400 text-[9px] font-bold uppercase leading-none">Kamar / Asrama</span>
                   <span className="font-bold text-gray-900 dark:text-gray-100 truncate block mt-0.5 leading-tight">{selectedCanteen.user?.santri_room || <span className="text-red-500 font-normal">Belum diisi</span>}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Foto Utama Toko (Super Admin & Admin Upload) */}
+            <div className="bg-white dark:bg-gray-900 p-2 sm:p-2.5 rounded-none border border-gray-200 dark:border-gray-800 shadow-xs space-y-1.5">
+              <div className="flex items-center justify-between flex-wrap gap-1">
+                <h3 className="font-bold text-[10.5px] uppercase tracking-wider text-gray-900 dark:text-white flex items-center gap-1.5">
+                  <ImageIcon className="w-3 h-3 text-green-600 dark:text-green-400" />
+                  Foto Utama Toko (Katalog & Detail)
+                </h3>
+                {selectedCanteen.image && (
+                  <span className="px-1.5 py-0.2 text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800 rounded-none">
+                    Foto Terpasang
+                  </span>
+                )}
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1 border-t border-gray-100 dark:border-gray-800">
+                {/* Preview Image */}
+                <div className="w-20 h-14 sm:w-24 sm:h-16 bg-gray-100 dark:bg-gray-800 rounded-none border border-gray-300 dark:border-gray-700 overflow-hidden relative shrink-0 flex items-center justify-center">
+                  {canteenPhotoPreview ? (
+                    <img src={canteenPhotoPreview} alt="Preview" className="w-full h-full object-cover" />
+                  ) : selectedCanteen.image ? (
+                    <AppImage src={selectedCanteen.image} alt={selectedCanteen.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <Store className="w-6 h-6 text-gray-400" />
+                  )}
+                  {canteenPhotoPreview && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCanteenPhotoFile(null);
+                        setCanteenPhotoPreview(null);
+                      }}
+                      className="absolute top-0 right-0 bg-red-600 text-white p-0.5 cursor-pointer leading-none"
+                      title="Batalkan foto baru"
+                    >
+                      <X size={10} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Form Controls */}
+                <div className="flex-1 min-w-0 space-y-1">
+                  <p className="text-[10px] text-gray-500 dark:text-gray-400 leading-tight">
+                    Format gambar JPG, PNG, atau WebP. Otomatis dioptimasi dan disimpan ke Google Drive.
+                  </p>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <label className="cursor-pointer">
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/jpg,image/webp"
+                        onChange={(e) => {
+                          const file = e.target.files[0];
+                          if (file) {
+                            if (file.size > 2 * 1024 * 1024) {
+                              toast.error('Ukuran file maksimal 2 MB');
+                              e.target.value = '';
+                              return;
+                            }
+                            setCanteenPhotoFile(file);
+                            setCanteenPhotoPreview(URL.createObjectURL(file));
+                          }
+                        }}
+                        className="hidden"
+                      />
+                      <div className="border border-dashed border-gray-300 dark:border-gray-700 hover:border-green-500 px-2.5 py-1 bg-gray-50 dark:bg-gray-800/40 text-center transition-colors h-[28px] flex items-center justify-center gap-1 text-[10px] text-gray-700 dark:text-gray-200 font-semibold rounded-none">
+                        <UploadCloud size={12} className="text-gray-400 shrink-0" />
+                        <span>{canteenPhotoFile ? canteenPhotoFile.name : (selectedCanteen.image ? 'Ganti Foto Toko' : 'Pilih Foto Toko')}</span>
+                      </div>
+                    </label>
+
+                    {canteenPhotoFile && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          updateCanteenPhotoMutation.mutate({
+                            id: selectedCanteen.id,
+                            file: canteenPhotoFile
+                          });
+                        }}
+                        disabled={updateCanteenPhotoMutation.isPending}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 rounded-none font-bold text-[11px] transition-all disabled:opacity-50 flex items-center justify-center gap-1 shadow-xs cursor-pointer h-[28px]"
+                      >
+                        <Save size={12} />
+                        <span>{updateCanteenPhotoMutation.isPending ? 'Mengunggah...' : 'Simpan Foto ke Drive'}</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

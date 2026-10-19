@@ -127,6 +127,172 @@ class AdminOrderController extends Controller
     }
 
     /**
+     * Export recap data and save directly to Google Drive (folder 04_laporan_keuangan)
+     */
+    public function exportRecapToDrive(Request $request)
+    {
+        $canteenId = $request->input('canteen_id', $request->query('canteen_id'));
+        $courierId = $request->input('courier_id', $request->query('courier_id'));
+        $period = $request->input('period', $request->query('period', 'day'));
+        $startDate = $request->input('start_date', $request->query('start_date'));
+        $endDate = $request->input('end_date', $request->query('end_date'));
+
+        $query = Order::forRecap()->filterPeriod($period, $startDate, $endDate);
+
+        if ($canteenId && $canteenId !== 'all') {
+            $query->where('canteen_id', $canteenId);
+        }
+
+        if ($courierId && $courierId !== 'all') {
+            if ($courierId === 'none' || $courierId === 'unassigned') {
+                $query->whereNull('courier_id');
+            } else {
+                $query->where('courier_id', $courierId);
+            }
+        }
+
+        $orders = $query->orderBy('created_at', 'asc')->orderBy('id', 'asc')->get();
+        $recap = Order::calculateRecap($orders, $period);
+        $summary = $recap['summary'] ?? [];
+
+        // Build CSV rows
+        $csvLines = [];
+        $csvLines[] = ['LAPORAN REKAPITULASI PENJUALAN & KEUANGAN - HIGO PONDOK'];
+        $csvLines[] = ['Waktu Ekspor', Carbon::now('Asia/Jakarta')->translatedFormat('l, d F Y H:i:s') . ' WIB'];
+        $csvLines[] = ['Periode', strtoupper($period) . ($startDate ? " ({$startDate} s/d " . ($endDate ?: $startDate) . ")" : '')];
+        $csvLines[] = ['Filter Toko', $canteenId && $canteenId !== 'all' ? "Toko #{$canteenId}" : 'Semua Toko'];
+        $csvLines[] = ['Filter Kurir', $courierId && $courierId !== 'all' ? ($courierId === 'none' ? 'Tanpa Kurir' : "Kurir #{$courierId}") : 'Semua Kurir'];
+        $csvLines[] = [];
+
+        // 1. RINGKASAN GLOBAL
+        $csvLines[] = ['--- RINGKASAN GLOBAL ---'];
+        $csvLines[] = ['Indikator Keuangan', 'Nilai'];
+        $csvLines[] = ['Total Pesanan', ($summary['total_orders'] ?? 0) . ' Pesanan'];
+        $csvLines[] = ['Total Belanja Produk (Omzet Toko)', (float) ($summary['total_products'] ?? 0)];
+        $csvLines[] = ['Total HPP / Modal Pokok', (float) ($summary['total_hpp'] ?? 0)];
+        $csvLines[] = ['Total Estimasi Laba Toko', (float) ($summary['total_profit'] ?? 0)];
+        $csvLines[] = ['Total Ongkir Diterima Kurir (Net)', (float) ($summary['total_courier_net_delivery_fee'] ?? $summary['total_delivery_fee'] ?? 0)];
+        $csvLines[] = ['Total Biaya Admin Aplikasi', (float) ($summary['total_admin_fee'] ?? 0)];
+        $csvLines[] = ['Total Potongan Kurir Masuk Kas Admin', (float) ($summary['total_courier_cut_to_admin'] ?? 0)];
+        $csvLines[] = ['Total Subsidi Diskon Voucher (Kas Admin)', (float) ($summary['total_voucher_discount'] ?? 0)];
+        $csvLines[] = ['Kas Admin Bersih (Net)', (float) ($summary['net_admin_fee'] ?? 0)];
+        $csvLines[] = ['GRAND TOTAL KESELURUHAN', (float) ($summary['grand_total'] ?? 0)];
+        $csvLines[] = [];
+
+        // 2. REKAP PER TOKO
+        $csvLines[] = ['--- REKAPITULASI PER TOKO / KANTIN ---'];
+        $csvLines[] = ['ID Toko', 'Nama Toko', 'Jumlah Pesanan', 'Omzet Produk (Rp)', 'Total HPP (Rp)', 'Total Laba (Rp)', 'Ongkir (Rp)', 'Biaya Admin (Rp)', 'Grand Total (Rp)'];
+        if (!empty($recap['canteen_recap'])) {
+            foreach ($recap['canteen_recap'] as $c) {
+                $csvLines[] = [
+                    $c['canteen_id'],
+                    $c['canteen_name'],
+                    $c['order_count'],
+                    (float) ($c['total_products'] ?? 0),
+                    (float) ($c['total_hpp'] ?? 0),
+                    (float) ($c['total_profit'] ?? 0),
+                    (float) ($c['total_delivery_fee'] ?? 0),
+                    (float) ($c['total_admin_fee'] ?? 0),
+                    (float) ($c['grand_total'] ?? 0),
+                ];
+            }
+        } else {
+            $csvLines[] = ['-', 'Tidak ada transaksi', 0, 0, 0, 0, 0, 0, 0];
+        }
+        $csvLines[] = [];
+
+        // 3. REKAP PER KURIR
+        $csvLines[] = ['--- REKAPITULASI PENGIRIMAN PER KURIR ---'];
+        $csvLines[] = ['ID Kurir', 'Nama Kurir', 'Jumlah Order', 'Ongkir Masuk Kurir (Rp)', 'Potongan Masuk Admin (Rp)', 'Grand Total Terkait (Rp)'];
+        if (!empty($recap['courier_recap'])) {
+            foreach ($recap['courier_recap'] as $cr) {
+                $csvLines[] = [
+                    $cr['courier_id'],
+                    $cr['courier_name'],
+                    $cr['order_count'],
+                    (float) ($cr['net_delivery_fee'] ?? 0),
+                    (float) ($cr['total_courier_cut_to_admin'] ?? 0),
+                    (float) ($cr['grand_total'] ?? 0),
+                ];
+            }
+        } else {
+            $csvLines[] = ['-', 'Tidak ada pengiriman kurir', 0, 0, 0, 0];
+        }
+        $csvLines[] = [];
+
+        // 4. BREAKDOWN PRODUK TERJUAL
+        $csvLines[] = ['--- BREAKDOWN PRODUK TERJUAL ---'];
+        $csvLines[] = ['ID Produk', 'Nama Produk', 'Toko', 'Jumlah Terjual (Qty)', 'Harga Jual (Rp)', 'Total Omzet (Rp)', 'Total Modal HPP (Rp)', 'Total Laba (Rp)'];
+        $products = !empty($recap['today_product_breakdown']) ? $recap['today_product_breakdown'] : ($recap['product_breakdown'] ?? []);
+        if (!empty($products)) {
+            foreach ($products as $p) {
+                $csvLines[] = [
+                    $p['product_id'],
+                    $p['name'],
+                    $p['canteen_name'],
+                    $p['qty'],
+                    (float) ($p['hpj'] ?? 0),
+                    (float) ($p['subtotal'] ?? 0),
+                    (float) ($p['total_hpp'] ?? 0),
+                    (float) ($p['profit'] ?? 0),
+                ];
+            }
+        } else {
+            $csvLines[] = ['-', 'Tidak ada produk terjual', '-', 0, 0, 0, 0, 0];
+        }
+
+        // Format CSV content using memory stream
+        $f = fopen('php://memory', 'r+');
+        foreach ($csvLines as $line) {
+            fputcsv($f, $line);
+        }
+        rewind($f);
+        $csvContent = stream_get_contents($f);
+        fclose($f);
+
+        // Standardized folder in Google Drive: 04_laporan_keuangan/{YYYY_MM}
+        $now = Carbon::now('Asia/Jakarta');
+        $monthFolder = $now->format('Y_m');
+        $dateSlug = $startDate ? str_replace('-', '', $startDate) : $now->format('Ymd');
+        $filename = "rekap_keuangan_{$period}_{$dateSlug}_" . $now->format('His') . ".csv";
+        $fullPath = "04_laporan_keuangan/{$monthFolder}/{$filename}";
+
+        $disk = config('filesystems.default', 'public');
+        // Prepend UTF-8 BOM so Microsoft Excel renders Indonesian accents and currency correctly
+        Storage::disk($disk)->put($fullPath, "\xEF\xBB\xBF" . $csvContent);
+
+        $driveUrl = null;
+        try {
+            $driveUrl = Storage::disk($disk)->url($fullPath);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning("Drive URL generation error: " . $e->getMessage());
+        }
+
+        // Log admin activity
+        try {
+            ActivityLog::create([
+                'user_id' => $request->user() ? $request->user()->id : null,
+                'action' => 'export_recap',
+                'model_type' => Order::class,
+                'model_id' => null,
+                'description' => "Admin {$request->user()->name} mengekspor rekapitulasi keuangan ({$period}) ke Cloud Storage Google Drive: {$filename}",
+            ]);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning("ActivityLog export error: " . $e->getMessage());
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Rekapitulasi keuangan berhasil diekspor dan disimpan ke Google Drive!',
+            'filename' => $filename,
+            'file_path' => $fullPath,
+            'drive_url' => $driveUrl,
+            'period' => $period,
+            'orders_count' => $summary['total_orders'] ?? count($orders),
+        ]);
+    }
+
+    /**
      * Move an order to Recycle Bin (Soft Delete)
      */
     public function destroy(Request $request, $id)
@@ -765,7 +931,19 @@ class AdminOrderController extends Controller
                 $type => count($filtered) > 0 ? $filtered : null,
             ]);
 
-            // Physically delete the file from storage
+            // Physically delete the file from storage (Google Drive and local)
+            $defaultDisk = config('filesystems.default', 'public');
+            try {
+                if ($defaultDisk === 'google') {
+                    if (str_contains($targetPath, 'drive.google.com') && preg_match('/id=([a-zA-Z0-9_-]+)/', $targetPath, $m)) {
+                        Storage::disk('google')->delete($m[1]);
+                    } else {
+                        Storage::disk('google')->delete($targetPath);
+                    }
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning("Drive deletion fallback: " . $e->getMessage());
+            }
             Storage::disk('public')->delete($targetPath);
 
             ActivityLog::create([

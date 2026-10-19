@@ -35,7 +35,8 @@ import {
   Ticket,
   MessageCircle,
   ChevronDown,
-  Package
+  Package,
+  HardDrive
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api, { getStorageUrl } from '../../lib/axios';
@@ -665,6 +666,48 @@ export default function AdminPesanan() {
 
       const res = await api.get(`/admin/orders/recap?${params.toString()}`);
       return res.data;
+    }
+  });
+
+  // Mutation: Ekspor Laporan Rekapitulasi ke Google Drive (04_laporan_keuangan)
+  const exportRecapToDriveMutation = useMutation({
+    mutationFn: async () => {
+      const params = new URLSearchParams();
+      if (selectedCanteenFilter !== 'all') params.append('canteen_id', selectedCanteenFilter);
+      if (selectedCourierFilter !== 'all') params.append('courier_id', selectedCourierFilter);
+      if (currentParams.period) params.append('period', currentParams.period);
+      if (currentParams.start_date) params.append('start_date', currentParams.start_date);
+      if (currentParams.end_date) params.append('end_date', currentParams.end_date);
+
+      const res = await api.post(`/admin/orders/recap/export-drive?${params.toString()}`);
+      return res.data;
+    },
+    onSuccess: (data) => {
+      toast.success(
+        (t) => (
+          <div className="flex flex-col gap-1">
+            <span className="font-bold text-xs">{data.message || 'Rekap tersimpan di Google Drive!'}</span>
+            <span className="text-[10px] text-gray-500 font-mono truncate">{data.filename}</span>
+            {data.drive_url && (
+              <a
+                href={data.drive_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => toast.dismiss(t.id)}
+                className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-400 hover:underline mt-0.5"
+              >
+                <span>Buka di Google Drive</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            )}
+          </div>
+        ),
+        { duration: 8000 }
+      );
+    },
+    onError: (err) => {
+      const msg = err.response?.data?.message || err.message || 'Gagal mengekspor rekapitulasi ke Google Drive';
+      toast.error(msg);
     }
   });
 
@@ -2076,17 +2119,35 @@ export default function AdminPesanan() {
       {activeTab === 'recap' && (
         <div className="space-y-1.5 sm:space-y-2">
           {/* Header Ringkasan Periode Aktif */}
-          <div className="bg-white dark:bg-gray-900 p-1.5 sm:p-2 rounded-none shadow-xs border border-gray-200 dark:border-gray-800 flex flex-wrap items-center justify-between gap-1">
+          <div className="bg-white dark:bg-gray-900 p-1.5 sm:p-2 rounded-none shadow-xs border border-gray-200 dark:border-gray-800 flex flex-wrap items-center justify-between gap-1.5">
             <h2 className="text-xs sm:text-sm font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
-              <FileText className="w-3.5 h-3.5 text-green-600" />
-              Rekapitulasi Penjualan & Keuangan ({getFilterLabel()})
+              <FileText className="w-3.5 h-3.5 text-green-600 shrink-0" />
+              <span className="truncate">Rekapitulasi Penjualan & Keuangan ({getFilterLabel()})</span>
             </h2>
-            <button
-              onClick={() => refetchRecap()}
-              className="flex items-center gap-1 text-[11px] text-green-600 dark:text-green-400 hover:underline font-semibold ml-auto"
-            >
-              <RefreshCw className={`w-3 h-3 ${isFetchingRecap ? 'animate-spin' : ''}`} /> Refresh Rekap
-            </button>
+            <div className="flex items-center gap-1.5 ml-auto">
+              <button
+                type="button"
+                onClick={() => exportRecapToDriveMutation.mutate()}
+                disabled={exportRecapToDriveMutation.isPending || isLoadingRecap}
+                className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white text-[11px] font-bold rounded-none shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
+                title="Ekspor laporan rekap ini langsung ke Google Drive folder 04_laporan_keuangan"
+              >
+                {exportRecapToDriveMutation.isPending ? (
+                  <RefreshCw className="w-3 h-3 animate-spin shrink-0" />
+                ) : (
+                  <HardDrive className="w-3 h-3 shrink-0" />
+                )}
+                <span>{exportRecapToDriveMutation.isPending ? 'Mengekspor...' : 'Ekspor ke Drive'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => refetchRecap()}
+                className="flex items-center gap-1 text-[11px] text-green-600 dark:text-green-400 hover:underline font-semibold"
+              >
+                <RefreshCw className={`w-3 h-3 ${isFetchingRecap ? 'animate-spin' : ''}`} />
+                <span className="hidden sm:inline">Refresh Rekap</span>
+              </button>
+            </div>
           </div>
 
           {isLoadingRecap ? (

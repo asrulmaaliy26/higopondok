@@ -1,5 +1,5 @@
 import React from 'react';
-import { Users, Wallet, TrendingUp, AlertCircle, ArrowRight, ClipboardList, Store, Shield, Ticket, CreditCard } from 'lucide-react';
+import { Users, Wallet, TrendingUp, AlertCircle, ArrowRight, ClipboardList, Store, Shield, Ticket, CreditCard, HardDrive, ExternalLink } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../../lib/axios';
 import { Link } from '@tanstack/react-router';
@@ -68,6 +68,49 @@ export default function AdminDashboard({ user }) {
         </div>
       </div>
 
+      {/* GOOGLE DRIVE CLOUD STORAGE BAR (SUPER ADMIN ONLY) */}
+      {isSuperAdmin && (
+        <div className="bg-white dark:bg-gray-900 rounded-none p-2 sm:p-2.5 border border-emerald-300 dark:border-emerald-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-gradient-to-r from-emerald-50/70 via-green-50/40 to-transparent dark:from-emerald-950/30 dark:via-green-950/20">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-8 h-8 rounded-none bg-emerald-100 dark:bg-emerald-900/40 border border-emerald-300 dark:border-emerald-800 flex items-center justify-center shrink-0 text-emerald-700 dark:text-emerald-400">
+              <HardDrive className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <h4 className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-wider">
+                  Cloud Storage Google Drive
+                </h4>
+                <span className="inline-block px-1.5 py-0.2 text-[9px] font-black uppercase tracking-wider bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                  Folder higo pondok
+                </span>
+              </div>
+              <p className="text-[11px] text-gray-600 dark:text-gray-300 truncate mt-0.5">
+                Arsip online terstruktur: 01_master_toko, 02_katalog_produk, 03_bukti_transaksi, & 04_laporan_keuangan.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <Link
+              to="/dashboard/pesanan"
+              className="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 border border-gray-300 dark:border-gray-700 text-xs font-bold rounded-none shadow-2xs transition-colors shrink-0"
+              title="Buka rekapitulasi penjualan untuk ekspor ke Drive"
+            >
+              <FileText className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
+              <span>Ekspor Rekap</span>
+            </Link>
+            <a
+              href="https://drive.google.com/drive/folders/1ksLwc4S9MohrBTH4YISZOEhR5inWIbcH?usp=sharing"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white text-xs font-bold rounded-none shadow-2xs transition-colors shrink-0 group"
+            >
+              <span>Buka Drive</span>
+              <ExternalLink className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+            </a>
+          </div>
+        </div>
+      )}
+
       {/* AKSES CEPAT ADMIN */}
       <div className="bg-white dark:bg-gray-900 rounded-none p-2 sm:p-2.5 border border-gray-200 dark:border-gray-800 shadow-xs">
         <div className="flex items-center justify-between mb-1.5">
@@ -75,7 +118,7 @@ export default function AdminDashboard({ user }) {
             Akses Cepat Menu Admin
           </h3>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1.5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-1.5">
           <Link
             to={ordersLink}
             className="flex flex-col items-center text-center justify-center p-2 rounded-none bg-green-50/60 hover:bg-green-100/70 dark:bg-green-950/40 dark:hover:bg-green-900/50 transition-all border border-green-200/70 dark:border-green-800/60 shadow-2xs cursor-pointer"
@@ -128,6 +171,22 @@ export default function AdminDashboard({ user }) {
             <span className="text-xs font-bold text-gray-900 dark:text-white leading-tight">Log Aktivitas</span>
             <span className="text-[10px] text-gray-500 dark:text-gray-400 hidden sm:block leading-none mt-0.5">Riwayat Audit Sistem</span>
           </Link>
+
+          {isSuperAdmin && (
+            <a
+              href="https://drive.google.com/drive/folders/1ksLwc4S9MohrBTH4YISZOEhR5inWIbcH?usp=sharing"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex flex-col items-center text-center justify-center p-2 rounded-none bg-emerald-50/70 hover:bg-emerald-100/80 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50 transition-all border border-emerald-300/80 dark:border-emerald-800/70 shadow-2xs cursor-pointer group"
+            >
+              <HardDrive className="w-5 h-5 text-emerald-600 dark:text-emerald-400 mb-1 group-hover:scale-105 transition-transform" />
+              <span className="text-xs font-bold text-gray-900 dark:text-white leading-tight flex items-center gap-1">
+                Google Drive
+                <ExternalLink className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+              </span>
+              <span className="text-[10px] text-gray-500 dark:text-gray-400 hidden sm:block leading-none mt-0.5">Arsip & Bukti Foto</span>
+            </a>
+          )}
 
           <SyncDbButton variant="card" />
         </div>

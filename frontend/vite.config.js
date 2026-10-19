@@ -106,6 +106,20 @@ export default defineConfig(({ command }) => ({
               },
             },
           },
+          {
+            urlPattern: /^https:\/\/(?:drive\.google\.com|drive\.usercontent\.google\.com|lh3\.googleusercontent\.com)\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'google-drive-images-cache',
+              expiration: {
+                maxEntries: 300,
+                maxAgeSeconds: 30 * 24 * 60 * 60, // 30 Days
+              },
+              cacheableResponse: {
+                statuses: [0, 200],
+              },
+            },
+          },
         ],
       },
     })

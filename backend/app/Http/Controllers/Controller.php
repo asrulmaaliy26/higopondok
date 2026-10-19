@@ -37,9 +37,20 @@ abstract class Controller
         }
 
         $rolesStr = preg_replace('/[^a-zA-Z0-9_-]/', '_', $rolesStr);
-        $basePath = $rolesStr . '_' . $userName;
+        $userFolder = $rolesStr . '_' . $userName;
 
-        return $subFolder ? $basePath . '/' . $subFolder : $basePath;
+        // Standarisasi Google Drive:
+        // 01_master_toko: foto toko/canteen, banner kantin, avatar profil
+        // 02_katalog_produk: foto katalog produk makanan & barang
+        if ($subFolder === 'products') {
+            return "02_katalog_produk/{$userFolder}";
+        }
+
+        if (in_array($subFolder, ['canteens', 'banners', 'avatars'])) {
+            return "01_master_toko/{$userFolder}/{$subFolder}";
+        }
+
+        return "01_master_toko/{$userFolder}" . ($subFolder ? "/{$subFolder}" : "");
     }
 
     /**
@@ -53,15 +64,31 @@ abstract class Controller
      * @param string $disk
      * @return string
      */
-    protected function storeOptimizedImage($file, $user, $subFolder = null, $disk = 'public', $dirOverride = null)
+    protected function storeOptimizedImage($file, $user, $subFolder = null, $disk = null, $dirOverride = null)
     {
+        $disk = $disk ?: config('filesystems.default', 'public');
         $dir = $dirOverride ?: $this->getUserUploadPath($user, $subFolder);
         $mime = $file->getMimeType() ?: '';
         $isImage = str_starts_with($mime, 'image/');
+
+        $resolveReturn = function ($storedPath) use ($disk) {
+            if ($disk === 'google') {
+                try {
+                    $url = \Illuminate\Support\Facades\Storage::disk('google')->url($storedPath);
+                    if ($url) {
+                        return $url;
+                    }
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::warning("Google Drive URL generation fallback: " . $e->getMessage());
+                }
+            }
+            return $storedPath;
+        };
         
         // If not an image or GD is not available, store directly
         if (!extension_loaded('gd') || !$isImage) {
-            return $file->store($dir, $disk);
+            $stored = $file->store($dir, $disk);
+            return $resolveReturn($stored);
         }
 
         // High-Concurrency Fast-Path:
@@ -73,7 +100,8 @@ abstract class Controller
                 $ext = 'jpg';
             }
             $filename = \Illuminate\Support\Str::random(40) . '.' . $ext;
-            return $file->storeAs($dir, $filename, $disk);
+            $stored = $file->storeAs($dir, $filename, $disk);
+            return $resolveReturn($stored);
         }
 
         try {
@@ -82,7 +110,8 @@ abstract class Controller
             $srcImg = @imagecreatefromstring($imageContent);
 
             if (!$srcImg) {
-                return $file->store($dir, $disk);
+                $stored = $file->store($dir, $disk);
+                return $resolveReturn($stored);
             }
 
             $origWidth = imagesx($srcImg);
@@ -134,10 +163,11 @@ abstract class Controller
 
             \Illuminate\Support\Facades\Storage::disk($disk)->put($fullPath, $compressedData);
 
-            return $fullPath;
+            return $resolveReturn($fullPath);
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::warning("Image optimization fallback: " . $e->getMessage());
-            return $file->store($dir, $disk);
+            $stored = $file->store($dir, $disk);
+            return $resolveReturn($stored);
         }
     }
 
@@ -190,7 +220,9 @@ abstract class Controller
             default => 'proof',
         };
 
-        return "{$dateFolder}/{$userName}/{$subFolder}";
+        // Standarisasi Google Drive:
+        // 03_bukti_transaksi: bukti bayar santri, bukti kirim kurir, struk belanja kantin
+        return "03_bukti_transaksi/{$dateFolder}/{$userName}/{$subFolder}";
     }
 
     /**
@@ -202,8 +234,9 @@ abstract class Controller
      * @param string $disk
      * @return string
      */
-    protected function storeOrderProofImage($file, $order, $proofType = 'proof', $disk = 'public')
+    protected function storeOrderProofImage($file, $order, $proofType = 'proof', $disk = null)
     {
+        $disk = $disk ?: config('filesystems.default', 'public');
         $dir = $this->getOrderProofUploadPath($order, $proofType);
         return $this->storeOptimizedImage($file, null, null, $disk, $dir);
     }

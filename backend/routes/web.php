@@ -6,6 +6,13 @@ use Illuminate\Support\Facades\Route;
 Route::get('/storage/{path}', function ($path) {
     $filePath = storage_path('app/public/' . $path);
     if (!file_exists($filePath)) {
+        try {
+            if (\Illuminate\Support\Facades\Storage::disk('google')->exists($path)) {
+                return redirect(\Illuminate\Support\Facades\Storage::disk('google')->url($path));
+            }
+        } catch (\Throwable $e) {
+            // fallback to 404
+        }
         abort(404, 'File not found');
     }
     
