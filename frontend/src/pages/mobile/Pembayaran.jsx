@@ -580,30 +580,17 @@ export default function Pembayaran() {
     const detailPenerima = [classInfo, santriRoom].filter(Boolean).join(' | ');
 
     let text = `Assalamu'alaikum Warahmatullahi Wabarakatuh, ${order.canteen?.name || 'Toko'}.\n\n`;
-    text += `Konfirmasi Pesanan *#${order.id}*\n`;
+    text += `Konfirmasi Pesanan *#${order.id}*${order.checkout_id ? ` (Checkout #${order.checkout_id})` : ''}\n\n`;
     text += `Perkenalkan saya:\n`;
     if (isTeacher) {
       text += `👨‍🏫 *Guru / Staff*: ${user?.name || '-'}\n`;
       if (user?.teacher_unit) text += `🏢 Unit: ${user.teacher_unit}\n`;
     } else {
       if (waliName) text += `👤 *Nama Wali*: ${waliName}\n`;
-      text += `🎓 *Nama Santri*: ${santriName}${detailPenerima ? ` (${detailPenerima})` : ''}\n`;
+      text += `🎓 *Nama Santri*: ${santriName}\n`;
+      if (detailPenerima) text += `🏠 Lokasi / Kamar: ${detailPenerima}\n`;
     }
-    text += `\n*Menu Pesanan:*\n`;
-    if (order.is_custom) {
-      text += `• 1x Pesanan Khusus: ${order.custom_notes || 'Titipan'}\n`;
-    } else {
-      order.items?.forEach(item => {
-        const itemSubtotal = parseFloat(item.subtotal || (item.price_per_item * item.quantity));
-        text += `• ${item.quantity}x ${item.product?.name} (Rp ${Math.round(itemSubtotal).toLocaleString('id-ID')})\n`;
-        if (item.notes) {
-          text += `  Catatan: ${item.notes}\n`;
-        }
-      });
-    }
-    const totalOrder = parseFloat(order.total_price) || subtotal;
-    text += `\n*Total Pesanan: Rp ${Math.round(totalOrder).toLocaleString('id-ID')}*\n`;
-    text += `Mohon segera diproses nggih, Syukron Jazakumullah Khairan. 🙏`;
+    text += `\nMohon segera diproses nggih, Syukron Jazakumullah Khairan. 🙏`;
     return text;
   };
 
@@ -646,39 +633,17 @@ export default function Pembayaran() {
     const checkoutCode = ordersList[0].checkout_id ? ` (Checkout #${ordersList[0].checkout_id})` : '';
 
     let text = `Assalamu'alaikum Warahmatullahi Wabarakatuh, ${canteenTitle || 'Kantin'}.\n\n`;
-    text += `Konfirmasi Pesanan *${orderCodes}*${checkoutCode}\n`;
+    text += `Konfirmasi Pesanan *${orderCodes}*${checkoutCode}\n\n`;
     text += `Perkenalkan saya:\n`;
     if (isTeacher) {
       text += `👨‍🏫 *Guru / Staff*: ${user?.name || '-'}\n`;
       if (user?.teacher_unit) text += `🏢 Unit: ${user.teacher_unit}\n`;
     } else {
       if (waliName) text += `👤 *Nama Wali*: ${waliName}\n`;
-      text += `🎓 *Nama Santri*: ${santriName}${detailPenerima ? ` (${detailPenerima})` : ''}\n`;
+      text += `🎓 *Nama Santri*: ${santriName}\n`;
+      if (detailPenerima) text += `🏠 Lokasi / Kamar: ${detailPenerima}\n`;
     }
-    text += `\n`;
-
-    let totalAll = 0;
-    ordersList.forEach((order) => {
-      const storeName = order.canteen?.name || 'Toko';
-      text += `*🏬 ${storeName} (#${order.id}):*\n`;
-      if (order.is_custom) {
-        text += `• 1x Pesanan Khusus: ${order.custom_notes || 'Titipan'}\n`;
-      } else {
-        order.items?.forEach(item => {
-          const itemSubtotal = parseFloat(item.subtotal || (item.price_per_item * item.quantity));
-          text += `• ${item.quantity}x ${item.product?.name} (Rp ${Math.round(itemSubtotal).toLocaleString('id-ID')})\n`;
-          if (item.notes) {
-            text += `  Catatan: ${item.notes}\n`;
-          }
-        });
-      }
-      const totalOrder = parseFloat(order.total_price) || 0;
-      totalAll += totalOrder;
-      text += `Subtotal Toko: Rp ${Math.round(totalOrder).toLocaleString('id-ID')}\n\n`;
-    });
-
-    text += `*Total Semua Pesanan: Rp ${Math.round(totalAll).toLocaleString('id-ID')}*\n`;
-    text += `Mohon segera diproses nggih, Syukron Jazakumullah Khairan. 🙏`;
+    text += `\nMohon segera diproses nggih, Syukron Jazakumullah Khairan. 🙏`;
     return text;
   };
 
