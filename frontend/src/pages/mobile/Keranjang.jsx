@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, Link } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -164,6 +164,16 @@ export default function Keranjang() {
     enabled: !!token
   });
 
+  // Fetch available public/active vouchers for dynamic motivation banner
+  const { data: availableVouchers = [] } = useQuery({
+    queryKey: ['available_vouchers', token],
+    queryFn: async () => {
+      const res = await api.get('/vouchers');
+      return res.data || [];
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+
   const canteenEntries = Object.entries(cart); // [[canteenId, { canteen, items }], ...]
 
   const totalItems = canteenEntries.reduce(
@@ -207,6 +217,106 @@ export default function Keranjang() {
   }
 
   const grandTotal = Math.max(0, rawGrandTotal - voucherDiscount);
+
+  // Dynamic Voucher Nudge & Threshold Calculation (Hanya tampil jika ada voucher riil di database)
+  const voucherNudge = useMemo(() => {
+    if (totalSubtotal <= 0) return null;
+
+    // Kumpulkan semua voucher aktif yang valid (baik dari myVouchers maupun availableVouchers)
+    const combinedVouchers = [];
+    const seenIds = new Set();
+
+    (myVouchers || []).forEach((uv) => {
+      const v = uv.voucher;
+      if (v && v.is_active && !seenIds.has(v.id)) {
+        seenIds.add(v.id);
+        combinedVouchers.push({ ...v, is_claimed: true });
+      }
+    });
+
+    (availableVouchers || []).forEach((v) => {
+      if (v && v.is_active && !v.is_expired && !v.is_used && !seenIds.has(v.id)) {
+        seenIds.add(v.id);
+        combinedVouchers.push(v);
+      }
+    });
+
+    // Filter hanya voucher yang cocok dengan toko di keranjang
+    const validVouchers = combinedVouchers.filter((v) => {
+      if (v.canteen_id && !canteenSummaries.some((c) => c.canteen.id === v.canteen_id)) {
+        return false;
+      }
+      return true;
+    });
+
+    if (validVouchers.length === 0) return null;
+
+    // 1. Cek apakah ada voucher dengan min_purchase yang BELUM tercapai tapi hampir tercapai (>= 50% atau kurang <= 25rb)
+    const pendingWithMin = validVouchers
+      .filter((v) => {
+        const minP = parseFloat(v.min_purchase || 0);
+        return minP > 0 && totalSubtotal < minP;
+      })
+      .sort((a, b) => parseFloat(a.min_purchase) - parseFloat(b.min_purchase));
+
+    if (pendingWithMin.length > 0) {
+      const nextVoucher = pendingWithMin[0];
+      const minP = parseFloat(nextVoucher.min_purchase);
+      const gap = minP - totalSubtotal;
+      const progressPercent = Math.min(100, Math.round((totalSubtotal / minP) * 100));
+
+      if (progressPercent >= 50 || gap <= 25000) {
+        const discAmt = parseFloat(nextVoucher.discount_amount || 0);
+        const discText = nextVoucher.discount_type === 'admin_fee'
+          ? `Diskon Admin Rp ${discAmt.toLocaleString('id-ID')}`
+          : nextVoucher.discount_type === 'delivery_fee'
+          ? `Diskon Ongkir Rp ${discAmt.toLocaleString('id-ID')}`
+          : `Diskon Rp ${discAmt.toLocaleString('id-ID')}`;
+
+        return {
+          type: 'progress',
+          voucher: nextVoucher,
+          gap,
+          minP,
+          progressPercent,
+          discText,
+          title: `Dikit Lagi Dapat ${discText}!`,
+          desc: `Tambah belanja Rp ${gap.toLocaleString('id-ID')} lagi untuk mengaktifkan voucher "${nextVoucher.title || nextVoucher.code}" (Min. Belanja Rp ${minP.toLocaleString('id-ID')}).`
+        };
+      }
+    }
+
+    // 2. Cek apakah ada voucher dengan min_purchase yang SUDAH memenuhi syarat (totalSubtotal >= min_purchase)
+    // dan user belum memilih voucher
+    if (!selectedVoucher) {
+      const qualifiedVouchers = validVouchers
+        .filter((v) => {
+          const minP = parseFloat(v.min_purchase || 0);
+          return minP > 0 && totalSubtotal >= minP;
+        })
+        .sort((a, b) => parseFloat(b.discount_amount || 0) - parseFloat(a.discount_amount || 0));
+
+      if (qualifiedVouchers.length > 0) {
+        const bestVoucher = qualifiedVouchers[0];
+        const discAmt = parseFloat(bestVoucher.discount_amount || 0);
+        const discText = bestVoucher.discount_type === 'admin_fee'
+          ? `potongan biaya admin Rp ${discAmt.toLocaleString('id-ID')}`
+          : bestVoucher.discount_type === 'delivery_fee'
+          ? `potongan ongkir Rp ${discAmt.toLocaleString('id-ID')}`
+          : `potongan belanja Rp ${discAmt.toLocaleString('id-ID')}`;
+
+        return {
+          type: 'qualified',
+          voucher: bestVoucher,
+          discText,
+          title: `🎉 Belanja Memenuhi Syarat Voucher!`,
+          desc: `Kamu berhak menggunakan voucher "${bestVoucher.title || bestVoucher.code}" dengan ${discText}.`
+        };
+      }
+    }
+
+    return null;
+  }, [totalSubtotal, myVouchers, availableVouchers, canteenSummaries, selectedVoucher]);
 
   const finalLocation = deliveryLocation.trim();
 
@@ -667,28 +777,28 @@ export default function Keranjang() {
           </div>
         </div>
 
-        {/* VOUCHER THRESHOLD MOTIVATION BANNER (DI ATAS 40RB / LEBIH DARI 5 ITEM) */}
-        {totalSubtotal < 40000 && totalSubtotal >= 20000 ? (
+        {/* DYNAMIC VOUCHER MOTIVATION BANNER (Hanya Muncul Jika Benar-Benar Ada Voucher di Database) */}
+        {voucherNudge && voucherNudge.type === 'progress' ? (
           <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/80 p-3 rounded-none shadow-xs">
             <div className="flex items-start justify-between gap-2 mb-1.5">
               <div className="flex items-center gap-1.5">
                 <Sparkles className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
                 <h4 className="text-xs font-black text-amber-900 dark:text-amber-200 uppercase tracking-wider">
-                  Dikit Lagi Dapat Diskon Rp 10.000!
+                  {voucherNudge.title}
                 </h4>
               </div>
               <span className="text-[10px] font-mono font-bold text-amber-800 dark:text-amber-300 bg-amber-200/60 dark:bg-amber-900/60 px-1.5 py-0.5 rounded-none">
-                Kurang Rp {(40000 - totalSubtotal).toLocaleString('id-ID')}
+                Kurang Rp {voucherNudge.gap.toLocaleString('id-ID')}
               </span>
             </div>
             <p className="text-[11px] text-amber-800/90 dark:text-amber-300 leading-snug mb-2 font-medium">
-              Tambah belanja Rp {(40000 - totalSubtotal).toLocaleString('id-ID')} lagi untuk mengaktifkan voucher diskon Rp 10.000 (Min. Rp 40.000).
+              {voucherNudge.desc}
             </p>
             {/* Progress bar */}
             <div className="w-full bg-amber-200/60 dark:bg-amber-900/60 h-1.5 rounded-none overflow-hidden mb-2">
               <div 
                 className="bg-amber-500 h-full rounded-none transition-all duration-300"
-                style={{ width: `${Math.min(100, Math.round((totalSubtotal / 40000) * 100))}%` }}
+                style={{ width: `${voucherNudge.progressPercent}%` }}
               />
             </div>
             <div className="flex justify-end">
@@ -701,16 +811,16 @@ export default function Keranjang() {
               </button>
             </div>
           </div>
-        ) : totalSubtotal >= 40000 ? (
+        ) : voucherNudge && voucherNudge.type === 'qualified' ? (
           <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700/80 p-2.5 rounded-none shadow-xs flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 min-w-0">
               <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-              <div>
-                <p className="text-xs font-black text-emerald-950 dark:text-emerald-100 uppercase tracking-wider">
-                  🎉 Belanja Di Atas Rp 40.000!
+              <div className="min-w-0">
+                <p className="text-xs font-black text-emerald-950 dark:text-emerald-100 uppercase tracking-wider truncate">
+                  {voucherNudge.title}
                 </p>
-                <p className="text-[10.5px] text-emerald-700 dark:text-emerald-300">
-                  Kamu berhak menggunakan voucher diskon potongan belanja Rp 10.000.
+                <p className="text-[10.5px] text-emerald-700 dark:text-emerald-300 truncate">
+                  {voucherNudge.desc}
                 </p>
               </div>
             </div>
@@ -723,22 +833,6 @@ export default function Keranjang() {
                 Pilih Voucher
               </button>
             )}
-          </div>
-        ) : totalItems >= 3 && totalItems < 5 ? (
-          <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-300 dark:border-blue-700/80 p-2.5 rounded-none shadow-xs flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5">
-              <Sparkles className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
-              <p className="text-[11px] font-bold text-blue-950 dark:text-blue-100">
-                Pilih {5 - totalItems} menu lagi untuk menikmati promo santri 5+ item!
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => navigate({ to: '/kantin' })}
-              className="px-2 py-0.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] uppercase rounded-none shrink-0"
-            >
-              + Menu
-            </button>
           </div>
         ) : null}
 

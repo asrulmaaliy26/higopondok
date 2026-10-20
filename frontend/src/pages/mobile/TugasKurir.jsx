@@ -370,6 +370,7 @@ export default function TugasKurir() {
 
   // Modals States
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [selectedOrderGroup, setSelectedOrderGroup] = useState([]);
   const [uploadType, setUploadType] = useState('purchase'); // 'purchase' | 'delivery'
   const [photoPreviews, setPhotoPreviews] = useState([]);
   const [photoFiles, setPhotoFiles] = useState([]);
@@ -378,7 +379,7 @@ export default function TugasKurir() {
   const [confirmCancelOrder, setConfirmCancelOrder] = useState(null);
   const [receiptModalConfig, setReceiptModalConfig] = useState({
     isOpen: false,
-    mode: 'single', // 'single' | 'batch'
+    mode: 'single', // 'single' | 'batch' | 'bundle'
     order: null,
     orders: [],
     title: ''
@@ -398,6 +399,16 @@ export default function TugasKurir() {
       order: orderToPrint,
       orders: [],
       title: `Struk Pesanan #ORD-${orderToPrint.id}`
+    });
+  };
+
+  const handlePrintBundleReceipt = (group) => {
+    setReceiptModalConfig({
+      isOpen: true,
+      mode: 'bundle',
+      order: group.primaryOrder,
+      orders: group.orders,
+      title: `Struk Wadah Pengantaran (${group.orders.length} Toko)`
     });
   };
 
@@ -424,6 +435,50 @@ export default function TugasKurir() {
       orders: targetOrders,
       title: `Rekap ${tabLabel} (${targetOrders.length} Pesanan)`
     });
+  };
+
+  const [isFetchingAllStores, setIsFetchingAllStores] = useState(false);
+
+  const handlePrintAllStoresReceipt = async () => {
+    setIsFetchingAllStores(true);
+    const toastId = toast.loading('Mengambil data seluruh toko untuk cetak...');
+    try {
+      const dateParams = currentParams.start_date ? `start_date=${currentParams.start_date}&end_date=${currentParams.end_date}&` : '';
+      const periodParam = currentParams.period ? `period=${currentParams.period}&` : '';
+      let statusParam = '';
+      if (statusTab === 'processing') statusParam = 'scope=processing&';
+      else if (statusTab === 'pending') statusParam = 'scope=pending&';
+      else if (statusTab === 'completed') statusParam = 'scope=completed&';
+
+      const res = await api.get(`/courier/orders?${dateParams}${periodParam}${statusParam}all_stores=1`);
+      const allOrders = res.data?.data || res.data || [];
+      const targetOrders = (Array.isArray(allOrders) ? allOrders : []).filter(o => o.status !== 'cancelled');
+
+      if (targetOrders.length === 0) {
+        toast.error('Tidak ada pesanan aktif pada filter saat ini.', { id: toastId });
+        return;
+      }
+
+      toast.success(`Berhasil memuat ${targetOrders.length} pesanan seluruh toko`, { id: toastId });
+
+      let tabLabel = 'Seluruh Toko';
+      if (statusTab === 'all') tabLabel = 'Semua Toko';
+      else if (statusTab === 'processing') tabLabel = 'Sedang Diantar (Semua Toko)';
+      else if (statusTab === 'pending') tabLabel = 'Menunggu (Semua Toko)';
+      else if (statusTab === 'completed') tabLabel = 'Selesai (Semua Toko)';
+
+      setReceiptModalConfig({
+        isOpen: true,
+        mode: 'batch',
+        order: null,
+        orders: targetOrders,
+        title: `Rekap Pesanan ${tabLabel} (${targetOrders.length} Pesanan)`
+      });
+    } catch (err) {
+      toast.error('Gagal mengambil data pesanan seluruh toko', { id: toastId });
+    } finally {
+      setIsFetchingAllStores(false);
+    }
   };
 
   // Fetch all orders for courier
@@ -460,49 +515,68 @@ export default function TugasKurir() {
     return [];
   }, [rawCanteens]);
 
-  // Take / Claim Order Mutation
+  // Take / Claim Order Mutation (Support Single or Batch Array)
   const takeOrderMutation = useMutation({
-    mutationFn: async (id) => {
-      const res = await api.post(`/courier/orders/${id}/take`);
-      return res.data;
+    mutationFn: async (idOrIds) => {
+      const ids = Array.isArray(idOrIds) ? idOrIds : [idOrIds];
+      let lastRes = null;
+      for (const targetId of ids) {
+        const res = await api.post(`/courier/orders/${targetId}/take`);
+        lastRes = res.data;
+      }
+      return lastRes;
     },
-    onMutate: async (id) => {
-      return await mutateOrderInCaches(queryClient, 'courier_orders', id, (order) => ({
-        ...order,
-        courier_id: currentUser?.id,
-        courier: currentUser || order.courier,
-        status: 'processing'
-      }));
+    onMutate: async (idOrIds) => {
+      const ids = Array.isArray(idOrIds) ? idOrIds : [idOrIds];
+      const contexts = [];
+      for (const targetId of ids) {
+        const ctx = await mutateOrderInCaches(queryClient, 'courier_orders', targetId, (order) => ({
+          ...order,
+          courier_id: currentUser?.id,
+          courier: currentUser || order.courier,
+          status: 'processing'
+        }));
+        contexts.push(ctx);
+      }
+      return contexts;
     },
-    onError: (err, id, context) => {
-      rollbackCaches(queryClient, context);
+    onError: (err, idOrIds, context) => {
+      if (Array.isArray(context)) {
+        context.forEach(ctx => rollbackCaches(queryClient, ctx));
+      } else {
+        rollbackCaches(queryClient, context);
+      }
       toast.error(err.response?.data?.message || 'Gagal mengambil pesanan');
     },
     onSuccess: (data) => {
-      toast.success(data.message || 'Pesanan berhasil diambil!');
+      toast.success(data?.message || 'Pesanan berhasil diambil!');
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['courier_orders'] });
     }
   });
 
-  // Upload Proof (Receipt / Delivery) Mutation
+  // Upload Proof (Receipt / Delivery) Mutation (Support Single or Batch Array)
   const uploadProofMutation = useMutation({
-    mutationFn: async ({ id, files, type }) => {
-      const formData = new FormData();
+    mutationFn: async ({ id, orderIds, files, type }) => {
+      const ids = orderIds && orderIds.length > 0 ? orderIds : [id];
       const fieldName = type === 'delivery' ? 'proof_of_delivery[]' : 'proof_of_purchase[]';
-      const endpoint = type === 'delivery' ? `/courier/orders/${id}/upload-delivery` : `/courier/orders/${id}/upload-receipt`;
+      let lastRes = null;
       
-      files.forEach(file => {
-        formData.append(fieldName, file);
-      });
-      
-      const res = await api.post(endpoint, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
-      });
-      return res.data;
+      for (const targetId of ids) {
+        const formData = new FormData();
+        files.forEach(file => {
+          formData.append(fieldName, file);
+        });
+        const endpoint = type === 'delivery' ? `/courier/orders/${targetId}/upload-delivery` : `/courier/orders/${targetId}/upload-receipt`;
+        const res = await api.post(endpoint, formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        });
+        lastRes = res.data;
+      }
+      return lastRes;
     },
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['courier_orders'] });
@@ -534,20 +608,35 @@ export default function TugasKurir() {
     }
   });
 
-  // Complete Order Mutation
+  // Complete Order Mutation (Support Single or Batch Array)
   const markCompleteMutation = useMutation({
-    mutationFn: async (id) => {
-      const res = await api.post(`/courier/orders/${id}/complete`);
-      return res.data;
+    mutationFn: async (idOrIds) => {
+      const ids = Array.isArray(idOrIds) ? idOrIds : [idOrIds];
+      let lastRes = null;
+      for (const targetId of ids) {
+        const res = await api.post(`/courier/orders/${targetId}/complete`);
+        lastRes = res.data;
+      }
+      return lastRes;
     },
-    onMutate: async (id) => {
-      return await mutateOrderInCaches(queryClient, 'courier_orders', id, (order) => ({
-        ...order,
-        status: 'completed'
-      }));
+    onMutate: async (idOrIds) => {
+      const ids = Array.isArray(idOrIds) ? idOrIds : [idOrIds];
+      const contexts = [];
+      for (const targetId of ids) {
+        const ctx = await mutateOrderInCaches(queryClient, 'courier_orders', targetId, (order) => ({
+          ...order,
+          status: 'completed'
+        }));
+        contexts.push(ctx);
+      }
+      return contexts;
     },
-    onError: (err, id, context) => {
-      rollbackCaches(queryClient, context);
+    onError: (err, idOrIds, context) => {
+      if (Array.isArray(context)) {
+        context.forEach(ctx => rollbackCaches(queryClient, ctx));
+      } else {
+        rollbackCaches(queryClient, context);
+      }
       toast.error('Gagal menyelesaikan pesanan');
     },
     onSuccess: () => {
@@ -662,6 +751,7 @@ export default function TugasKurir() {
 
   const handleCloseModal = () => {
     setSelectedOrder(null);
+    setSelectedOrderGroup([]);
     setPhotoFiles([]);
     setPhotoPreviews([]);
     if (fileInputRef.current) {
@@ -692,7 +782,16 @@ export default function TugasKurir() {
       toast.error('Silakan pilih atau ambil foto terlebih dahulu');
       return;
     }
-    uploadProofMutation.mutate({ id: selectedOrder.id, files: photoFiles, type: uploadType });
+    const orderIds = (selectedOrderGroup && selectedOrderGroup.length > 0)
+      ? selectedOrderGroup.map(o => o.id)
+      : [selectedOrder.id];
+
+    uploadProofMutation.mutate({ 
+      id: selectedOrder.id, 
+      orderIds, 
+      files: photoFiles, 
+      type: uploadType 
+    });
   };
 
   const toggleCanteenExpand = (canteenId) => {
@@ -796,6 +895,44 @@ export default function TugasKurir() {
       return (b.id || 0) - (a.id || 0);
     });
   }, [orders, statusTab, recipientFilter, selectedCanteenFilter, selectedCategoryFilter, searchQuery, currentUser?.id]);
+
+  // Grouping pesanan per kurir (Kurir-Level Grouping / Wadah Pengantaran Kurir)
+  // Pesanan dalam 1 checkout atau 1 santri/asrama di hari yang sama disatukan jadi 1 wadah pengantaran
+  const groupedCourierOrders = useMemo(() => {
+    if (!filteredOrders || filteredOrders.length === 0) return [];
+
+    const map = new Map();
+
+    filteredOrders.forEach(order => {
+      const dateKey = order.created_at ? order.created_at.substring(0, 10) : '';
+      const sName = (order.recipient_santri_name || order.user?.santri_name || order.user?.name || '').trim().toLowerCase();
+      const sRoom = (order.delivery_location || order.recipient_santri_room || order.user?.santri_room || '').trim().toLowerCase();
+
+      // Kunci grouping kurir: checkout_id jika ada, fallback ke user_id + santri + asrama + tanggal
+      const groupKey = order.checkout_id
+        ? `chk_${order.checkout_id}`
+        : (order.user_id && (sName || sRoom))
+          ? `usr_${order.user_id}_${sName}_${sRoom}_${dateKey}`
+          : `ord_${order.id}`;
+
+      if (!map.has(groupKey)) {
+        map.set(groupKey, {
+          groupKey,
+          checkoutId: order.checkout_id || null,
+          orders: []
+        });
+      }
+
+      map.get(groupKey).orders.push(order);
+    });
+
+    return Array.from(map.values()).map(group => {
+      group.orders.sort((a, b) => a.id - b.id);
+      group.primaryOrder = group.orders[0];
+      group.isMultiStore = group.orders.length > 1;
+      return group;
+    });
+  }, [filteredOrders]);
 
   // Recipient Counts for Filter Switcher
   const recipientCounts = useMemo(() => {
@@ -1399,7 +1536,7 @@ export default function TugasKurir() {
               }`}
             >
               <ShoppingBag className="w-3.5 h-3.5" />
-              <span>Daftar Pesanan ({filteredOrders.length})</span>
+              <span>Daftar Pesanan ({groupedCourierOrders.length !== filteredOrders.length ? `${groupedCourierOrders.length} Wadah` : filteredOrders.length})</span>
             </button>
             <button
               onClick={() => setViewMode('canteen')}
@@ -1442,15 +1579,33 @@ export default function TugasKurir() {
               </select>
             </div>
 
-            {/* Tombol Cetak */}
-            <button
-              onClick={handlePrintBatchReceipt}
-              className="py-1 px-2 bg-gray-900 hover:bg-black text-white dark:bg-gray-800 dark:hover:bg-gray-700 rounded-none text-xs font-bold transition-all flex items-center justify-center gap-1 shadow-xs border border-gray-700 h-[26px]"
-              title={`Cetak Rekap Pesanan (${printableOrdersCount} Pesanan)`}
-            >
-              <Printer className="w-3 h-3 text-green-400" />
-              <span>🖨️ Cetak ({printableOrdersCount})</span>
-            </button>
+            {/* Tombol Cetak Kurir & Cetak All (Semua Toko) */}
+            <div className="flex items-center gap-1">
+              <button
+                onClick={handlePrintBatchReceipt}
+                className="flex-1 py-1 px-1 bg-gray-900 hover:bg-black text-white dark:bg-gray-800 dark:hover:bg-gray-700 rounded-none text-[11px] font-bold transition-all flex items-center justify-center gap-1 shadow-xs border border-gray-700 h-[26px] cursor-pointer"
+                title={`Cetak Rekap Pesanan Toko Kurir (${printableOrdersCount} Pesanan)`}
+              >
+                <Printer className="w-3 h-3 text-green-400 shrink-0" />
+                <span className="truncate">Cetak ({printableOrdersCount})</span>
+              </button>
+
+              <button
+                onClick={handlePrintAllStoresReceipt}
+                disabled={isFetchingAllStores}
+                className="flex-1 py-1 px-1 bg-emerald-700 hover:bg-emerald-800 text-white dark:bg-emerald-800 dark:hover:bg-emerald-700 rounded-none text-[11px] font-bold transition-all flex items-center justify-center gap-1 shadow-xs border border-emerald-600 h-[26px] cursor-pointer disabled:opacity-50"
+                title="Cetak Seluruh Pesanan Semua Toko Per Santri (Seperti Admin)"
+              >
+                {isFetchingAllStores ? (
+                  <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent"></div>
+                ) : (
+                  <>
+                    <Printer className="w-3 h-3 text-amber-300 shrink-0" />
+                    <span className="truncate">Cetak All</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
 
           {/* Financial Summary Row */}
@@ -1486,8 +1641,8 @@ export default function TugasKurir() {
             {/* ======================================================== */}
             {viewMode === 'list' && (
           <div>
-            {filteredOrders.length === 0 ? (
-              <div className="bg-white dark:bg-gray-900 rounded-2xl p-8 text-center border border-gray-200 dark:border-gray-700 shadow-xs">
+            {groupedCourierOrders.length === 0 ? (
+              <div className="bg-white dark:bg-gray-900 rounded-none p-8 text-center border border-gray-200 dark:border-gray-700 shadow-xs">
                 <Package className="w-12 h-12 text-gray-300 dark:text-gray-700 mx-auto mb-2" />
                 <p className="text-gray-500 dark:text-gray-400 font-semibold text-sm">Tidak ada pesanan tugas untuk Anda.</p>
                 <p className="text-xs text-gray-400 mt-1">
@@ -1498,7 +1653,390 @@ export default function TugasKurir() {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-2.5">
-                {filteredOrders.map(order => {
+                {groupedCourierOrders.map(group => {
+                  if (group.isMultiStore) {
+                    const primaryOrder = group.primaryOrder;
+                    const isTeacherOrder = checkIsTeacherOrder(primaryOrder);
+                    const isPriority = group.orders.some(o => o.is_priority) || isTeacherOrder;
+                    const isAllCompleted = group.orders.every(o => o.status === 'completed');
+                    const isAnyProcessing = group.orders.some(o => o.status === 'processing');
+                    const isAllPending = group.orders.every(o => o.status === 'pending');
+                    const isAllCancelled = group.orders.every(o => o.status === 'cancelled');
+
+                    const isAllPaid = group.orders.every(o => o.payment_status === 'paid');
+                    const isAnyWaiting = group.orders.some(o => o.payment_status === 'waiting_confirmation');
+
+                    const santriName = primaryOrder.recipient_santri_name || primaryOrder.user?.santri_name || primaryOrder.user?.name || 'Santri';
+                    const waliName = primaryOrder.user?.name || 'Wali';
+                    let santriClass = primaryOrder.recipient_santri_class || primaryOrder.user?.santri_class || '';
+                    let santriLevel = primaryOrder.recipient_santri_level || primaryOrder.user?.santri_level || '';
+                    let santriRoom = primaryOrder.delivery_location || primaryOrder.recipient_santri_room || primaryOrder.user?.santri_room || '';
+
+                    // Fallback match from santri.json
+                    if (!isTeacherOrder && santriName && santriData?.data) {
+                      const sName = santriName.toLowerCase().trim();
+                      const match = santriData.data.find(r => {
+                        if (!r || !r[1]) return false;
+                        const rawName = r[1].toLowerCase().replace(/\s+(laki-laki|perempuan)$/i, '').trim();
+                        return rawName === sName || sName.includes(rawName) || rawName.includes(sName);
+                      });
+                      if (match) {
+                        if (!santriLevel && match[4]) santriLevel = match[4];
+                        const tingkat = match[5] || '';
+                        const rombel = match[6] || '';
+                        const program = match[7] && match[7] !== '-' ? match[7] : '';
+                        const fullClass = [tingkat, rombel, program].filter(Boolean).join(' ');
+                        if (!santriClass || santriClass === tingkat) {
+                          santriClass = fullClass || santriClass;
+                        }
+                        if ((!santriRoom || santriRoom === 'Kamar Santri') && match[10]) {
+                          santriRoom = match[10];
+                        }
+                      }
+                    }
+
+                    const allPurchaseProofs = Array.from(new Set(group.orders.flatMap(o => Array.isArray(o.proof_of_purchase) ? o.proof_of_purchase : (o.proof_of_purchase ? [o.proof_of_purchase] : []))));
+                    const allDeliveryProofs = Array.from(new Set(group.orders.flatMap(o => Array.isArray(o.proof_of_delivery) ? o.proof_of_delivery : (o.proof_of_delivery ? [o.proof_of_delivery] : []))));
+                    const allPaymentProofs = Array.from(new Set(group.orders.flatMap(o => Array.isArray(o.proof_of_payment) ? o.proof_of_payment : (o.proof_of_payment ? [o.proof_of_payment] : []))));
+
+                    const totalGroupModal = group.orders.reduce((sum, o) => sum + getOrderModalBelanja(o), 0);
+                    const totalGroupDeliveryFee = group.orders.reduce((sum, o) => sum + (o.delivery_fee > 0 ? parseFloat(o.delivery_fee) : (o.voucher_id ? 3000 : 0)), 0);
+
+                    const hasUnassigned = group.orders.some(o => !o.courier_id);
+
+                    return (
+                      <div 
+                        key={group.groupKey} 
+                        className={`bg-white dark:bg-gray-900 rounded-none border shadow-sm hover:shadow-md transition-all p-3 sm:p-3.5 flex flex-col justify-between gap-2.5 ${
+                          isTeacherOrder
+                            ? 'border-purple-600 dark:border-purple-500 ring-2 ring-purple-600/30 bg-purple-50/15 dark:bg-purple-950/15'
+                            : isPriority
+                            ? 'border-indigo-500 dark:border-indigo-400 ring-2 ring-indigo-500/30 bg-indigo-50/15 dark:bg-indigo-950/10'
+                            : isAnyProcessing 
+                            ? 'border-green-500 dark:border-green-600 ring-1 ring-green-500/30' 
+                            : isAllPending 
+                            ? 'border-amber-400 dark:border-amber-700 ring-1 ring-amber-500/30' 
+                            : isAllCompleted
+                            ? 'border-green-200 dark:border-green-900/50'
+                            : 'border-green-300/80 dark:border-green-800'
+                        }`}
+                      >
+                        {/* Priority Strip for Teacher Orders */}
+                        {isTeacherOrder ? (
+                          <div className="bg-gradient-to-r from-purple-800 via-indigo-900 to-purple-800 text-white px-2.5 py-1 rounded-none flex items-center justify-between text-[11px] font-black tracking-tight -mx-3 -mt-3 mb-1 shadow-xs border-b border-purple-700">
+                            <span className="flex items-center gap-1.5">
+                              <span>🎓</span>
+                              <span>PESANAN GURU / STAFF</span>
+                              <span className="bg-amber-400 text-purple-950 px-1 py-0.2 rounded-none text-[9px] font-black shadow-2xs">
+                                ⚡ PRIORITAS MEJA
+                              </span>
+                            </span>
+                            <span className="bg-white/20 text-white px-1.5 py-0.2 rounded-none uppercase text-[10px] font-mono font-bold">
+                              UNIT {primaryOrder.user?.teacher_unit || 'YAYASAN'}
+                            </span>
+                          </div>
+                        ) : isPriority ? (
+                          <div className="bg-gradient-to-r from-indigo-700 via-purple-700 to-indigo-800 text-white px-2.5 py-1 rounded-none flex items-center justify-between text-[11px] font-black tracking-tight -mx-3 -mt-3 mb-1 shadow-xs">
+                            <span className="flex items-center gap-1.5">
+                              <span>⚡</span>
+                              <span>PRIORITAS ANTAR LANGSUNG</span>
+                            </span>
+                          </div>
+                        ) : null}
+
+                        {/* 1. CARD HEADER: BUNDLE BADGE, CODE & STATUS */}
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between gap-1.5 border-b border-gray-200 dark:border-gray-700/80 pb-1.5">
+                            <div className="flex items-center gap-1 flex-wrap min-w-0">
+                              <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded-none bg-emerald-100 text-emerald-900 dark:bg-emerald-950/80 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-700 flex items-center gap-1">
+                                <span>📦</span>
+                                <span>PAKET GABUNGAN ({group.orders.length} TOKO)</span>
+                              </span>
+                              <span className="text-[11px] font-bold text-gray-800 dark:text-gray-200 font-mono">
+                                {group.checkoutId ? `#${group.checkoutId}` : group.orders.map(o => `#${o.id}`).join(' ')}
+                              </span>
+                              {renderOrderDateTime(primaryOrder)}
+                            </div>
+
+                            {/* Status Badges */}
+                            <div className="flex items-center gap-1 shrink-0">
+                              {isAllPending && (
+                                <span className="px-1.5 py-0.5 bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 text-[10px] font-bold rounded-none flex items-center gap-0.5">
+                                  <Clock className="w-2.5 h-2.5" /> Menunggu
+                                </span>
+                              )}
+                              {isAnyProcessing && !isAllCompleted && (
+                                <span className="px-1.5 py-0.5 bg-green-50 dark:bg-green-950/60 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800 text-[10px] font-bold rounded-none flex items-center gap-0.5">
+                                  <Truck className="w-2.5 h-2.5" /> Diantar
+                                </span>
+                              )}
+                              {isAllCompleted && (
+                                <span className="px-1.5 py-0.5 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[10px] font-bold rounded-none flex items-center gap-0.5">
+                                  <CheckCircle className="w-2.5 h-2.5" /> Selesai
+                                </span>
+                              )}
+                              {isAllCancelled && (
+                                <span className="px-1.5 py-0.5 bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800 text-[10px] font-bold rounded-none">
+                                  Batal
+                                </span>
+                              )}
+
+                              <span className={`px-1.5 py-0.5 text-[10px] font-bold rounded-none ${
+                                isAllPaid
+                                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300'
+                                  : isAnyWaiting
+                                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300 ring-1 ring-amber-300'
+                                    : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+                              }`}>
+                                {isAllPaid ? 'Lunas' : isAnyWaiting ? 'Verifikasi' : 'COD'}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* 2. SANTRI / TEACHER & ROOM INFO */}
+                          {isTeacherOrder ? (
+                            <div className="text-xs space-y-1 bg-purple-50/60 dark:bg-purple-950/40 p-2 border border-purple-200 dark:border-purple-800 rounded-none">
+                              <div className="flex items-center justify-between gap-1.5">
+                                <span className="font-extrabold text-purple-950 dark:text-purple-100 truncate flex items-center gap-1 text-xs">
+                                  <span className="text-sm">🎓</span>
+                                  <span className="truncate">{primaryOrder.user?.name || 'Guru / Staff'}</span>
+                                </span>
+                                <span className="text-[11px] font-black text-purple-950 dark:text-purple-100 bg-purple-200 dark:bg-purple-900 px-2 py-0.5 rounded-none border border-purple-300 dark:border-purple-700 shrink-0 flex items-center gap-1 shadow-2xs">
+                                  <span>📍</span>
+                                  <span className="font-mono">{santriRoom || `Ruang Guru ${primaryOrder.user?.teacher_unit || ''}`}</span>
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-1.5 flex-wrap text-[11px] pt-0.5">
+                                <span className="font-mono text-purple-900 dark:text-purple-200 font-bold bg-white dark:bg-purple-900/60 px-1.5 py-0.2 border border-purple-300 dark:border-purple-700">
+                                  NIY: {primaryOrder.user?.niy || '-'}
+                                </span>
+                                <span className="inline-flex items-center px-1.5 py-0.2 rounded-none bg-purple-100 dark:bg-purple-900/60 text-purple-800 dark:text-purple-200 border border-purple-300 dark:border-purple-700 text-[10px] font-bold">
+                                  Unit {primaryOrder.user?.teacher_unit || 'Yayasan'}
+                                </span>
+                                {primaryOrder.user?.phone && (
+                                  <a
+                                    href={`https://wa.me/${primaryOrder.user.phone.replace(/^0/, '62')}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="font-mono text-green-700 dark:text-green-400 font-bold hover:underline flex items-center gap-1 bg-green-50 dark:bg-green-950/40 px-1.5 py-0.2 border border-green-200 dark:border-green-800 text-[10px]"
+                                    title="Chat WhatsApp Guru"
+                                  >
+                                    <MessageCircle className="w-3 h-3 text-green-600" />
+                                    <span>+{primaryOrder.user.phone}</span>
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="text-xs space-y-1">
+                              <div className="flex items-center justify-between gap-1.5">
+                                <span className="font-bold text-gray-900 dark:text-white truncate flex items-center gap-1">
+                                  <User className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                                  <span className="truncate">{santriName}</span>
+                                </span>
+                                <span className="text-xs sm:text-sm font-extrabold text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/50 px-2 py-0.5 rounded-none border border-rose-200 dark:border-rose-800 shrink-0 flex items-center gap-1 shadow-2xs">
+                                  <span>📍</span>
+                                  <span className="font-black">{santriRoom || 'Kamar Santri'}</span>
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-1.5 flex-wrap text-[11px] text-gray-500 dark:text-gray-400 pt-0.5">
+                                <span className="truncate">Wali: {waliName}</span>
+                                {(santriLevel || santriClass) && (
+                                  <span className="inline-flex items-center px-1.5 py-0.2 rounded-none bg-green-50 dark:bg-green-950/60 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800 text-[10px] font-bold">
+                                    🎓 {santriLevel ? `${santriLevel} ` : ''}{santriClass ? `Kelas ${santriClass}` : ''}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 3. BREAKDOWN PER TOKO DALAM WADAH PENGANTARAN */}
+                          <div className="space-y-1.5 pt-1">
+                            {group.orders.map(order => (
+                              <div key={order.id} className="bg-gray-50/70 dark:bg-gray-800/40 rounded-none p-2 space-y-1 text-xs border border-gray-200 dark:border-gray-700/80">
+                                {/* Header Toko Kecil */}
+                                <div className="flex items-center justify-between gap-1 text-[11px] pb-1 border-b border-gray-200 dark:border-gray-700">
+                                  <div className="flex items-center gap-1 truncate">
+                                    <span className="font-extrabold text-gray-900 dark:text-gray-100 truncate">
+                                      🏪 {order.canteen?.name || 'Toko'}
+                                    </span>
+                                    {order.canteen?.category && (
+                                      <span className="text-[8.5px] font-black uppercase px-1 py-0.1 bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700">
+                                        {order.canteen.category === 'kota' ? 'Kota' : 'Kauman'}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span className="font-mono text-[10px] text-gray-500 dark:text-gray-400 font-bold">
+                                    #ORD-{order.id}
+                                  </span>
+                                </div>
+
+                                {/* Items per toko */}
+                                {order.custom_notes && (
+                                  <div className="text-[11px] font-medium text-amber-800 dark:text-amber-300 pb-0.5">
+                                    ✨ {order.custom_notes}
+                                  </div>
+                                )}
+                                {order.items && order.items.length > 0 ? (
+                                  order.items.map(item => (
+                                    <div key={item.id} className="flex justify-between items-center text-[11px]">
+                                      <span className="text-gray-800 dark:text-gray-200 truncate pr-2 flex items-center gap-1">
+                                        <strong className="text-gray-900 dark:text-white font-bold">{item.quantity}x</strong> {item.product?.name || 'Produk'}
+                                        {item.notes && <span className="text-gray-400 italic text-[10px]"> ({cleanItemNotes(item.notes)})</span>}
+                                      </span>
+                                      <span className="font-bold text-gray-900 dark:text-white shrink-0 font-mono text-[10px]">
+                                        Rp {formatRupiah(getItemModalTotalHpp(item))}
+                                      </span>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <div className="text-[11px] text-amber-800 dark:text-amber-300">
+                                    • 1x {order.custom_notes || 'Pesanan Khusus / Titip Beli'}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* 4. PROOF CHIPS (AGGREGATED ACROSS STORES) */}
+                          {(allPurchaseProofs.length > 0 || allDeliveryProofs.length > 0 || allPaymentProofs.length > 0) && (
+                            <div className="flex gap-1 flex-wrap pt-0.5">
+                              {allPurchaseProofs.length > 0 && (
+                                <button
+                                  onClick={() => setSelectedProofs(allPurchaseProofs.map(p => getStorageUrl(p)))}
+                                  className="px-1.5 py-0.5 bg-purple-50 hover:bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 rounded-none text-[10px] font-semibold flex items-center gap-1 transition-colors border border-purple-200 dark:border-purple-800"
+                                >
+                                  📄 Struk ({allPurchaseProofs.length})
+                                </button>
+                              )}
+
+                              {allDeliveryProofs.length > 0 && (
+                                <button
+                                  onClick={() => setSelectedProofs(allDeliveryProofs.map(p => getStorageUrl(p)))}
+                                  className="px-1.5 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 rounded-none text-[10px] font-semibold flex items-center gap-1 transition-colors border border-blue-200 dark:border-blue-800"
+                                >
+                                  📷 Antar ({allDeliveryProofs.length})
+                                </button>
+                              )}
+
+                              {allPaymentProofs.length > 0 && (
+                                <button
+                                  onClick={() => setSelectedProofs(allPaymentProofs.map(p => getStorageUrl(p)))}
+                                  className="px-1.5 py-0.5 bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-800 dark:text-gray-300 rounded-none text-[10px] font-semibold flex items-center gap-1 transition-colors border border-gray-200 dark:border-gray-700"
+                                >
+                                  💳 Transfer
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 5. FOOTER: TOTAL MODAL BELANJA & COURIER ACTIONS */}
+                        <div className="pt-1.5 border-t border-gray-200 dark:border-gray-700/80 space-y-1.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <span className="text-sm font-black text-green-700 dark:text-green-400 block leading-tight">
+                                Rp {formatRupiah(totalGroupModal)}
+                              </span>
+                              <span className="text-[10px] text-gray-400 font-medium truncate block">
+                                Modal {group.orders.length} Toko • Ongkir: Rp {formatRupiah(totalGroupDeliveryFee)}
+                              </span>
+                            </div>
+
+                            {/* Mini Actions: Print Bundle Receipt */}
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                onClick={() => handlePrintBundleReceipt(group)}
+                                className="p-1 bg-amber-50 hover:bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800 rounded-none text-xs font-bold transition-colors"
+                                title="Cetak Struk Gabungan Wadah Ini (Hanya Toko Anda)"
+                              >
+                                <Printer className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Courier Operational Action Buttons */}
+                          {!isAllCompleted && !isAllCancelled && (
+                            <div className="space-y-1 pt-0.5">
+                              {hasUnassigned ? (
+                                <button
+                                  onClick={() => takeOrderMutation.mutate(group.orders.map(o => o.id))}
+                                  disabled={takeOrderMutation.isPending}
+                                  className="w-full py-1.5 px-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-none text-xs transition-colors flex items-center justify-center gap-1 shadow-xs disabled:opacity-50"
+                                >
+                                  {takeOrderMutation.isPending ? (
+                                    <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white border-t-transparent"></div>
+                                  ) : (
+                                    <>
+                                      <Truck className="w-3.5 h-3.5" />
+                                      Ambil & Antar Seluruh Pesanan ({group.orders.length} Toko)
+                                    </>
+                                  )}
+                                </button>
+                              ) : (
+                                <>
+                                  <div className="grid grid-cols-2 gap-1">
+                                    <button 
+                                      onClick={() => {
+                                        setSelectedOrder(primaryOrder);
+                                        setSelectedOrderGroup(group.orders);
+                                        setUploadType('purchase');
+                                        setPhotoFiles([]);
+                                        setPhotoPreviews([]);
+                                      }}
+                                      className="py-1.5 px-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-none text-xs transition-colors flex items-center justify-center gap-1 shadow-2xs"
+                                    >
+                                      <Camera className="w-3 h-3" />
+                                      + Struk Toko
+                                    </button>
+
+                                    <button 
+                                      onClick={() => {
+                                        setSelectedOrder(primaryOrder);
+                                        setSelectedOrderGroup(group.orders);
+                                        setUploadType('delivery');
+                                        setPhotoFiles([]);
+                                        setPhotoPreviews([]);
+                                      }}
+                                      className="py-1.5 px-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-none text-xs transition-colors flex items-center justify-center gap-1 shadow-2xs"
+                                    >
+                                      <Upload className="w-3 h-3" />
+                                      + Bukti Antar
+                                    </button>
+                                  </div>
+
+                                  <button 
+                                    onClick={() => setConfirmCompleteOrder({
+                                      ...primaryOrder,
+                                      isBundle: true,
+                                      orderIds: group.orders.map(o => o.id),
+                                      bundleOrders: group.orders
+                                    })}
+                                    disabled={markCompleteMutation.isPending}
+                                    className="w-full py-1.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-none text-xs transition-colors flex items-center justify-center gap-1 shadow-xs disabled:opacity-50"
+                                  >
+                                    {markCompleteMutation.isPending ? (
+                                      <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white border-t-transparent"></div>
+                                    ) : (
+                                      <>
+                                        <CheckCircle className="w-3.5 h-3.5" /> 
+                                        Selesaikan Paket ({group.orders.length} Toko)
+                                      </>
+                                    )}
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  // Single Order Mode
+                  const order = group.primaryOrder;
                   const isProcessing = order.status === 'processing';
                   const isPending = order.status === 'pending';
                   const isCompleted = order.status === 'completed';
@@ -2771,7 +3309,7 @@ export default function TugasKurir() {
           <div className="bg-white dark:bg-gray-900 rounded-none w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 shadow-2xl my-auto border border-gray-300 dark:border-gray-700">
             <div className="flex justify-between items-center p-3 border-b border-gray-200 dark:border-gray-700">
               <h3 className="text-sm font-bold text-gray-900 dark:text-white">
-                Upload Foto Bukti #{selectedOrder.id}
+                Upload Foto Bukti {selectedOrderGroup && selectedOrderGroup.length > 1 ? `Wadah (${selectedOrderGroup.length} Toko)` : `#${selectedOrder.id}`}
               </h3>
               <button onClick={handleCloseModal} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1">
                 <X className="w-5 h-5" />
@@ -2808,6 +3346,12 @@ export default function TugasKurir() {
               <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
                 Upload <span className="font-bold text-gray-900 dark:text-white">{uploadType === 'delivery' ? 'Bukti Serah Terima' : 'Struk Pembelian'}</span> untuk <span className="font-bold text-green-700 dark:text-green-400">{checkIsTeacherOrder(selectedOrder) ? (selectedOrder.user?.name || 'Guru') : (selectedOrder.recipient_santri_name || selectedOrder.user?.santri_name || selectedOrder.user?.name)}</span> ({checkIsTeacherOrder(selectedOrder) ? (selectedOrder.delivery_location || `Ruang Guru ${selectedOrder.user?.teacher_unit || ''}`) : (selectedOrder.recipient_santri_room || selectedOrder.user?.santri_room || 'Asrama')}).
               </p>
+
+              {selectedOrderGroup && selectedOrderGroup.length > 1 && (
+                <div className="bg-emerald-50 dark:bg-emerald-950/40 p-2 rounded-none border border-emerald-300 dark:border-emerald-800 text-[11px] text-emerald-900 dark:text-emerald-200">
+                  📦 <strong>Paket Gabungan ({selectedOrderGroup.length} Toko):</strong> Foto yang diunggah akan otomatis disimpan untuk seluruh pesanan toko dalam wadah ini ({selectedOrderGroup.map(o => o.canteen?.name).filter(Boolean).join(', ')}).
+                </div>
+              )}
 
               {/* CURRENTLY SAVED PHOTOS FOR THIS TYPE */}
               {(() => {
@@ -3093,29 +3637,48 @@ export default function TugasKurir() {
       {confirmCompleteOrder && createPortal(
         <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 overflow-y-auto">
           <div className="bg-white dark:bg-gray-900 rounded-none w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200 shadow-2xl p-4 text-center space-y-2.5 my-auto border border-gray-300 dark:border-gray-700">
-            {!(confirmCompleteOrder.proof_of_purchase?.length > 0 || confirmCompleteOrder.proof_of_delivery?.length > 0) ? (
-              <div className="w-10 h-10 bg-amber-100 dark:bg-amber-900/30 text-amber-600 rounded-none flex items-center justify-center mx-auto border border-amber-300">
-                <AlertCircle className="w-5 h-5" />
-              </div>
-            ) : (
-              <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 text-green-600 rounded-none flex items-center justify-center mx-auto border border-green-300">
-                <CheckCircle className="w-5 h-5" />
-              </div>
-            )}
+            {(() => {
+              const hasProof = confirmCompleteOrder.isBundle
+                ? confirmCompleteOrder.bundleOrders?.some(o => (o.proof_of_purchase?.length > 0 || o.proof_of_delivery?.length > 0))
+                : (confirmCompleteOrder.proof_of_purchase?.length > 0 || confirmCompleteOrder.proof_of_delivery?.length > 0);
+
+              return !hasProof ? (
+                <div className="w-10 h-10 bg-amber-100 dark:bg-amber-900/30 text-amber-600 rounded-none flex items-center justify-center mx-auto border border-amber-300">
+                  <AlertCircle className="w-5 h-5" />
+                </div>
+              ) : (
+                <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 text-green-600 rounded-none flex items-center justify-center mx-auto border border-green-300">
+                  <CheckCircle className="w-5 h-5" />
+                </div>
+              );
+            })()}
             
             <h3 className="text-sm font-bold text-gray-900 dark:text-white">
-              Selesaikan Pesanan #{confirmCompleteOrder.id}?
+              {confirmCompleteOrder.isBundle 
+                ? `Selesaikan Paket Wadah (${confirmCompleteOrder.bundleOrders?.length} Toko)?` 
+                : `Selesaikan Pesanan #${confirmCompleteOrder.id}?`}
             </h3>
             
-            {!(confirmCompleteOrder.proof_of_purchase?.length > 0 || confirmCompleteOrder.proof_of_delivery?.length > 0) ? (
-              <p className="text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 p-2 rounded-none border border-amber-200 dark:border-amber-800 text-left font-medium">
-                ⚠️ <strong>Perhatian:</strong> Anda belum mengunggah foto struk ataupun bukti serah terima santri. Pastikan pesanan benar-benar sudah diserahkan.
-              </p>
-            ) : (
-              <p className="text-xs text-gray-600 dark:text-gray-300">
-                Pesanan atas nama <strong className="text-gray-900 dark:text-white">{confirmCompleteOrder.recipient_santri_name || confirmCompleteOrder.user?.santri_name || confirmCompleteOrder.user?.name}</strong> akan ditandai selesai.
-              </p>
-            )}
+            {(() => {
+              const hasProof = confirmCompleteOrder.isBundle
+                ? confirmCompleteOrder.bundleOrders?.some(o => (o.proof_of_purchase?.length > 0 || o.proof_of_delivery?.length > 0))
+                : (confirmCompleteOrder.proof_of_purchase?.length > 0 || confirmCompleteOrder.proof_of_delivery?.length > 0);
+
+              if (!hasProof) {
+                return (
+                  <p className="text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 p-2 rounded-none border border-amber-200 dark:border-amber-800 text-left font-medium">
+                    ⚠️ <strong>Perhatian:</strong> Anda belum mengunggah foto struk ataupun bukti serah terima santri. Pastikan pesanan benar-benar sudah diserahkan.
+                  </p>
+                );
+              }
+
+              return (
+                <p className="text-xs text-gray-600 dark:text-gray-300">
+                  Pesanan atas nama <strong className="text-gray-900 dark:text-white">{confirmCompleteOrder.recipient_santri_name || confirmCompleteOrder.user?.santri_name || confirmCompleteOrder.user?.name}</strong>
+                  {confirmCompleteOrder.isBundle ? ` (${confirmCompleteOrder.bundleOrders?.map(o => o.canteen?.name).filter(Boolean).join(', ')})` : ''} akan ditandai selesai.
+                </p>
+              );
+            })()}
 
             <div className="flex gap-2 pt-1">
               <button 
@@ -3126,7 +3689,7 @@ export default function TugasKurir() {
               </button>
               <button 
                 onClick={() => {
-                  markCompleteMutation.mutate(confirmCompleteOrder.id);
+                  markCompleteMutation.mutate(confirmCompleteOrder.orderIds || confirmCompleteOrder.id);
                   setConfirmCompleteOrder(null);
                 }}
                 className="flex-1 py-1.5 rounded-none font-bold text-white bg-green-700 hover:bg-green-800 transition-colors text-xs shadow-xs"

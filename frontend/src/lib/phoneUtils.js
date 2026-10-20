@@ -24,57 +24,47 @@ export const getWaUrl = (phone, text = '') => {
 
 /**
  * Standar template pesan salam WhatsApp untuk Santri & Wali saat menghubungi Admin / Toko / Kurir
+ * Format yang dipersyaratkan:
+ * - Salam
+ * - Nama santri, kelas, jenjang, dll
+ * - Nama pengguna
  * @param {Object} options
  * @param {Object} [options.user] - Auth user object (store)
  * @param {string} [options.recipientTitle] - Misal "Admin HiGO Pondok", "Toko Berkah", "Kurir Pondok"
- * @param {string} [options.intentMessage] - Tujuan pesan
- * @param {Object} [options.extraInfo] - { santriName, santriRoom, santriClass, orderId, checkoutId, isTeacher }
- * @returns {string} Text template WhatsApp yang terstruktur rapi
+ * @param {Object} [options.extraInfo] - { santriName, santriRoom, santriClass, santriLevel, isTeacher, userName }
+ * @returns {string} Text template WhatsApp yang terstruktur rapi dan ringkas
  */
 export const buildDefaultGreetingWaText = ({
   user = null,
-  recipientTitle = 'Admin / Toko',
-  intentMessage = 'saya ingin bertanya / konfirmasi.',
+  recipientTitle = 'Admin HiGO Pondok',
   extraInfo = {}
 }) => {
   const isTeacher = user?.is_teacher || extraInfo.isTeacher;
-  const waliName = user?.name || extraInfo.waliName || '';
-  const santriName = extraInfo.santriName || user?.santri_name || '';
-  const room = extraInfo.santriRoom || user?.santri_room || extraInfo.deliveryLocation || '';
+  const userName = user?.name || extraInfo.userName || extraInfo.waliName || 'Pengguna HiGO';
+  const santriName = extraInfo.santriName || user?.santri_name || user?.name || '';
+  const jenjang = extraInfo.santriLevel || user?.santri_level || '';
   const kelas = extraInfo.santriClass || user?.santri_class || '';
+  const kamar = extraInfo.santriRoom || user?.santri_room || extraInfo.deliveryLocation || '';
 
-  let text = `Assalamu'alaikum Warahmatullahi Wabarakatuh, ${recipientTitle}.\n\n`;
-  text += `Perkenalkan saya:\n`;
+  const titlePart = recipientTitle ? `, ${recipientTitle}` : '';
+  let text = `Assalamu'alaikum Warahmatullahi Wabarakatuh${titlePart}.\n\n`;
 
   if (isTeacher) {
-    text += `👨‍🏫 *Guru / Staff*: ${user?.name || '-'}\n`;
-    if (user?.teacher_unit) text += `🏢 Unit / Tugas: ${user.teacher_unit}\n`;
+    const unit = user?.teacher_unit || extraInfo.teacherUnit;
+    text += `Guru / Staff: ${userName}${unit ? ` (Unit: ${unit})` : ''}\n`;
+    text += `Nama Pengguna: ${userName}`;
   } else {
-    if (waliName) {
-      text += `👤 *Nama Wali*: ${waliName}\n`;
-    }
-    if (santriName) {
-      text += `🎓 *Nama Santri*: ${santriName}\n`;
-    }
-    const locInfo = [kelas, room].filter(Boolean).join(' | ');
-    if (locInfo) {
-      text += `🏠 *Kamar / Kelas*: ${locInfo}\n`;
-    }
-  }
+    const details = [];
+    if (kelas) details.push(`Kelas: ${kelas}`);
+    if (jenjang) details.push(`Jenjang: ${jenjang}`);
+    if (kamar) details.push(`Kamar: ${kamar}`);
 
-  if (extraInfo.orderId) {
-    text += `📦 *No. Pesanan*: #${extraInfo.orderId}\n`;
+    const detailStr = details.length > 0 ? ` (${details.join(', ')})` : '';
+    text += `Nama Santri: ${santriName || userName}${detailStr}\n`;
+    text += `Nama Pengguna: ${userName}`;
   }
-  if (extraInfo.checkoutId) {
-    text += `🛒 *ID Checkout*: #${extraInfo.checkoutId}\n`;
-  }
-
-  if (intentMessage) {
-    text += `\nMaksud saya: ${intentMessage}\n\n`;
-  }
-
-  text += `Terima kasih, Syukron Jazakumullah Khairan. 🙏`;
 
   return text;
 };
+
 

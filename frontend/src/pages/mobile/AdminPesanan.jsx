@@ -1455,17 +1455,49 @@ export default function AdminPesanan() {
                     : 'Struk transfer valid dan sesuai dengan total tagihan pesanan.'
                 );
 
-                let issueWa = '';
-                if (isShortage) {
-                  issueWa = `pada bukti transfer yang diunggah terbaca nominal *Rp ${detectedAmount.toLocaleString('id-ID')}*, sedangkan total tagihan pesanan *Rp ${grandTotal.toLocaleString('id-ID')}* (Terdapat kekurangan pembayaran sebesar *Rp ${shortageAmount.toLocaleString('id-ID')}*).`;
-                } else if (!transDate) {
-                  issueWa = `tanggal transaksi pada foto bukti transfer tidak terbaca / tidak tertera jelas.`;
+                const santriDetails = [];
+                if (santriClass) santriDetails.push(`Kelas: ${santriClass}`);
+                if (santriLevel) santriDetails.push(`Jenjang: ${santriLevel}`);
+                if (santriRoom && santriRoom !== '-') santriDetails.push(`Kamar: ${santriRoom}`);
+                const santriDetailStr = santriDetails.length > 0 ? ` (${santriDetails.join(', ')})` : '';
+
+                const santriLine = isTeacherOrder
+                  ? `Guru / Staff: ${group.user?.name || santriName}${group.user?.teacher_unit ? ` (Unit: ${group.user.teacher_unit})` : ''}`
+                  : `Nama Santri: ${santriName}${santriDetailStr}`;
+
+                let itemsText = '';
+                if (group.orders.length > 1) {
+                  const storeBlocks = group.orders.map(o => {
+                    const storeName = o.canteen?.name || `Kantin #${o.canteen_id}`;
+                    const items = (o.items && o.items.length > 0)
+                      ? o.items.map(item => {
+                          const cleanNote = item.notes ? cleanItemNotes(item.notes) : '';
+                          const noteStr = cleanNote ? ` (${cleanNote})` : '';
+                          return `- ${item.quantity}x ${item.product?.name || 'Produk'}${noteStr}`;
+                        })
+                      : (o.custom_notes ? [`- ${o.custom_notes}`] : []);
+                    return `*${storeName}:*\n${items.join('\n')}`;
+                  }).filter(block => block.trim());
+
+                  if (storeBlocks.length > 0) {
+                    itemsText = `\n\nPesanan:\n${storeBlocks.join('\n\n')}`;
+                  }
                 } else {
-                  issueWa = `catatan bukti: ${aiNoteText}`;
+                  const first = group.orders[0];
+                  const singleItems = (first?.items && first.items.length > 0)
+                    ? first.items.map(item => {
+                        const cleanNote = item.notes ? cleanItemNotes(item.notes) : '';
+                        const noteStr = cleanNote ? ` (${cleanNote})` : '';
+                        return `- ${item.quantity}x ${item.product?.name || 'Produk'}${noteStr}`;
+                      })
+                    : (first?.custom_notes ? [`- ${first.custom_notes}`] : []);
+
+                  if (singleItems.length > 0) {
+                    itemsText = `\n\nPesanan:\n${singleItems.join('\n')}`;
+                  }
                 }
 
-                const waOrderCode = group.checkoutId ? `No. Checkout: *${group.checkoutId}*` : `No. Pesanan: *#${firstOrder.id}*`;
-                const waMessage = `Assalamu'alaikum wr. wb.\n\nHalo Bapak/Ibu ${waliName || 'Wali Santri'},\nKami dari pengelola *Higo Pondok* mengonfirmasi pesanan santri an. *${santriName}* (${santriRoom || '-'}), ${waOrderCode}.\n\nKeterangan bukti pembayaran: ${issueWa}\n\nMohon konfirmasi atau pelunasannya nggih Bapak/Ibu. Terima kasih.`;
+                const waMessage = `Assalamu'alaikum Warahmatullahi Wabarakatuh.\n\n${santriLine}${itemsText}`;
 
                 return (
                   <div

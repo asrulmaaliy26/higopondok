@@ -743,6 +743,24 @@ export default function PesanAiChat() {
     const text = (textToSend || inputMessage).trim();
     if (!text || chatMutation.isPending) return;
 
+    // Jika santri memilih quick reply "Chat WhatsApp Admin", buka link WhatsApp admin langsung
+    if (text === 'Chat WhatsApp Admin') {
+      const adminContact = messages.slice().reverse().find((m) => m.support_contact?.admin)?.support_contact?.admin || supportResponse?.data?.admin;
+      const targetPhone = adminContact?.phone || '081234567890';
+      const waLink = getWaUrl(
+        targetPhone,
+        buildDefaultGreetingWaText({
+          user,
+          recipientTitle: 'Admin HiGO Pondok',
+        })
+      ) || adminContact?.wa_url;
+
+      if (waLink) {
+        window.open(waLink, '_blank');
+        return;
+      }
+    }
+
     // Kumpulkan riwayat 8 pesan terakhir agar AI paham konteks revisi & tanya jawab
     const recentHistory = messages.slice(-8).map((m) => ({
       sender: m.sender,
@@ -936,7 +954,6 @@ export default function PesanAiChat() {
                             buildDefaultGreetingWaText({
                               user,
                               recipientTitle: 'Admin HiGO Pondok',
-                              intentMessage: 'saya butuh bantuan / tanya terkait kendala aplikasi dan layanan santri.'
                             })
                           ) || msg.support_contact.admin.wa_url}
                           target="_blank"
@@ -1587,7 +1604,6 @@ export default function PesanAiChat() {
                     buildDefaultGreetingWaText({
                       user,
                       recipientTitle: 'Admin HiGO Pondok',
-                      intentMessage: 'saya butuh bantuan / tanya terkait aplikasi dan layanan santri.'
                     })
                   ) || supportData?.admin?.wa_url || '#'}
                   target="_blank"

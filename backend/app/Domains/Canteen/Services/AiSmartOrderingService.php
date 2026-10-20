@@ -141,11 +141,32 @@ class AiSmartOrderingService
             $result = $this->ruleBasedMatcher($normalizedMessage, $products, $userLocation, $history, $user);
         }
 
-        // Jika terdeteksi intent bantuan/CS, pastikan support_contact selalu terisi
+        // Cek apakah ada hal yang tidak diketahui AI atau santri butuh bantuan admin:
+        // 1) Ada flag is_unknown_query dari AI
+        // 2) Tidak ada menu yang cocok (order belum ready, canteens kosong) dan balasan mengandung indikasi ketidaktahuan/ketiadaan menu
+        $replyLower = strtolower($result['reply_text'] ?? '');
+        $isUnknown = !empty($result['is_unknown_query'])
+            || (!$result['is_order_ready'] && empty($result['canteens']) && (
+                str_contains($replyLower, 'belum mengetahui')
+                || str_contains($replyLower, 'belum menemukan')
+                || str_contains($replyLower, 'tidak menemukan')
+                || str_contains($replyLower, 'tidak tahu')
+                || str_contains($replyLower, 'hubungi admin')
+            ));
+
         $isHelp = preg_match('/(?:bantuan|tolong\s*(?:bantu|admin)|hubungi\s*(?:admin|toko|kantin|cs|pengelola)|kontak\s*(?:admin|toko|kantin)|chat\s*(?:langsung\s*)?(?:admin|toko|kantin|cs)|komplain|kendala|masalah|wa\s*(?:admin|toko|kantin)|nomor\s*(?:admin|toko|kantin|wa)|customer\s*service|tanya\s*admin|bicara\s*dengan\s*admin)/i', $normalizedMessage);
-        if ($isHelp && empty($result['support_contact'])) {
+
+        if (($isHelp || $isUnknown) && empty($result['support_contact'])) {
             $result['support_contact'] = $this->getSupportContacts(null, null, $user);
             $result['is_help_intent'] = true;
+        }
+
+        if ($isUnknown || $isHelp) {
+            $quick = $result['quick_replies'] ?? [];
+            if (!in_array('Chat WhatsApp Admin', $quick)) {
+                array_unshift($quick, 'Chat WhatsApp Admin');
+            }
+            $result['quick_replies'] = array_values(array_unique($quick));
         }
 
         return $result;
@@ -337,41 +358,42 @@ class AiSmartOrderingService
 
     /**
      * Standar format salam pembuka WhatsApp untuk Santri & Wali
+     * Format yang dipersyaratkan:
+     * - Salam
+     * - Nama santri, kelas, jenjang, dll
+     * - Nama pengguna
      */
-    public static function buildUserGreetingText(?User $user, string $recipientTitle, string $intent): string
+    public static function buildUserGreetingText(?User $user, string $recipientTitle = 'Admin HiGO Pondok', ?string $intent = null): string
     {
-        $text = "Assalamu'alaikum Warahmatullahi Wabarakatuh, {$recipientTitle}.\n\n";
-        $text .= "Perkenalkan saya:\n";
+        $titlePart = $recipientTitle ? ", {$recipientTitle}" : '';
+        $text = "Assalamu'alaikum Warahmatullahi Wabarakatuh{$titlePart}.\n\n";
 
         if ($user) {
+            $userName = $user->name ?: 'Pengguna HiGO';
             if ($user->is_teacher) {
-                $text .= "👨‍🏫 *Guru / Staff*: {$user->name}\n";
-                if ($user->teacher_unit) {
-                    $text .= "🏢 Unit: {$user->teacher_unit}\n";
-                }
+                $unit = $user->teacher_unit ? " (Unit: {$user->teacher_unit})" : '';
+                $text .= "Guru / Staff: {$userName}{$unit}\n";
+                $text .= "Nama Pengguna: {$userName}";
             } else {
-                $waliName = $user->name;
                 $santriName = $user->santri_name ?: $user->name;
-                $room = $user->santri_room;
-                $class = $user->santri_class;
+                $details = [];
+                if ($user->santri_class) {
+                    $details[] = "Kelas: {$user->santri_class}";
+                }
+                if ($user->santri_level) {
+                    $details[] = "Jenjang: {$user->santri_level}";
+                }
+                if ($user->santri_room) {
+                    $details[] = "Kamar: {$user->santri_room}";
+                }
 
-                if ($waliName) {
-                    $text .= "👤 *Nama Wali*: {$waliName}\n";
-                }
-                if ($santriName) {
-                    $text .= "🎓 *Nama Santri*: {$santriName}\n";
-                }
-                $locInfo = implode(' | ', array_filter([$class, $room]));
-                if ($locInfo) {
-                    $text .= "🏠 *Kamar / Kelas*: {$locInfo}\n";
-                }
+                $detailStr = !empty($details) ? ' (' . implode(', ', $details) . ')' : '';
+                $text .= "Nama Santri: {$santriName}{$detailStr}\n";
+                $text .= "Nama Pengguna: {$userName}";
             }
         } else {
-            $text .= "👤 *Pengguna HiGO Pondok*\n";
+            $text .= "Nama Pengguna: Pengguna HiGO";
         }
-
-        $text .= "\nMaksud saya: {$intent}\n\n";
-        $text .= "Terima kasih, Syukron Jazakumullah Khairan. 🙏";
 
         return $text;
     }
@@ -389,7 +411,7 @@ class AiSmartOrderingService
 
         $adminPhone = $admin?->phone ?: '081234567890';
         $adminName = $admin?->name ?: 'Admin Pusat HiGO';
-        $adminMsg = self::buildUserGreetingText($user, "Admin HiGO Pondok", "saya butuh bantuan / tanya terkait aplikasi dan layanan santri.");
+        $adminMsg = self::buildUserGreetingText($user, "Admin HiGO Pondok");
         $adminWa = self::createWaUrl($adminPhone, $adminMsg);
 
         // 2. Ambil Toko Spesifik (jika ada) atau toko buka pertama
@@ -410,7 +432,7 @@ class AiSmartOrderingService
         $canteenData = null;
         if ($canteen) {
             $cPhone = $canteen->whatsapp_number ?: ($canteen->user?->phone ?: $adminPhone);
-            $cMsg = self::buildUserGreetingText($user, "Admin Toko {$canteen->name}", "saya ingin bertanya terkait menu / pesanan di HiGO Pondok.");
+            $cMsg = self::buildUserGreetingText($user, "Admin Toko {$canteen->name}");
             $canteenData = [
                 'id' => $canteen->id,
                 'name' => $canteen->name,
@@ -426,7 +448,7 @@ class AiSmartOrderingService
             ->get()
             ->map(function ($c) use ($adminPhone, $user) {
                 $cPhone = $c->whatsapp_number ?: ($c->user?->phone ?: $adminPhone);
-                $msg = AiSmartOrderingService::buildUserGreetingText($user, "Toko {$c->name}", "saya ingin bertanya terkait menu / pesanan di HiGO Pondok.");
+                $msg = AiSmartOrderingService::buildUserGreetingText($user, "Toko {$c->name}");
                 return [
                     'id' => $c->id,
                     'name' => $c->name,
@@ -540,10 +562,19 @@ class AiSmartOrderingService
             . "   - Berikan tanggapan ramah bahwa tim pengelola dan toko siap membantu via WhatsApp langsung.\n"
             . "   - Wajib set is_order_ready: false.\n"
             . "   - Sertakan quick_replies: ['Chat WhatsApp Admin', 'Chat WhatsApp Toko', 'Mau pesan makanan'].\n\n"
+            . "8. JIKA ADA YANG TIDAK KAMU KETAHUI / MENU ATAU PERTANYAAN DI LUAR KATALOG PONDOK:\n"
+            . "   - Jika santri/pengguna bertanya sesuatu yang tidak ada di katalog, pertanyaan di luar sistem pemesanan kantin, atau hal apa pun yang tidak kamu ketahui:\n"
+            . "   - JANGAN mengarang jawaban atau menu yang tidak ada!\n"
+            . "   - Berikan jawaban yang santun dan ramah bahwa kamu belum mengetahui informasi tersebut / menu belum tersedia di sistem kantin saat ini.\n"
+            . "   - Arahkan pengguna untuk langsung menghubungi Chat WhatsApp Admin HiGO Pondok melalui tombol di bawah.\n"
+            . "   - Wajib set is_order_ready: false.\n"
+            . "   - Wajib set is_unknown_query: true.\n"
+            . "   - Wajib sertakan quick_replies: ['Chat WhatsApp Admin', 'Mau pesan makanan', 'Ada menu apa aja?'].\n\n"
             . "Format output JSON wajib:\n"
             . "{\n"
             . "  \"reply_text\": \"Teks balasan ramah & interaktif untuk santri...\",\n"
             . "  \"is_order_ready\": false / true,\n"
+            . "  \"is_unknown_query\": false / true,\n"
             . "  \"is_custom\": false / true,\n"
             . "  \"delivery_location\": \"...\",\n"
             . "  \"recipient_name\": null / \"Nama Santri Lain\",\n"
@@ -1167,16 +1198,18 @@ class AiSmartOrderingService
             ];
         }
 
-        // E. Jika tidak ada kata yang cocok sama sekali
+        // E. Jika tidak ada kata yang cocok sama sekali / tidak diketahui AI
         return [
-            'reply_text' => "Maaf kak, saya belum menemukan menu \"{$message}\" di katalog kantin pondok saat ini. 😅\n\nMenu favorit yang tersedia antara lain:\n• Aneka **Bakso** (Bakso Mercon, Bakso Sapi Halus, Bakso Urat, dll)\n• **Mie Gacoan** (Tersedia Lv 0 s/d 8)\n• **Nasi Ayam & Nasi Goreng**\n• Aneka Minuman Segar & Camilan\n\nJika ingin membeli barang di luar pondok, Kakak bisa ketik: *\"Titip beli [nama barang] di toko luar\"*.",
+            'reply_text' => "Maaf kak, saya belum mengetahui informasi atau menemukan menu \"{$message}\" di katalog kantin pondok saat ini. 😅\n\nUntuk pertanyaan lebih lanjut atau kendala, Kakak bisa langsung menghubungi Chat Admin HiGO Pondok melalui tombol di bawah ya kak!\n\nMenu populer yang tersedia di kantin antara lain:\n• Aneka **Bakso** (Bakso Mercon, Bakso Sapi Halus, Bakso Urat)\n• **Mie Gacoan** (Tersedia Lv 0 s/d 8)\n• **Nasi Ayam & Nasi Goreng**\n• Aneka Minuman Segar & Camilan",
             'is_order_ready' => false,
+            'is_unknown_query' => true,
             'recipient_name' => null,
             'recipient_room' => $loc,
+            'support_contact' => $this->getSupportContacts(null, null, $user),
             'quick_replies' => [
+                "Chat WhatsApp Admin",
                 "Ada menu bakso apa aja?",
                 "Mau pesan mie apa ada?",
-                "Pesan Bakso Mercon 1 porsi",
                 "Pesan 2 Mie Gacoan Lv 1",
                 "Titip beli obat di apotek"
             ],
@@ -1338,6 +1371,7 @@ class AiSmartOrderingService
         return [
             'reply_text' => $aiData['reply_text'] ?? 'Pesanan berhasil disiapkan!',
             'is_order_ready' => $isReady,
+            'is_unknown_query' => !empty($aiData['is_unknown_query']) || !empty($aiData['need_admin_support']),
             'is_custom' => !empty($aiData['is_custom']),
             'delivery_location' => $deliveryLocation,
             'recipient_name' => $recipientName,

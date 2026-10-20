@@ -59,17 +59,16 @@ class ProcessPaymentProofAiJob implements ShouldQueue
             // Jalankan verifikasi AI Gemini terhadap bukti pembayaran
             $aiResult = $scanner->verifyAndApplyPayment($orders, $this->uploadedPaths);
 
-            // Jika AI berhasil memvalidasi dan pesanan lunas, otomatis sinkronkan ke Google Drive
-            if (!empty($aiResult) && ($aiResult['verified'] ?? false)) {
-                try {
-                    $controller = app(Controller::class);
-                    $firstOrder = $orders->first();
-                    if ($firstOrder) {
-                        $controller->syncProofToGoogleDrive($firstOrder, 'proof_of_payment');
-                    }
-                } catch (\Throwable $driveError) {
-                    Log::warning("[ProcessPaymentProofAiJob] Gagal sinkronisasi Google Drive: " . $driveError->getMessage());
+            // Selalu sinkronkan berkas bukti pembayaran ke Google Drive setelah selesai diperiksa AI
+            // (baik lolos, kurang bayar, maupun ditolak) agar seluruh berkas terpusat di Google Drive
+            try {
+                $controller = app(Controller::class);
+                $firstOrder = $orders->first();
+                if ($firstOrder) {
+                    $controller->syncProofToGoogleDrive($firstOrder, 'proof_of_payment');
                 }
+            } catch (\Throwable $driveError) {
+                Log::warning("[ProcessPaymentProofAiJob] Gagal sinkronisasi Google Drive: " . $driveError->getMessage());
             }
 
             // Catat log aktivitas sistem

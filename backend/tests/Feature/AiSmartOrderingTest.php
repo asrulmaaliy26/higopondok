@@ -7,12 +7,12 @@ use App\Domains\Auth\User;
 use App\Domains\Canteen\Canteen;
 use App\Domains\Canteen\Product;
 use App\Domains\Canteen\Order;
-use Illuminate\Foundation\Testing\DatabaseTransactions;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Role;
 
 class AiSmartOrderingTest extends TestCase
 {
-    use DatabaseTransactions;
+    use RefreshDatabase;
 
     protected $user;
     protected $canteen;

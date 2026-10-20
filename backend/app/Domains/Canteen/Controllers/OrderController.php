@@ -1063,6 +1063,7 @@ class OrderController extends Controller
         $canteenId = $request->query('canteen_id');
         $startDate = $request->query('start_date');
         $endDate = $request->query('end_date');
+        $allStores = $request->boolean('all_stores') || $request->query('all_stores') === '1';
 
         // Hanya muat relasi yang benar-benar dipakai di UI kurir
         $query = Order::with(['canteen:id,name,category,whatsapp_number', 'user:id,name,santri_name,santri_room,santri_class,santri_level,phone,niy,teacher_unit,is_teacher', 'items.product:id,name,price,hpp,category,image', 'courier:id,name,phone'])
@@ -1076,7 +1077,7 @@ class OrderController extends Controller
             ->orderBy('is_priority', 'desc')
             ->orderBy('created_at', 'desc');
 
-        if (!$user->hasRole('admin') && !$user->hasRole('super_admin')) {
+        if (!$allStores && !$user->hasRole('admin') && !$user->hasRole('super_admin')) {
             $assignedCanteenIds = $user->assignedCanteens()->pluck('canteens.id')->toArray();
 
             $query->where(function ($q) use ($courierId, $assignedCanteenIds) {
@@ -1094,9 +1095,11 @@ class OrderController extends Controller
         }
 
         if ($scope === 'assigned') {
-            $query->where('courier_id', $courierId);
+            if (!$allStores) {
+                $query->where('courier_id', $courierId);
+            }
         } elseif ($scope === 'pending') {
-            if (!$user->hasRole('admin') && !$user->hasRole('super_admin')) {
+            if (!$allStores && !$user->hasRole('admin') && !$user->hasRole('super_admin')) {
                 return response()->json([]);
             }
             $query->where('status', 'pending');
@@ -1143,8 +1146,9 @@ class OrderController extends Controller
             });
         }
 
-        // Batasi maksimal 200 pesanan agar tidak overload (cukup untuk 1 hari operasi)
-        $orders = $query->limit(200)->get();
+        // Batasi maksimal 500 jika allStores, atau 200 pesanan reguler
+        $limit = $allStores ? 500 : 200;
+        $orders = $query->limit($limit)->get();
             
         return response()->json($orders);
     }

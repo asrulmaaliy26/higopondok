@@ -90,19 +90,19 @@ class WhatsAppDefaultGreetingTest extends TestCase
         $adminWaUrl = urldecode($data['admin']['wa_url']);
         $canteenWaUrl = urldecode($data['canteen']['wa_url']);
 
-        // Verifikasi link Admin mengandung Salam, Nama Wali, Nama Santri, dan Kamar/Kelas
+        // Verifikasi link Admin mengandung Salam, Nama Santri, dan Nama Pengguna
         $this->assertStringContainsString("Assalamu'alaikum Warahmatullahi Wabarakatuh", $adminWaUrl);
         $this->assertStringContainsString("Admin HiGO Pondok", $adminWaUrl);
-        $this->assertStringContainsString("*Nama Wali*: Bapak Suhartono", $adminWaUrl);
-        $this->assertStringContainsString("*Nama Santri*: Ahmad Al-Farizi", $adminWaUrl);
-        $this->assertStringContainsString("Abu Bakar 02", $adminWaUrl);
+        $this->assertStringContainsString("Nama Santri: Ahmad Al-Farizi", $adminWaUrl);
+        $this->assertStringContainsString("Kelas: 10 IPA", $adminWaUrl);
+        $this->assertStringContainsString("Kamar: Abu Bakar 02", $adminWaUrl);
+        $this->assertStringContainsString("Nama Pengguna: Bapak Suhartono", $adminWaUrl);
 
-        // Verifikasi link Toko mengandung Salam, Nama Toko, Nama Wali, dan Nama Santri
+        // Verifikasi link Toko mengandung Salam, Nama Toko, Nama Santri, dan Nama Pengguna
         $this->assertStringContainsString("Assalamu'alaikum Warahmatullahi Wabarakatuh", $canteenWaUrl);
-        $this->assertStringContainsString("Toko Berkah Al-Mannan", $canteenWaUrl);
-        $this->assertStringContainsString("*Nama Wali*: Bapak Suhartono", $canteenWaUrl);
-        $this->assertStringContainsString("*Nama Santri*: Ahmad Al-Farizi", $canteenWaUrl);
-        $this->assertStringContainsString("Abu Bakar 02", $canteenWaUrl);
+        $this->assertStringContainsString("Admin Toko Toko Berkah Al-Mannan", $canteenWaUrl);
+        $this->assertStringContainsString("Nama Santri: Ahmad Al-Farizi", $canteenWaUrl);
+        $this->assertStringContainsString("Nama Pengguna: Bapak Suhartono", $canteenWaUrl);
     }
 
     public function test_guru_chat_admin_dan_toko_selalu_memuat_identitas_guru(): void
@@ -117,26 +117,23 @@ class WhatsAppDefaultGreetingTest extends TestCase
         $canteenWaUrl = urldecode($data['canteen']['wa_url']);
 
         // Verifikasi format akun Guru / Staff
-        $this->assertStringContainsString("*Guru / Staff*: Ustadz Abdullah S.Pd", $adminWaUrl);
-        $this->assertStringContainsString("Unit Madrasah Aliyah", $adminWaUrl);
+        $this->assertStringContainsString("Guru / Staff: Ustadz Abdullah S.Pd", $adminWaUrl);
+        $this->assertStringContainsString("Unit: Unit Madrasah Aliyah", $adminWaUrl);
+        $this->assertStringContainsString("Nama Pengguna: Ustadz Abdullah S.Pd", $adminWaUrl);
 
-        $this->assertStringContainsString("*Guru / Staff*: Ustadz Abdullah S.Pd", $canteenWaUrl);
-        $this->assertStringContainsString("Toko Berkah Al-Mannan", $canteenWaUrl);
+        $this->assertStringContainsString("Guru / Staff: Ustadz Abdullah S.Pd", $canteenWaUrl);
+        $this->assertStringContainsString("Admin Toko Toko Berkah Al-Mannan", $canteenWaUrl);
     }
 
     public function test_service_helper_menghasilkan_teks_salam_yang_lengkap(): void
     {
         $text = AiSmartOrderingService::buildUserGreetingText(
             $this->waliUser,
-            "Toko Berkah",
-            "saya ingin konfirmasi ketersediaan sarapan pagi."
+            "Toko Berkah"
         );
 
         $this->assertStringContainsString("Assalamu'alaikum Warahmatullahi Wabarakatuh, Toko Berkah", $text);
-        $this->assertStringContainsString("Nama Wali*: Bapak Suhartono", $text);
-        $this->assertStringContainsString("Nama Santri*: Ahmad Al-Farizi", $text);
-        $this->assertStringContainsString("Kamar / Kelas*: 10 IPA | Abu Bakar 02", $text);
-        $this->assertStringContainsString("saya ingin konfirmasi ketersediaan sarapan pagi.", $text);
-        $this->assertStringContainsString("Syukron Jazakumullah Khairan", $text);
+        $this->assertStringContainsString("Nama Santri: Ahmad Al-Farizi (Kelas: 10 IPA, Kamar: Abu Bakar 02)", $text);
+        $this->assertStringContainsString("Nama Pengguna: Bapak Suhartono", $text);
     }
 }

@@ -44,6 +44,7 @@ class UpdateCanteenRequest extends FormRequest
             'delivery_fee' => 'nullable|numeric|min:0',
             'delivery_rates' => 'nullable|array',
             'delivery_rates.*' => 'nullable|numeric|min:0',
+            'is_open' => 'nullable',
         ];
     }
 }

@@ -160,7 +160,20 @@ class CanteenController extends Controller
             $data['image'] = $path;
         }
 
+        // Sinkronisasi status buka/tutup toko
+        if ($request->has('is_open')) {
+            $cacheKey = 'canteen_force_closed_' . $canteen->id;
+            $isOpenBool = filter_var($request->input('is_open'), FILTER_VALIDATE_BOOLEAN);
+            if ($isOpenBool) {
+                Cache::forget($cacheKey);
+            } else {
+                Cache::forever($cacheKey, true);
+            }
+        }
+
+        unset($data['is_open']);
         $canteen->update($data);
+        $canteen->refresh();
         
         return response()->json([
             'message' => 'Kantin berhasil diupdate', 

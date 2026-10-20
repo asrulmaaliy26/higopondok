@@ -25,6 +25,7 @@ export default function Profile() {
   const userRole = getUserRole(user);
   const role = userRole;
   const isAdmin = isAdminLevel(user) || !!originalAdmin;
+  const isStoreManager = userRole === ROLES.KANTIN || isAdminLevel(userRole) || !!originalAdmin;
 
   const { isStandalone, installApp } = usePwaStore();
   const queryClient = useQueryClient();
@@ -161,7 +162,7 @@ export default function Profile() {
       const res = await api.get('/my-canteens');
       return res.data.data || res.data;
     },
-    enabled: userRole === ROLES.KANTIN,
+    enabled: isStoreManager,
     onError: () => {
       toast.error('Gagal mengambil daftar kantin.');
     }
@@ -606,7 +607,14 @@ export default function Profile() {
                 )}
                 <MenuItem 
                   icon={Store} 
-                  title={userRole === ROLES.ADMIN ? "Katalog & Pengelolaan Toko" : "Manajemen Toko & Kantin"} 
+                  title="Pengaturan Profil Toko" 
+                  badge={canteens.length > 0 ? `${canteens.length} Toko` : 'Atur Toko'} 
+                  badgeColor="bg-green-600"
+                  onClick={() => setShowStoreListModal(true)} 
+                />
+                <MenuItem 
+                  icon={Store} 
+                  title={userRole === ROLES.ADMIN ? "Katalog & Etalase Toko" : "Manajemen Toko & Kantin"} 
                   onClick={() => navigate({ to: userRole === ROLES.ADMIN ? '/dashboard/toko-saya' : '/dashboard/pertokoan' })} 
                 />
               </>
@@ -681,7 +689,7 @@ export default function Profile() {
       </div>
 
       {/* Modal Daftar Toko (Multi-Store) */}
-      {userRole === ROLES.KANTIN && showStoreListModal && createPortal(
+      {isStoreManager && showStoreListModal && createPortal(
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in overflow-y-auto">
           <div className="bg-white dark:bg-gray-900 rounded-none shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh] my-auto">
             <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200 dark:border-gray-700">
@@ -790,7 +798,7 @@ export default function Profile() {
       )}
 
       {/* Modal Edit Kantin */}
-      {userRole === ROLES.KANTIN && showEditStoreModal && createPortal(
+      {isStoreManager && showEditStoreModal && createPortal(
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in overflow-y-auto">
           <div className="bg-white dark:bg-gray-900 rounded-none shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh] my-auto">
             <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200 dark:border-gray-700">

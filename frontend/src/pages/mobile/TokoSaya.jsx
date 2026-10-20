@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Store, Save, Plus, Edit2, Trash2, X, ChevronLeft, ChevronRight, Star, Clock, CheckCircle2, ChevronDown, Search, User, Flame, Layers, Sparkles } from 'lucide-react';
+import { Store, Save, Plus, Edit2, Trash2, X, ChevronLeft, ChevronRight, Star, Clock, CheckCircle2, ChevronDown, Search, User, Flame, Layers, Sparkles, Settings } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { hasVariants, getAvailableVariantPills } from '../../lib/variantUtils';
@@ -8,6 +8,7 @@ import toast from 'react-hot-toast';
 import api, { getStorageUrl } from '../../lib/axios';
 import { SkeletonCard } from '../../components/ui/Skeleton';
 import { ProductFormModal } from '../../components/modals/ProductFormModal';
+import StoreSettingsModal from '../../components/modals/StoreSettingsModal';
 import { useCanteenStore } from '../../store/canteenStore';
 import { useAuthStore } from '../../store/authStore';
 import { useActiveOrdersCount } from '../../hooks/useActiveOrdersCount';
@@ -26,6 +27,7 @@ export default function TokoSaya() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [storeSearch, setStoreSearch] = useState('');
   const activeOrdersCount = useActiveOrdersCount();
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
 
   React.useEffect(() => {
     const handleScroll = (e) => {
@@ -614,10 +616,13 @@ export default function TokoSaya() {
                   )}
                 </button>
                 <button 
-                  onClick={() => navigate({ to: '/dashboard/profile' })}
-                  className="text-[11px] font-medium text-gray-600 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded-none hover:bg-gray-200 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 cursor-pointer"
+                  type="button"
+                  onClick={() => setShowSettingsModal(true)}
+                  className="text-[11px] font-bold text-gray-700 bg-gray-100 hover:bg-green-600 hover:text-white border border-gray-300 dark:border-gray-700 px-2 py-0.5 rounded-none flex items-center gap-1 transition-colors cursor-pointer dark:bg-gray-800 dark:text-gray-200 shadow-2xs"
+                  title="Buka Pengaturan & Edit Toko Ini"
                 >
-                  Pengaturan (Profil)
+                  <Settings className="w-3 h-3 text-green-600" />
+                  <span>Pengaturan Toko</span>
                 </button>
               </div>
             </div>
@@ -1110,6 +1115,15 @@ export default function TokoSaya() {
             </div>
           </div>
         </div>
+      )}
+      
+      {/* Modal Pengaturan & Edit Toko */}
+      {canteen && (
+        <StoreSettingsModal
+          isOpen={showSettingsModal}
+          onClose={() => setShowSettingsModal(false)}
+          canteen={canteen}
+        />
       )}
     </div>
   );

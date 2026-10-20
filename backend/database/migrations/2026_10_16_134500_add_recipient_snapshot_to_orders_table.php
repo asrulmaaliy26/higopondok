@@ -30,24 +30,26 @@ return new class extends Migration
             }
         });
 
-        // Backfill data dari users untuk pesanan yang sudah ada
-        DB::statement("
-            UPDATE orders
-            JOIN users ON orders.user_id = users.id
-            SET orders.recipient_santri_name = CASE 
-                    WHEN users.is_teacher = 1 THEN users.name 
-                    WHEN users.santri_name IS NOT NULL AND users.santri_name != '' THEN users.santri_name 
-                    ELSE users.name 
-                END,
-                orders.recipient_santri_room = CASE
-                    WHEN users.is_teacher = 1 THEN users.teacher_unit
-                    ELSE users.santri_room
-                END,
-                orders.recipient_santri_class = users.santri_class,
-                orders.recipient_santri_level = users.santri_level,
-                orders.recipient_phone = users.phone
-            WHERE orders.recipient_santri_name IS NULL
-        ");
+        // Backfill data dari users untuk pesanan yang sudah ada (khusus MySQL)
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement("
+                UPDATE orders
+                JOIN users ON orders.user_id = users.id
+                SET orders.recipient_santri_name = CASE 
+                        WHEN users.is_teacher = 1 THEN users.name 
+                        WHEN users.santri_name IS NOT NULL AND users.santri_name != '' THEN users.santri_name 
+                        ELSE users.name 
+                    END,
+                    orders.recipient_santri_room = CASE
+                        WHEN users.is_teacher = 1 THEN users.teacher_unit
+                        ELSE users.santri_room
+                    END,
+                    orders.recipient_santri_class = users.santri_class,
+                    orders.recipient_santri_level = users.santri_level,
+                    orders.recipient_phone = users.phone
+                WHERE orders.recipient_santri_name IS NULL
+            ");
+        }
 
         // Pulihkan pesanan #2678 & #2679 spesifik untuk Zetta Arzagnafia
         DB::table('orders')

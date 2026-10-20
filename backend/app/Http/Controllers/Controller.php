@@ -288,6 +288,8 @@ abstract class Controller
                     if ($driveUrl) {
                         $updatedProofs[] = $driveUrl;
                         $changed = true;
+                        // Hapus file fisik lokal agar server bersih dan tidak ada file lokal tersisa
+                        \Illuminate\Support\Facades\Storage::disk('public')->delete($cleanPath);
                         continue;
                     }
                 }

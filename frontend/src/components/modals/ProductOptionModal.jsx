@@ -421,9 +421,17 @@ export const ProductOptionModal = ({
               <h4 className="font-bold text-sm text-gray-900 dark:text-white truncate">
                 {product.name}
               </h4>
-              <p className="text-xs font-bold text-green-600 dark:text-green-400 font-mono mt-0.5">
-                {formatRupiah(basePrice)}
-              </p>
+              <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                <span className="text-xs font-bold text-green-600 dark:text-green-400 font-mono">
+                  {formatRupiah(basePrice)}
+                </span>
+                {Boolean(product.sold_count && product.sold_count > 0) && (
+                  <span className="inline-flex items-center gap-0.5 px-1 py-0.2 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 rounded-none text-[9.5px] font-bold font-mono">
+                    <Flame className="w-2.5 h-2.5 text-amber-500 fill-amber-500 shrink-0" />
+                    <span>{product.sold_count}x dipesan</span>
+                  </span>
+                )}
+              </div>
               {product.description && (
                 <p className="text-[11px] text-gray-500 dark:text-gray-400 line-clamp-2 mt-1 leading-snug">
                   {product.description}

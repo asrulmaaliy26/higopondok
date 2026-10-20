@@ -12,6 +12,7 @@ import api, { getStorageUrl, getPublicUrl } from '../../lib/axios';
 import { useAuthStore } from '../../store/authStore';
 import { getFileType, isImageFile, isHeifFile, isPdfFile, formatFileSize, getFileNameFromPath, compressImageFiles } from '../../lib/fileUtils';
 import santriData from '../../data/santri.json';
+import { buildDefaultGreetingWaText } from '../../lib/phoneUtils';
 import ThermalReceiptModal from '../../components/receipt/ThermalReceiptModal';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 
@@ -518,43 +519,11 @@ export default function Pembayaran() {
 
   const buildCourierWAText = (group) => {
     const firstOrder = group.orders[0];
-    const isTeacher = group.orders.some(o => o.order_for === 'guru');
-    const santriName = isTeacher ? `Guru / Staff (${user?.name})` : (firstOrder?.recipient_santri_name || user?.santri_name || user?.name || '-');
-    const waliName = user?.name || '';
+    const isTeacher = group.orders.some(o => o.order_for === 'guru') || user?.is_teacher;
+    const santriName = isTeacher ? `Guru / Staff (${user?.name})` : (firstOrder?.recipient_santri_name || user?.santri_name || user?.name || '');
+    let santriClass = firstOrder?.recipient_santri_class || user?.santri_class || '';
+    let santriLevel = firstOrder?.recipient_santri_level || user?.santri_level || '';
     let santriRoom = firstOrder?.recipient_santri_room || group.delivery_location || (isTeacher ? `Ruang Guru / Kantor ${user?.teacher_unit || ''}` : user?.santri_room || '');
-
-    let text = `Assalamu'alaikum Warahmatullahi Wabarakatuh, Kurir HiGO Pondok.\n\n`;
-    text += `Konfirmasi Pengiriman Pesanan${isTeacher ? ' (⚡ Pesanan Guru / Staff - Prioritas)' : ''}:\n`;
-    text += `Perkenalkan saya:\n`;
-    if (isTeacher) {
-      text += `👨‍🏫 *Guru / Staff*: ${user?.name || '-'}\n`;
-      if (user?.teacher_unit) text += `🏢 Unit: ${user.teacher_unit}\n`;
-    } else {
-      if (waliName) text += `👤 *Nama Wali*: ${waliName}\n`;
-      text += `🎓 *Nama Santri*: ${santriName}\n`;
-      if (santriRoom) text += `🏠 Lokasi / Kamar: ${santriRoom}\n`;
-    }
-    text += `\n`;
-    if (group.checkoutId) {
-      text += `*ID Checkout*: #${group.checkoutId}\n`;
-    }
-    text += `*Toko*: ${group.orders.map(o => o.canteen?.name).filter(Boolean).join(', ')}\n`;
-    text += `*Total Tagihan: Rp ${Math.round(group.grandTotal).toLocaleString('id-ID')}*\n\n`;
-    text += `Mohon bantuannya untuk pengiriman ya, Syukron! 🙏`;
-    return text;
-  };
-
-  const buildOrderWAText = (order) => {
-    const subtotal = order.is_custom 
-      ? Math.max(0, parseFloat(order.total_price) - parseFloat(order.delivery_fee || 0) - parseFloat(order.admin_fee || 0))
-      : (order.items?.reduce((sum, item) => sum + parseFloat(item.subtotal), 0) || 0);
-
-    const isTeacher = order.order_for === 'guru' || user?.is_teacher;
-    const santriName = isTeacher ? `Guru / Staff (${user?.name})` : (order.recipient_santri_name || user?.santri_name || user?.name || '-');
-    const waliName = user?.name || '';
-    let santriClass = order.recipient_santri_class || user?.santri_class || '';
-    let santriLevel = order.recipient_santri_level || user?.santri_level || '';
-    let santriRoom = order.recipient_santri_room || user?.santri_room || order.delivery_location || '';
 
     if (!isTeacher && santriName && santriData?.data) {
       const sName = santriName.toLowerCase().trim();
@@ -576,32 +545,25 @@ export default function Pembayaran() {
       }
     }
 
-    const classInfo = [santriClass, santriLevel].filter(Boolean).join(' / ');
-    const detailPenerima = [classInfo, santriRoom].filter(Boolean).join(' | ');
-
-    let text = `Assalamu'alaikum Warahmatullahi Wabarakatuh, ${order.canteen?.name || 'Toko'}.\n\n`;
-    text += `Konfirmasi Pesanan *#${order.id}*${order.checkout_id ? ` (Checkout #${order.checkout_id})` : ''}\n\n`;
-    text += `Perkenalkan saya:\n`;
-    if (isTeacher) {
-      text += `👨‍🏫 *Guru / Staff*: ${user?.name || '-'}\n`;
-      if (user?.teacher_unit) text += `🏢 Unit: ${user.teacher_unit}\n`;
-    } else {
-      if (waliName) text += `👤 *Nama Wali*: ${waliName}\n`;
-      text += `🎓 *Nama Santri*: ${santriName}\n`;
-      if (detailPenerima) text += `🏠 Lokasi / Kamar: ${detailPenerima}\n`;
-    }
-    text += `\nMohon segera diproses nggih, Syukron Jazakumullah Khairan. 🙏`;
-    return text;
+    return buildDefaultGreetingWaText({
+      user,
+      recipientTitle: 'Kurir HiGO Pondok',
+      extraInfo: {
+        isTeacher,
+        santriName,
+        santriClass,
+        santriLevel,
+        santriRoom,
+        userName: user?.name
+      }
+    });
   };
 
   const buildGroupCanteenWAText = (ordersList, canteenTitle) => {
     if (!ordersList || ordersList.length === 0) return '';
-    if (ordersList.length === 1) return buildOrderWAText(ordersList[0]);
-
     const firstOrder = ordersList[0];
-    const isTeacher = ordersList.some(o => o.order_for === 'guru');
-    const santriName = isTeacher ? `Guru / Staff (${user?.name})` : (firstOrder?.recipient_santri_name || user?.santri_name || user?.name || '-');
-    const waliName = user?.name || '';
+    const isTeacher = ordersList.some(o => o.order_for === 'guru') || user?.is_teacher;
+    const santriName = isTeacher ? `Guru / Staff (${user?.name})` : (firstOrder?.recipient_santri_name || user?.santri_name || user?.name || '');
     let santriClass = firstOrder?.recipient_santri_class || user?.santri_class || '';
     let santriLevel = firstOrder?.recipient_santri_level || user?.santri_level || '';
     let santriRoom = firstOrder?.recipient_santri_room || ordersList[0].delivery_location || (isTeacher ? `Ruang Guru / Kantor ${user?.teacher_unit || ''}` : user?.santri_room || '');
@@ -626,25 +588,22 @@ export default function Pembayaran() {
       }
     }
 
-    const classInfo = [santriClass, santriLevel].filter(Boolean).join(' / ');
-    const detailPenerima = [classInfo, santriRoom].filter(Boolean).join(' | ');
+    return buildDefaultGreetingWaText({
+      user,
+      recipientTitle: canteenTitle || 'Toko',
+      extraInfo: {
+        isTeacher,
+        santriName,
+        santriClass,
+        santriLevel,
+        santriRoom,
+        userName: user?.name
+      }
+    });
+  };
 
-    const orderCodes = ordersList.map(o => `#${o.id}`).join(', ');
-    const checkoutCode = ordersList[0].checkout_id ? ` (Checkout #${ordersList[0].checkout_id})` : '';
-
-    let text = `Assalamu'alaikum Warahmatullahi Wabarakatuh, ${canteenTitle || 'Kantin'}.\n\n`;
-    text += `Konfirmasi Pesanan *${orderCodes}*${checkoutCode}\n\n`;
-    text += `Perkenalkan saya:\n`;
-    if (isTeacher) {
-      text += `👨‍🏫 *Guru / Staff*: ${user?.name || '-'}\n`;
-      if (user?.teacher_unit) text += `🏢 Unit: ${user.teacher_unit}\n`;
-    } else {
-      if (waliName) text += `👤 *Nama Wali*: ${waliName}\n`;
-      text += `🎓 *Nama Santri*: ${santriName}\n`;
-      if (detailPenerima) text += `🏠 Lokasi / Kamar: ${detailPenerima}\n`;
-    }
-    text += `\nMohon segera diproses nggih, Syukron Jazakumullah Khairan. 🙏`;
-    return text;
+  const buildOrderWAText = (order) => {
+    return buildGroupCanteenWAText([order], order.canteen?.name);
   };
 
 

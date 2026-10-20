@@ -1430,8 +1430,8 @@ export default function ThermalReceiptModal({
                     <h2 className="thermal-header-title text-lg sm:text-xl font-black uppercase tracking-wider">HIGO PONDOK</h2>
                     <p className="thermal-header-sub text-xs sm:text-sm font-bold text-gray-800">Layanan Pesan Antar Santri</p>
                     
-                    {/* KODE ORDERAN (BESAR & TEBAL) */}
-                    <div className="mt-2 py-1 px-3 border-2 border-black inline-block bg-black text-white">
+                    {/* KODE ORDERAN (KOTAK BERGARIS PERSIS GAMBAR) */}
+                    <div className="mt-2 py-1 px-3 border-2 border-black inline-block bg-white text-black">
                       <span className="thermal-order-code text-base sm:text-lg font-black tracking-wider">
                         #ORD-{order.id}
                       </span>
@@ -1536,21 +1536,23 @@ export default function ThermalReceiptModal({
                     <h2 className="thermal-header-title text-lg sm:text-xl font-black uppercase tracking-wider">HIGO PONDOK</h2>
                     <p className="thermal-header-sub text-xs sm:text-sm font-bold text-gray-800">Layanan Pesan Antar Santri</p>
 
-                    {/* KODE WADAH / CHECKOUT */}
-                    <div className="mt-2 py-1 px-3 border-2 border-black inline-block bg-black text-white">
+                    {/* KODE WADAH / CHECKOUT (KOTAK BERGARIS PERSIS GAMBAR) */}
+                    <div className="mt-2 py-1 px-3 border-2 border-black inline-block bg-white text-black">
                       <span className="thermal-order-code text-sm sm:text-base font-black tracking-wider block">
-                        {bundleSummary.checkoutId || `WADAH (${bundleSummary.ordersCount} TOKO)`}
+                        {bundleSummary.checkoutId ? `#${bundleSummary.checkoutId}` : bundleSummary.orderIds}
                       </span>
                     </div>
 
                     <div className="text-left text-xs sm:text-sm mt-2 space-y-0.5 pt-1.5 border-t border-dotted border-gray-400">
                       <div className="flex justify-between items-start gap-1">
-                        <span className="shrink-0 text-gray-700 font-medium">Order ID:</span>
-                        <span className="font-bold text-right font-mono text-xs break-words">{bundleSummary.orderIds}</span>
-                      </div>
-                      <div className="flex justify-between items-start gap-1">
                         <span className="shrink-0 text-gray-700 font-medium">Waktu:</span>
                         <span className="font-semibold text-right">{formatDateTime(bundleSummary.created_at)}</span>
+                      </div>
+                      <div className="flex justify-between items-start gap-1">
+                        <span className="shrink-0 text-gray-700 font-medium">Toko:</span>
+                        <span className="font-bold text-right uppercase break-words">
+                          {Array.from(new Set(filteredBatchOrders.map(o => o.canteen?.name).filter(Boolean))).join(', ') || 'Kantin Pondok'}
+                        </span>
                       </div>
                       {courierName && (
                         <div className="flex justify-between items-start gap-1">
@@ -1596,7 +1598,7 @@ export default function ThermalReceiptModal({
                   {/* DAFTAR MENU GABUNGAN SELURUH TOKO (TANPA HARGA) */}
                   <div className="py-2 border-b-2 border-dashed border-black">
                     <div className="thermal-menu-header flex justify-between font-black text-xs sm:text-sm pb-1.5 border-b border-black tracking-wider uppercase">
-                      <span>RINCIAN MENU ({bundleSummary.ordersCount} TOKO):</span>
+                      <span>DAFTAR MENU:</span>
                     </div>
                     <div className="pt-2 space-y-3">
                       {filteredBatchOrders.map((o, storeIdx) => (
@@ -1621,7 +1623,7 @@ export default function ThermalReceiptModal({
                                     </div>
                                     {item.notes && (
                                       <div className="thermal-menu-note text-xs sm:text-sm font-bold italic text-black pl-3 border-l-2 border-black ml-1">
-                                        ↳ Catatan: {cleanItemNotes(item.notes)}
+                                        | Catatan: [{cleanItemNotes(item.notes)}]
                                       </div>
                                     )}
                                   </div>

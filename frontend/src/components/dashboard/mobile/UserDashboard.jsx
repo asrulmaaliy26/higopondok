@@ -23,7 +23,8 @@ import {
   Ticket,
   Wallet,
   Activity,
-  ClipboardList
+  ClipboardList,
+  Flame
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api, { getStorageUrl } from '../../../lib/axios';
@@ -536,10 +537,18 @@ export default function UserDashboard({ user }) {
                       </p>
                     </div>
 
-                    <div className="pt-1.5 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between gap-1">
-                      <span className="text-xs font-mono font-bold text-green-700 dark:text-green-400">
-                        Rp {parseFloat(product.price).toLocaleString('id-ID')}
-                      </span>
+                    <div className="pt-1.5 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between gap-1 flex-wrap">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-xs font-mono font-bold text-green-700 dark:text-green-400">
+                          Rp {parseFloat(product.price).toLocaleString('id-ID')}
+                        </span>
+                        {Boolean(product.sold_count && product.sold_count > 0) && (
+                          <span className="inline-flex items-center gap-0.5 px-1 py-0.2 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 rounded-none text-[9px] font-bold font-mono">
+                            <Flame className="w-2 h-2 text-amber-500 fill-amber-500 shrink-0" />
+                            <span>{product.sold_count}x</span>
+                          </span>
+                        )}
+                      </div>
 
                       {hasVariants(product) ? (
                         <button
