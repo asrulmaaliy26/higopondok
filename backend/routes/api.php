@@ -48,6 +48,39 @@ Route::get('/buat-symlink-storage', function () {
     }
 });
 
+Route::get('/gdrive/test', function () {
+    $results = [
+        'default_disk' => config('filesystems.default'),
+        'has_client_id' => !empty(config('filesystems.disks.google.clientId')),
+        'has_client_secret' => !empty(config('filesystems.disks.google.clientSecret')),
+        'has_refresh_token' => !empty(config('filesystems.disks.google.refreshToken')),
+        'shared_folder_id' => config('filesystems.disks.google.sharedFolderId'),
+    ];
+
+    try {
+        $testFile = '01_master_toko/test_ping_' . time() . '.txt';
+        \Illuminate\Support\Facades\Storage::disk('google')->put($testFile, 'HigoPondok VPS GDrive Ping ' . now());
+        $exists = \Illuminate\Support\Facades\Storage::disk('google')->exists($testFile);
+        $url = \Illuminate\Support\Facades\Storage::disk('google')->url($testFile);
+        \Illuminate\Support\Facades\Storage::disk('google')->delete($testFile);
+
+        $results['write_test'] = 'success';
+        $results['read_test'] = $exists ? 'success' : 'failed';
+        $results['url_test'] = $url;
+        $results['status'] = 'READY_AND_WORKING';
+        $results['message'] = 'Integrasi Google Drive di server aktif dan berfungsi 100%!';
+    } catch (\Throwable $e) {
+        $results['write_test'] = 'error';
+        $results['error_message'] = $e->getMessage();
+        $results['status'] = 'NEEDS_CONFIGURATION';
+        if (empty($results['has_refresh_token'])) {
+            $results['action_needed'] = 'Buka https://www.higopondok.id/api/gdrive/connect di browser untuk menghubungkan akun Google Drive';
+        }
+    }
+
+    return response()->json($results);
+});
+
 Route::get('/gdrive/connect', function () {
     $client = new \Google\Client();
     $client->setClientId(config('filesystems.disks.google.clientId'));
