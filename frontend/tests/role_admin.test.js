@@ -56,7 +56,13 @@ describe('Unit Test: Role ADMIN & SUPER ADMIN Pages', () => {
     assert.strictEqual(typeof mod.default, 'function', 'BukuPanduan harus mengekspor komponen React');
   });
 
-  it('9. Roles ADMIN dan SUPER_ADMIN harus terdefinisi dengan benar pada config roles', () => {
+  it('9. Komponen AdminDashboard (AdminDashboard.jsx) harus termuat tanpa error runtime', async () => {
+    const mod = await loadComponent('./src/components/dashboard/mobile/AdminDashboard.jsx');
+    assert.ok(mod, 'Modul AdminDashboard harus berhasil dimuat');
+    assert.strictEqual(typeof mod.default, 'function', 'AdminDashboard harus mengekspor komponen React');
+  });
+
+  it('10. Roles ADMIN dan SUPER_ADMIN harus terdefinisi dengan benar pada config roles', () => {
     assert.strictEqual(ROLES.ADMIN, 'admin', 'ROLES.ADMIN harus bernilai "admin"');
     assert.strictEqual(ROLES.SUPER_ADMIN, 'super_admin', 'ROLES.SUPER_ADMIN harus bernilai "super_admin"');
   });

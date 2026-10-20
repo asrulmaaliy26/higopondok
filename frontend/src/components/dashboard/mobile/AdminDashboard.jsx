@@ -1,5 +1,5 @@
 import React from 'react';
-import { Users, Wallet, TrendingUp, AlertCircle, ArrowRight, ClipboardList, Store, Shield, Ticket, CreditCard, HardDrive, ExternalLink } from 'lucide-react';
+import { Users, Wallet, TrendingUp, AlertCircle, ArrowRight, ClipboardList, Store, Shield, Ticket, CreditCard, HardDrive, ExternalLink, FileText } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../../lib/axios';
 import { Link } from '@tanstack/react-router';
