@@ -161,6 +161,13 @@ class OrderSeeder extends Seeder
                 }
             }
 
+            if ($totalOrdersCount > 0) {
+                $sampleCancel = Order::first();
+                if ($sampleCancel) {
+                    $sampleCancel->update(['status' => 'cancelled']);
+                }
+            }
+
             DB::commit();
             $this->command->info("Berhasil membuat {$totalOrdersCount} pesanan dengan total {$totalItemsCount} produk asli toko untuk 3 user!");
 

@@ -33,6 +33,7 @@ import {
 import toast from 'react-hot-toast';
 import api from '../../lib/axios';
 import { useAuthStore } from '../../store/authStore';
+import { getWaUrl, buildDefaultGreetingWaText } from '../../lib/phoneUtils';
 
 /**
  * WhatsApp / Chat style text parser
@@ -930,7 +931,14 @@ export default function PesanAiChat() {
                           </p>
                         </div>
                         <a
-                          href={msg.support_contact.admin.wa_url}
+                          href={getWaUrl(
+                            msg.support_contact.admin.phone,
+                            buildDefaultGreetingWaText({
+                              user,
+                              recipientTitle: 'Admin HiGO Pondok',
+                              intentMessage: 'saya butuh bantuan / tanya terkait kendala aplikasi dan layanan santri.'
+                            })
+                          ) || msg.support_contact.admin.wa_url}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="mt-2.5 w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-1.5 px-2 text-[11px] text-center flex items-center justify-center gap-1.5 rounded-none transition-colors shadow-2xs cursor-pointer active:scale-[0.99]"
@@ -1574,7 +1582,14 @@ export default function PesanAiChat() {
                   Hubungi admin jika ada kendala pengantaran santri, komplain kurir, saldo, atau bantuan sistem.
                 </p>
                 <a
-                  href={supportData?.admin?.wa_url || '#'}
+                  href={getWaUrl(
+                    supportData?.admin?.phone,
+                    buildDefaultGreetingWaText({
+                      user,
+                      recipientTitle: 'Admin HiGO Pondok',
+                      intentMessage: 'saya butuh bantuan / tanya terkait aplikasi dan layanan santri.'
+                    })
+                  ) || supportData?.admin?.wa_url || '#'}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="mt-2 w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-3 text-xs text-center flex items-center justify-center gap-1.5 rounded-none transition-colors shadow-2xs cursor-pointer active:scale-[0.99]"
@@ -1632,7 +1647,14 @@ export default function PesanAiChat() {
                         </span>
                       </div>
                       <a
-                        href={currentCanteen.wa_url}
+                        href={getWaUrl(
+                          currentCanteen.phone,
+                          buildDefaultGreetingWaText({
+                            user,
+                            recipientTitle: `Toko ${currentCanteen.name}`,
+                            intentMessage: 'saya ingin bertanya terkait menu / pesanan di HiGO Pondok.'
+                          })
+                        ) || currentCanteen.wa_url}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="w-full bg-green-700 hover:bg-green-800 text-white font-bold py-2 px-3 text-xs text-center flex items-center justify-center gap-1.5 rounded-none transition-colors shadow-2xs cursor-pointer active:scale-[0.99]"

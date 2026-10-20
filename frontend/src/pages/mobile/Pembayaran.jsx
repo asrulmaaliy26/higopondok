@@ -310,14 +310,20 @@ export default function Pembayaran() {
     onSuccess: (data) => {
       queryClient.invalidateQueries(['user_orders']);
       queryClient.invalidateQueries(['orders']);
-      if (data?.ai_verified) {
-        toast.success(data.message || 'Pembayaran berhasil diverifikasi otomatis oleh AI! Status Lunas.', { duration: 5000 });
-      } else {
-        toast.success(data?.message || 'Bukti transfer berhasil diunggah! Menunggu validasi admin.', { duration: 4500 });
-      }
+      toast.success(data?.message || 'Bukti transfer berhasil diunggah! Sistem sedang memvalidasi di latar belakang.', { duration: 4000 });
       setShowPaymentProofModal(false);
       setPaymentProofFiles([]);
       setActiveOrderForPaymentProof(null);
+
+      // Trigger sinkronisasi otomatis di latar belakang saat AI selesai memproses struk
+      setTimeout(() => {
+        queryClient.invalidateQueries(['user_orders']);
+        queryClient.invalidateQueries(['orders']);
+      }, 3000);
+      setTimeout(() => {
+        queryClient.invalidateQueries(['user_orders']);
+        queryClient.invalidateQueries(['orders']);
+      }, 7000);
     },
     onError: (err) => {
       toast.error(err.response?.data?.message || 'Gagal mengunggah bukti transfer. Silakan periksa koneksi dan coba lagi.');
@@ -514,16 +520,25 @@ export default function Pembayaran() {
     const firstOrder = group.orders[0];
     const isTeacher = group.orders.some(o => o.order_for === 'guru');
     const santriName = isTeacher ? `Guru / Staff (${user?.name})` : (firstOrder?.recipient_santri_name || user?.santri_name || user?.name || '-');
+    const waliName = user?.name || '';
     let santriRoom = firstOrder?.recipient_santri_room || group.delivery_location || (isTeacher ? `Ruang Guru / Kantor ${user?.teacher_unit || ''}` : user?.santri_room || '');
 
-    let text = `Assalamu'alaikum Warahmatullahi Wabarakatuh, Kurir Higo Pondok.\n`;
-    text += `Saya ingin konfirmasi pengiriman pesanan saya${isTeacher ? ' (⚡ Pesanan Guru / Staff - Prioritas)' : ''}:\n`;
+    let text = `Assalamu'alaikum Warahmatullahi Wabarakatuh, Kurir HiGO Pondok.\n\n`;
+    text += `Konfirmasi Pengiriman Pesanan${isTeacher ? ' (⚡ Pesanan Guru / Staff - Prioritas)' : ''}:\n`;
+    text += `Perkenalkan saya:\n`;
+    if (isTeacher) {
+      text += `👨‍🏫 *Guru / Staff*: ${user?.name || '-'}\n`;
+      if (user?.teacher_unit) text += `🏢 Unit: ${user.teacher_unit}\n`;
+    } else {
+      if (waliName) text += `👤 *Nama Wali*: ${waliName}\n`;
+      text += `🎓 *Nama Santri*: ${santriName}\n`;
+      if (santriRoom) text += `🏠 Lokasi / Kamar: ${santriRoom}\n`;
+    }
+    text += `\n`;
     if (group.checkoutId) {
       text += `*ID Checkout*: #${group.checkoutId}\n`;
     }
-    text += `*Toko*: ${group.orders.map(o => o.canteen?.name).filter(Boolean).join(', ')}\n\n`;
-    text += `*Penerima*: ${santriName}\n`;
-    if (santriRoom) text += `🏠 Lokasi: ${santriRoom}\n\n`;
+    text += `*Toko*: ${group.orders.map(o => o.canteen?.name).filter(Boolean).join(', ')}\n`;
     text += `*Total Tagihan: Rp ${Math.round(group.grandTotal).toLocaleString('id-ID')}*\n\n`;
     text += `Mohon bantuannya untuk pengiriman ya, Syukron! 🙏`;
     return text;
@@ -534,12 +549,14 @@ export default function Pembayaran() {
       ? Math.max(0, parseFloat(order.total_price) - parseFloat(order.delivery_fee || 0) - parseFloat(order.admin_fee || 0))
       : (order.items?.reduce((sum, item) => sum + parseFloat(item.subtotal), 0) || 0);
 
-    const santriName = order.recipient_santri_name || user?.santri_name || user?.name || '-';
+    const isTeacher = order.order_for === 'guru' || user?.is_teacher;
+    const santriName = isTeacher ? `Guru / Staff (${user?.name})` : (order.recipient_santri_name || user?.santri_name || user?.name || '-');
+    const waliName = user?.name || '';
     let santriClass = order.recipient_santri_class || user?.santri_class || '';
     let santriLevel = order.recipient_santri_level || user?.santri_level || '';
     let santriRoom = order.recipient_santri_room || user?.santri_room || order.delivery_location || '';
 
-    if (santriName && santriData?.data) {
+    if (!isTeacher && santriName && santriData?.data) {
       const sName = santriName.toLowerCase().trim();
       const match = santriData.data.find(r => {
         if (!r || !r[1]) return false;
@@ -562,10 +579,17 @@ export default function Pembayaran() {
     const classInfo = [santriClass, santriLevel].filter(Boolean).join(' / ');
     const detailPenerima = [classInfo, santriRoom].filter(Boolean).join(' | ');
 
-    let text = `Assalamu'alaikum Warahmatullahi Wabarakatuh, ${order.canteen?.name || 'Toko'}.\n`;
+    let text = `Assalamu'alaikum Warahmatullahi Wabarakatuh, ${order.canteen?.name || 'Toko'}.\n\n`;
     text += `Konfirmasi Pesanan *#${order.id}*\n`;
-    text += `👤 Santri: *${santriName}*${detailPenerima ? ` (${detailPenerima})` : ''}\n\n`;
-    text += `*Menu Pesanan:*\n`;
+    text += `Perkenalkan saya:\n`;
+    if (isTeacher) {
+      text += `👨‍🏫 *Guru / Staff*: ${user?.name || '-'}\n`;
+      if (user?.teacher_unit) text += `🏢 Unit: ${user.teacher_unit}\n`;
+    } else {
+      if (waliName) text += `👤 *Nama Wali*: ${waliName}\n`;
+      text += `🎓 *Nama Santri*: ${santriName}${detailPenerima ? ` (${detailPenerima})` : ''}\n`;
+    }
+    text += `\n*Menu Pesanan:*\n`;
     if (order.is_custom) {
       text += `• 1x Pesanan Khusus: ${order.custom_notes || 'Titipan'}\n`;
     } else {
@@ -590,6 +614,7 @@ export default function Pembayaran() {
     const firstOrder = ordersList[0];
     const isTeacher = ordersList.some(o => o.order_for === 'guru');
     const santriName = isTeacher ? `Guru / Staff (${user?.name})` : (firstOrder?.recipient_santri_name || user?.santri_name || user?.name || '-');
+    const waliName = user?.name || '';
     let santriClass = firstOrder?.recipient_santri_class || user?.santri_class || '';
     let santriLevel = firstOrder?.recipient_santri_level || user?.santri_level || '';
     let santriRoom = firstOrder?.recipient_santri_room || ordersList[0].delivery_location || (isTeacher ? `Ruang Guru / Kantor ${user?.teacher_unit || ''}` : user?.santri_room || '');
@@ -620,9 +645,17 @@ export default function Pembayaran() {
     const orderCodes = ordersList.map(o => `#${o.id}`).join(', ');
     const checkoutCode = ordersList[0].checkout_id ? ` (Checkout #${ordersList[0].checkout_id})` : '';
 
-    let text = `Assalamu'alaikum Warahmatullahi Wabarakatuh, ${canteenTitle || 'Kantin'}.\n`;
+    let text = `Assalamu'alaikum Warahmatullahi Wabarakatuh, ${canteenTitle || 'Kantin'}.\n\n`;
     text += `Konfirmasi Pesanan *${orderCodes}*${checkoutCode}\n`;
-    text += `👤 Pemesan: *${santriName}*${detailPenerima ? ` (${detailPenerima})` : ''}\n\n`;
+    text += `Perkenalkan saya:\n`;
+    if (isTeacher) {
+      text += `👨‍🏫 *Guru / Staff*: ${user?.name || '-'}\n`;
+      if (user?.teacher_unit) text += `🏢 Unit: ${user.teacher_unit}\n`;
+    } else {
+      if (waliName) text += `👤 *Nama Wali*: ${waliName}\n`;
+      text += `🎓 *Nama Santri*: ${santriName}${detailPenerima ? ` (${detailPenerima})` : ''}\n`;
+    }
+    text += `\n`;
 
     let totalAll = 0;
     ordersList.forEach((order) => {

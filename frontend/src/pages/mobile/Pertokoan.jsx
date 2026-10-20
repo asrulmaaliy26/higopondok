@@ -41,6 +41,7 @@ import { useAuthStore } from '../../store/authStore';
 import { ROLES } from '../../config/roles';
 import { ProductFormModal } from '../../components/modals/ProductFormModal';
 import { hasVariants, getAvailableVariantPills } from '../../lib/variantUtils';
+import { getWaUrl, buildDefaultGreetingWaText } from '../../lib/phoneUtils';
 
 // Re-export untuk kompatibilitas
 export { CANTEEN_ZONES };
@@ -1882,7 +1883,19 @@ export default function Pertokoan() {
                   <span className="block text-gray-400 text-[9px] font-bold uppercase leading-none">WhatsApp</span>
                   <span className="font-bold text-gray-900 dark:text-gray-100 truncate block mt-0.5 leading-tight">
                     {selectedCanteen.user?.phone ? (
-                      <a href={`https://wa.me/${selectedCanteen.user.phone}`} target="_blank" rel="noreferrer" className="text-emerald-600 dark:text-emerald-400 hover:underline">
+                      <a 
+                        href={getWaUrl(
+                          selectedCanteen.user.phone, 
+                          buildDefaultGreetingWaText({
+                            user: currentUser,
+                            recipientTitle: `Toko ${selectedCanteen.name}`,
+                            intentMessage: 'saya ingin bertanya seputar menu & pesanan di HiGO Pondok.'
+                          })
+                        ) || `https://wa.me/${selectedCanteen.user.phone}`} 
+                        target="_blank" 
+                        rel="noreferrer" 
+                        className="text-emerald-600 dark:text-emerald-400 hover:underline"
+                      >
                         {selectedCanteen.user.phone}
                       </a>
                     ) : (

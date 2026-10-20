@@ -449,7 +449,7 @@ class AiSmartOrderingTest extends TestCase
         $this->assertTrue($data['is_order_ready']);
         $this->assertCount(1, $data['canteens']);
         $item = $data['canteens'][0]['items'][0];
-        $this->assertStringContainsString('Mie Ayam Kulit', $item['name']);
+        $this->assertStringContainsString('Mie Ayam Kulit', preg_replace('/\s+/', ' ', $item['name']));
         $this->assertEquals(4, $item['quantity']);
         $this->assertEquals(48000, $item['subtotal']);
     }

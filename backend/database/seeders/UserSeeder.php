@@ -79,16 +79,24 @@ class UserSeeder extends Seeder
         if (\App\Domains\Canteen\Voucher::count() === 0) {
             \App\Domains\Canteen\Voucher::create([
                 'code' => 'SANTRIHEMAT',
+                'title' => 'Voucher Santri Hemat',
+                'description' => 'Potongan belanja Rp 5.000',
+                'discount_type' => 'product_discount',
                 'discount_amount' => 5000,
                 'min_purchase' => 20000,
                 'valid_until' => now()->addDays(30),
+                'is_active' => true,
             ]);
             \App\Domains\Canteen\Voucher::create([
                 'code' => 'MAKANPUAS',
+                'title' => 'Voucher Makan Puas',
+                'description' => 'Potongan belanja Rp 10.000',
+                'discount_type' => 'product_discount',
                 'discount_amount' => 10000,
                 'min_purchase' => 40000,
                 'canteen_id' => $canteen->id,
                 'valid_until' => now()->addDays(7),
+                'is_active' => true,
             ]);
         }
 

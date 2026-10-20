@@ -16,11 +16,11 @@ class ReceiptScannerService
      * Model Gemini yang digunakan secara berurutan jika terjadi kendala/demand spike
      */
     protected array $models = [
-        'gemini-3-flash-preview',
         'gemini-2.5-flash',
-        'gemini-2.5-flash-lite',
+        'gemini-2.0-flash',
         'gemini-flash-latest',
         'gemini-flash-lite-latest',
+        'gemini-3-flash-preview',
     ];
 
     /**
@@ -137,7 +137,7 @@ Kembalikan respon HANYA dalam format JSON valid tanpa tanda markdown (```json):
                 $response = Http::withHeaders([
                     'Content-Type' => 'application/json',
                 ])
-                ->timeout(20)
+                ->timeout(10)
                 ->post($endpoint, $payload);
 
                 if ($response->successful()) {

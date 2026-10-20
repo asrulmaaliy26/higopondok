@@ -107,7 +107,7 @@ class AiChatOrderController extends Controller
         $canteenId = $request->query('canteen_id') ? (int) $request->query('canteen_id') : null;
         $canteenName = $request->query('canteen_name') ?: null;
 
-        $contacts = $this->aiService->getSupportContacts($canteenId, $canteenName);
+        $contacts = $this->aiService->getSupportContacts($canteenId, $canteenName, $request->user());
 
         return response()->json([
             'success' => true,

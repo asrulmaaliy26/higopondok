@@ -138,13 +138,13 @@ class AiSmartOrderingService
 
         // Fallback: Rule-based & Fuzzy catalog matcher (100% offline & instan)
         if (!$result) {
-            $result = $this->ruleBasedMatcher($normalizedMessage, $products, $userLocation, $history);
+            $result = $this->ruleBasedMatcher($normalizedMessage, $products, $userLocation, $history, $user);
         }
 
         // Jika terdeteksi intent bantuan/CS, pastikan support_contact selalu terisi
         $isHelp = preg_match('/(?:bantuan|tolong\s*(?:bantu|admin)|hubungi\s*(?:admin|toko|kantin|cs|pengelola)|kontak\s*(?:admin|toko|kantin)|chat\s*(?:langsung\s*)?(?:admin|toko|kantin|cs)|komplain|kendala|masalah|wa\s*(?:admin|toko|kantin)|nomor\s*(?:admin|toko|kantin|wa)|customer\s*service|tanya\s*admin|bicara\s*dengan\s*admin)/i', $normalizedMessage);
         if ($isHelp && empty($result['support_contact'])) {
-            $result['support_contact'] = $this->getSupportContacts();
+            $result['support_contact'] = $this->getSupportContacts(null, null, $user);
             $result['is_help_intent'] = true;
         }
 
@@ -336,9 +336,50 @@ class AiSmartOrderingService
     }
 
     /**
+     * Standar format salam pembuka WhatsApp untuk Santri & Wali
+     */
+    public static function buildUserGreetingText(?User $user, string $recipientTitle, string $intent): string
+    {
+        $text = "Assalamu'alaikum Warahmatullahi Wabarakatuh, {$recipientTitle}.\n\n";
+        $text .= "Perkenalkan saya:\n";
+
+        if ($user) {
+            if ($user->is_teacher) {
+                $text .= "👨‍🏫 *Guru / Staff*: {$user->name}\n";
+                if ($user->teacher_unit) {
+                    $text .= "🏢 Unit: {$user->teacher_unit}\n";
+                }
+            } else {
+                $waliName = $user->name;
+                $santriName = $user->santri_name ?: $user->name;
+                $room = $user->santri_room;
+                $class = $user->santri_class;
+
+                if ($waliName) {
+                    $text .= "👤 *Nama Wali*: {$waliName}\n";
+                }
+                if ($santriName) {
+                    $text .= "🎓 *Nama Santri*: {$santriName}\n";
+                }
+                $locInfo = implode(' | ', array_filter([$class, $room]));
+                if ($locInfo) {
+                    $text .= "🏠 *Kamar / Kelas*: {$locInfo}\n";
+                }
+            }
+        } else {
+            $text .= "👤 *Pengguna HiGO Pondok*\n";
+        }
+
+        $text .= "\nMaksud saya: {$intent}\n\n";
+        $text .= "Terima kasih, Syukron Jazakumullah Khairan. 🙏";
+
+        return $text;
+    }
+
+    /**
      * Ambil data kontak Admin HiGO Pondok dan Toko Kantin
      */
-    public function getSupportContacts(?int $canteenId = null, ?string $canteenName = null): array
+    public function getSupportContacts(?int $canteenId = null, ?string $canteenName = null, ?User $user = null): array
     {
         // 1. Ambil kontak Admin HiGO Pondok
         $admin = User::whereHas('roles', fn($rq) => $rq->whereIn('name', ['admin', 'super_admin']))
@@ -348,7 +389,8 @@ class AiSmartOrderingService
 
         $adminPhone = $admin?->phone ?: '081234567890';
         $adminName = $admin?->name ?: 'Admin Pusat HiGO';
-        $adminWa = self::createWaUrl($adminPhone, "Assalamu'alaikum Admin HiGO Pondok, saya butuh bantuan / tanya terkait aplikasi.");
+        $adminMsg = self::buildUserGreetingText($user, "Admin HiGO Pondok", "saya butuh bantuan / tanya terkait aplikasi dan layanan santri.");
+        $adminWa = self::createWaUrl($adminPhone, $adminMsg);
 
         // 2. Ambil Toko Spesifik (jika ada) atau toko buka pertama
         $canteen = null;
@@ -368,12 +410,13 @@ class AiSmartOrderingService
         $canteenData = null;
         if ($canteen) {
             $cPhone = $canteen->whatsapp_number ?: ($canteen->user?->phone ?: $adminPhone);
+            $cMsg = self::buildUserGreetingText($user, "Admin Toko {$canteen->name}", "saya ingin bertanya terkait menu / pesanan di HiGO Pondok.");
             $canteenData = [
                 'id' => $canteen->id,
                 'name' => $canteen->name,
                 'category' => $canteen->category,
                 'phone' => $cPhone,
-                'wa_url' => self::createWaUrl($cPhone, "Assalamu'alaikum Kak Admin Toko {$canteen->name}, saya ingin tanya terkait menu / pesanan di HiGO Pondok."),
+                'wa_url' => self::createWaUrl($cPhone, $cMsg),
             ];
         }
 
@@ -381,14 +424,15 @@ class AiSmartOrderingService
         $allCanteens = Canteen::approved()
             ->with('user')
             ->get()
-            ->map(function ($c) use ($adminPhone) {
+            ->map(function ($c) use ($adminPhone, $user) {
                 $cPhone = $c->whatsapp_number ?: ($c->user?->phone ?: $adminPhone);
+                $msg = AiSmartOrderingService::buildUserGreetingText($user, "Toko {$c->name}", "saya ingin bertanya terkait menu / pesanan di HiGO Pondok.");
                 return [
                     'id' => $c->id,
                     'name' => $c->name,
                     'category' => $c->category,
                     'phone' => $cPhone,
-                    'wa_url' => self::createWaUrl($cPhone, "Assalamu'alaikum Toko {$c->name}, saya ingin tanya terkait menu / pesanan di HiGO Pondok."),
+                    'wa_url' => self::createWaUrl($cPhone, $msg),
                 ];
             })
             ->values()
@@ -574,7 +618,7 @@ class AiSmartOrderingService
     /**
      * Fallback NLP Cerdas: Rule-based, Tanya Jawab Menu, & Keyword Matching
      */
-    public function ruleBasedMatcher(string $message, $products, string $userLocation, array $history = []): array
+    public function ruleBasedMatcher(string $message, $products, string $userLocation, array $history = [], ?User $user = null): array
     {
         $lower = strtolower($message);
 
@@ -660,7 +704,7 @@ class AiSmartOrderingService
                 $candCanteenName = trim($mTk[1]);
             }
 
-            $support = $this->getSupportContacts(null, $candCanteenName);
+            $support = $this->getSupportContacts(null, $candCanteenName, $user);
             $adminName = $support['admin']['name'];
 
             $reply = "Siap kak! Jika ada kendala, komplain pengantaran, atau butuh bantuan layanan santri, Kakak bisa langsung menghubungi Admin HiGO melalui kontak WhatsApp resmi di bawah ini:\n\n"
@@ -1271,11 +1315,17 @@ class AiSmartOrderingService
                         if (!empty($item['product_id'])) {
                             $p = Product::find($item['product_id']);
                         }
+                        if (!empty($item['name'])) {
+                            $item['name'] = trim(preg_replace('/\s+/', ' ', $item['name']));
+                        }
                         if (!$p && !empty($item['name'])) {
-                            $p = Product::where('name', $item['name'])->first();
+                            $p = Product::where('name', $item['name'])
+                                ->orWhere('name', 'LIKE', "%{$item['name']}%")
+                                ->first();
                         }
                         if ($p) {
                             $item['product_id'] = $p->id;
+                            $item['name'] = $p->name;
                             if (empty($item['variant_config'])) {
                                 $item['variant_config'] = $p->variant_config;
                             }

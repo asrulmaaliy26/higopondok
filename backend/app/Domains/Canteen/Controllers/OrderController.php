@@ -1591,69 +1591,25 @@ class OrderController extends Controller
             ? Order::where('checkout_id', $checkoutId)->get()
             : collect([$order]);
 
-        // Verifikasi otomatis bukti bayar dengan Google Gemini AI Vision (Mendukung multi-gambar & Opsi 1 scan langsung)
-        $aiResult = null;
-        if (!empty($uploadedPaths)) {
-            try {
-                $scanner = app(\App\Domains\Canteen\Services\ReceiptScannerService::class);
-                $aiResult = $scanner->verifyAndApplyPayment($targetOrders, $uploadedPaths, $tempLocalPaths);
-            } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::error("[OrderController] Gagal verifikasi bukti transfer AI: " . $e->getMessage());
-            }
-        }
-
-        // Jika AI berhasil memvalidasi pembayaran dan mengubah status menjadi LUNAS,
-        // otomatis sinkronkan & unggah berkas bukti lokal ke Google Drive!
-        if (!empty($aiResult) && ($aiResult['verified'] ?? false)) {
-            $this->syncProofToGoogleDrive($order, 'proof_of_payment');
-        }
-
-
-        // --- Catat Activity Log hasil verifikasi AI ---
         $uploaderUser = $request->user();
-        $freshOrder   = $order->fresh()->load(['canteen', 'user']);
-        $customerName = $freshOrder->user ? ($freshOrder->user->santri_name ?: $freshOrder->user->name) : "User #{$freshOrder->user_id}";
-        $canteenName  = $freshOrder->canteen ? $freshOrder->canteen->name : "Kantin #{$freshOrder->canteen_id}";
-        $orderIds     = $targetOrders->pluck('id')->implode(', ');
-        $totalFmt     = number_format($targetOrders->sum('total_price'), 0, ',', '.');
-        $scanData     = $aiResult['scan'] ?? [];
-        $refNo        = $scanData['ref_number'] ?? ($scanData['proofs'][0]['ref_number'] ?? null);
-        $bank         = $scanData['source_bank'] ?? ($scanData['proofs'][0]['source_bank'] ?? null);
-        $transDate    = $scanData['date'] ?? ($scanData['proofs'][0]['date'] ?? null);
-        $transTime    = $scanData['time'] ?? ($scanData['proofs'][0]['time'] ?? null);
-        $refInfo      = $refNo ? " | Ref: {$refNo}" : '';
-        $bankInfo     = $bank ? " | Bank: {$bank}" : '';
-        $dateInfo     = $transDate ? " | Tgl Struk: {$transDate}" . ($transTime ? " {$transTime}" : '') : ' | Tgl Struk: Tidak tertera';
+        $targetOrderIds = $targetOrders->pluck('id')->toArray();
 
-        if (!empty($aiResult)) {
-            if ($aiResult['verified'] ?? false) {
-                ActivityLog::create([
-                    'user_id'     => $uploaderUser->id,
-                    'action'      => 'ai_payment_verified',
-                    'model_type'  => Order::class,
-                    'model_id'    => $freshOrder->id,
-                    'description' => "✅ AI Gemini MEMVERIFIKASI & MELUNASI pesanan #{$orderIds} ({$canteenName} - {$customerName}) senilai Rp {$totalFmt}{$bankInfo}{$refInfo}{$dateInfo}. Diunggah oleh: {$uploaderUser->name}.",
-                ]);
-            } else {
-                $failReason = $aiResult['message'] ?? 'Tidak diketahui';
-                ActivityLog::create([
-                    'user_id'     => $uploaderUser->id,
-                    'action'      => 'ai_payment_unverified',
-                    'model_type'  => Order::class,
-                    'model_id'    => $freshOrder->id,
-                    'description' => "⏳ AI Gemini GAGAL memverifikasi pesanan #{$orderIds} ({$canteenName} - {$customerName}) senilai Rp {$totalFmt}{$bankInfo}{$refInfo}{$dateInfo}. Alasan: {$failReason}. Menunggu konfirmasi manual admin. Diunggah oleh: {$uploaderUser->name}.",
-                ]);
-            }
+        // Verifikasi otomatis bukti bayar dengan Google Gemini AI Vision & Google Drive sync di latar belakang (Non-Blocking Fast Response)
+        if (!empty($uploadedPaths)) {
+            \App\Domains\Canteen\Jobs\ProcessPaymentProofAiJob::dispatchAfterResponse(
+                $targetOrderIds,
+                $uploadedPaths,
+                $uploaderUser ? $uploaderUser->id : $order->user_id
+            );
         }
-        // --- Akhir Activity Log AI ---
 
-        $responseMsg = $aiResult['message'] ?? 'Bukti transfer berhasil diunggah! Menunggu konfirmasi & validasi pembayaran.';
+        $freshOrder = $order->fresh()->load(['canteen', 'user', 'items.product', 'courier']);
 
         return response()->json([
-            'message'     => $responseMsg,
-            'ai_verified' => $aiResult['verified'] ?? false,
-            'ai_ocr_data' => $aiResult['scan'] ?? null,
-            'order'       => $freshOrder->load(['canteen', 'user', 'items.product', 'courier'])
+            'message'               => 'Bukti pembayaran berhasil diunggah! Sistem AI sedang memvalidasi struk di latar belakang.',
+            'ai_verified'           => false,
+            'processing_background' => true,
+            'order'                 => $freshOrder
         ]);
     }
 
@@ -1733,71 +1689,26 @@ class OrderController extends Controller
         $uploadedPaths = $uploadResult['uploaded_paths'] ?? [];
         $tempLocalPaths = $uploadResult['temp_local_paths'] ?? [];
 
-        // Verifikasi otomatis bukti bayar dengan Google Gemini AI Vision (Mendukung multi-gambar & Opsi 1 scan langsung)
-        $aiResult = null;
+        $uploaderUser = $request->user();
+        $targetOrderIds = $orders->pluck('id')->toArray();
+
+        // Verifikasi otomatis bukti bayar dengan Google Gemini AI Vision & Google Drive sync di latar belakang (Non-Blocking Fast Response)
         if (!empty($uploadedPaths)) {
-            try {
-                $scanner = app(\App\Domains\Canteen\Services\ReceiptScannerService::class);
-                $aiResult = $scanner->verifyAndApplyPayment($orders, $uploadedPaths, $tempLocalPaths);
-            } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::error("[OrderController] Gagal verifikasi checkout proof AI: " . $e->getMessage());
-            }
+            \App\Domains\Canteen\Jobs\ProcessPaymentProofAiJob::dispatchAfterResponse(
+                $targetOrderIds,
+                $uploadedPaths,
+                $uploaderUser ? $uploaderUser->id : $orders->first()?->user_id
+            );
         }
 
-        // Jika AI berhasil memvalidasi pembayaran dan mengubah status menjadi LUNAS,
-        // otomatis sinkronkan & unggah berkas bukti lokal ke Google Drive!
-        if (!empty($aiResult) && ($aiResult['verified'] ?? false) && $orders->isNotEmpty()) {
-            $this->syncProofToGoogleDrive($orders->first(), 'proof_of_payment');
-        }
-
-
-        // --- Catat Activity Log hasil verifikasi AI (Checkout Batch) ---
-        $uploaderUser  = $request->user();
-        $firstOrder    = $orders->first();
-        $customerName  = $firstOrder && $firstOrder->user ? ($firstOrder->user->santri_name ?: $firstOrder->user->name) : "User";
-        $canteenNames  = $orders->map(fn($o) => $o->canteen ? $o->canteen->name : "Kantin #{$o->canteen_id}")->unique()->implode(', ');
-        $orderIdsList  = $orders->pluck('id')->implode(', ');
-        $totalFmt      = number_format($orders->sum('total_price'), 0, ',', '.');
-        $scanData      = $aiResult['scan'] ?? [];
-        $refNo         = $scanData['ref_number'] ?? ($scanData['proofs'][0]['ref_number'] ?? null);
-        $bank          = $scanData['source_bank'] ?? ($scanData['proofs'][0]['source_bank'] ?? null);
-        $transDate     = $scanData['date'] ?? ($scanData['proofs'][0]['date'] ?? null);
-        $transTime     = $scanData['time'] ?? ($scanData['proofs'][0]['time'] ?? null);
-        $refInfo       = $refNo ? " | Ref: {$refNo}" : '';
-        $bankInfo      = $bank ? " | Bank: {$bank}" : '';
-        $dateInfo      = $transDate ? " | Tgl Struk: {$transDate}" . ($transTime ? " {$transTime}" : '') : ' | Tgl Struk: Tidak tertera';
-
-        if (!empty($aiResult)) {
-            if ($aiResult['verified'] ?? false) {
-                ActivityLog::create([
-                    'user_id'     => $uploaderUser->id,
-                    'action'      => 'ai_payment_verified',
-                    'model_type'  => Order::class,
-                    'model_id'    => $firstOrder?->id,
-                    'description' => "✅ AI Gemini MEMVERIFIKASI & MELUNASI checkout #{$checkoutId} (Pesanan #{$orderIdsList}) [{$canteenNames} - {$customerName}] senilai Rp {$totalFmt}{$bankInfo}{$refInfo}{$dateInfo}. Diunggah oleh: {$uploaderUser->name}.",
-                ]);
-            } else {
-                $failReason = $aiResult['message'] ?? 'Tidak diketahui';
-                ActivityLog::create([
-                    'user_id'     => $uploaderUser->id,
-                    'action'      => 'ai_payment_unverified',
-                    'model_type'  => Order::class,
-                    'model_id'    => $firstOrder?->id,
-                    'description' => "⏳ AI Gemini GAGAL memverifikasi checkout #{$checkoutId} (Pesanan #{$orderIdsList}) [{$canteenNames} - {$customerName}] senilai Rp {$totalFmt}{$bankInfo}{$refInfo}{$dateInfo}. Alasan: {$failReason}. Menunggu konfirmasi manual admin. Diunggah oleh: {$uploaderUser->name}.",
-                ]);
-            }
-        }
-        // --- Akhir Activity Log AI (Checkout Batch) ---
-
-        $responseMsg     = $aiResult['message'] ?? 'Bukti transfer berhasil diunggah untuk seluruh pesanan dalam checkout ini!';
         $refreshedOrders = Order::where('checkout_id', $checkoutId)->get();
 
         return response()->json([
-            'message'     => $responseMsg,
-            'ai_verified' => $aiResult['verified'] ?? false,
-            'ai_ocr_data' => $aiResult['scan'] ?? null,
-            'checkout_id' => $checkoutId,
-            'orders'      => $refreshedOrders->load(['canteen', 'user', 'items.product', 'courier'])
+            'message'               => 'Bukti transfer berhasil diunggah! Sistem AI sedang memvalidasi struk di latar belakang.',
+            'ai_verified'           => false,
+            'processing_background' => true,
+            'checkout_id'           => $checkoutId,
+            'orders'                => $refreshedOrders->load(['canteen', 'user', 'items.product', 'courier'])
         ]);
     }
 
