@@ -53,31 +53,42 @@ class ReceiptScannerService
             ];
         }
 
-        // Tentukan path absolut file
-        $absolutePath = $imagePath;
-        if (!file_exists($absolutePath)) {
+        // Tentukan sumber data file gambar (Lokal / Temp / Disk Public / Google Drive / URL)
+        $fileContents = null;
+        $mime = 'image/jpeg';
+
+        if (file_exists($imagePath) && is_file($imagePath)) {
+            $mime = @mime_content_type($imagePath) ?: 'image/jpeg';
+            $fileContents = @file_get_contents($imagePath);
+        } elseif (Storage::disk('public')->exists($imagePath)) {
             $storagePath = Storage::disk('public')->path($imagePath);
-            if (file_exists($storagePath)) {
-                $absolutePath = $storagePath;
-            } else {
-                Log::error("[ReceiptScanner] File gambar tidak ditemukan: {$imagePath}");
-                return [
-                    'is_transfer_receipt' => false,
-                    'status' => 'UNKNOWN',
-                    'amount' => null,
-                    'error' => 'File gambar tidak ditemukan di server',
-                ];
+            $mime = @mime_content_type($storagePath) ?: 'image/jpeg';
+            $fileContents = @file_get_contents($storagePath);
+        } else {
+            // Fallback untuk URL eksternal atau Google Drive disk
+            try {
+                if (filter_var($imagePath, FILTER_VALIDATE_URL)) {
+                    $resp = Http::timeout(15)->get($imagePath);
+                    if ($resp->successful()) {
+                        $fileContents = $resp->body();
+                        $mime = $resp->header('Content-Type') ?: 'image/jpeg';
+                    }
+                } elseif (config('filesystems.disks.google') && Storage::disk('google')->exists($imagePath)) {
+                    $fileContents = Storage::disk('google')->get($imagePath);
+                    $mime = Storage::disk('google')->mimeType($imagePath) ?: 'image/jpeg';
+                }
+            } catch (\Throwable $e) {
+                Log::warning("[ReceiptScanner] Gagal membaca gambar dari disk google/URL: " . $e->getMessage());
             }
         }
 
-        $mime = mime_content_type($absolutePath) ?: 'image/jpeg';
-        $fileContents = file_get_contents($absolutePath);
-        if ($fileContents === false) {
+        if ($fileContents === null || $fileContents === false) {
+            Log::error("[ReceiptScanner] File gambar tidak dapat dibaca di server: {$imagePath}");
             return [
                 'is_transfer_receipt' => false,
                 'status' => 'UNKNOWN',
                 'amount' => null,
-                'error' => 'Gagal membaca isi file gambar',
+                'error' => 'File gambar tidak ditemukan atau gagal dibaca di server',
             ];
         }
 
@@ -161,9 +172,10 @@ Kembalikan respon HANYA dalam format JSON valid tanpa tanda markdown (```json):
      *
      * @param Order|Collection $orders
      * @param string|array $imagePaths
+     * @param array $localScanPaths Optional local file paths for zero-latency direct AI scanning (Option 1)
      * @return array
      */
-    public function verifyAndApplyPayment($orders, string|array $imagePaths): array
+    public function verifyAndApplyPayment($orders, string|array $imagePaths, array $localScanPaths = []): array
     {
         $orderCollection = $orders instanceof Collection ? $orders : collect([$orders]);
         if ($orderCollection->isEmpty()) {
@@ -203,8 +215,13 @@ Kembalikan respon HANYA dalam format JSON valid tanpa tanda markdown (```json):
 
         // Pindai setiap gambar yang diunggah
         foreach ($paths as $idx => $path) {
-            $scan = $this->scanReceipt($path);
-            $scan['file_path'] = $path;
+            // Opsi 1: Prioritaskan path file lokal sementara jika ada dan valid
+            $scanTarget = (!empty($localScanPaths[$idx]) && file_exists($localScanPaths[$idx]))
+                ? $localScanPaths[$idx]
+                : $path;
+
+            $scan = $this->scanReceipt($scanTarget);
+            $scan['file_path'] = $path; // Tetap simpan path resmi/URL drive untuk database & frontend
             $scan['file_index'] = $idx + 1;
             $scannedResults[] = $scan;
 

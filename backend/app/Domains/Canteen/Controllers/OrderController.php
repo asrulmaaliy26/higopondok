@@ -1537,7 +1537,9 @@ class OrderController extends Controller
             $targetUser = $order->user ?: $user;
 
             $paths = [];
+            $tempLocalPaths = [];
             foreach ($request->file('proof_of_payment') as $file) {
+                $tempLocalPaths[] = $file->getRealPath();
                 $paths[] = $this->storeOrderProofImage($file, $order, 'proof');
             }
 
@@ -1568,24 +1570,26 @@ class OrderController extends Controller
             return [
                 'order' => !empty($order->checkout_id) ? $order->fresh() : $order,
                 'uploaded_paths' => $paths,
+                'temp_local_paths' => $tempLocalPaths,
                 'checkout_id' => $order->checkout_id,
             ];
         });
 
         $order = $uploadResult['order'];
         $uploadedPaths = $uploadResult['uploaded_paths'] ?? [];
+        $tempLocalPaths = $uploadResult['temp_local_paths'] ?? [];
         $checkoutId = $uploadResult['checkout_id'];
 
         $targetOrders = !empty($checkoutId)
             ? Order::where('checkout_id', $checkoutId)->get()
             : collect([$order]);
 
-        // Verifikasi otomatis bukti bayar dengan Google Gemini AI Vision (Mendukung multi-gambar)
+        // Verifikasi otomatis bukti bayar dengan Google Gemini AI Vision (Mendukung multi-gambar & Opsi 1 scan langsung)
         $aiResult = null;
         if (!empty($uploadedPaths)) {
             try {
                 $scanner = app(\App\Domains\Canteen\Services\ReceiptScannerService::class);
-                $aiResult = $scanner->verifyAndApplyPayment($targetOrders, $uploadedPaths);
+                $aiResult = $scanner->verifyAndApplyPayment($targetOrders, $uploadedPaths, $tempLocalPaths);
             } catch (\Throwable $e) {
                 \Illuminate\Support\Facades\Log::error("[OrderController] Gagal verifikasi bukti transfer AI: " . $e->getMessage());
             }
@@ -1686,7 +1690,9 @@ class OrderController extends Controller
 
             $targetOrder = $orders->first();
             $paths = [];
+            $tempLocalPaths = [];
             foreach ($request->file('proof_of_payment') as $file) {
+                $tempLocalPaths[] = $file->getRealPath();
                 $paths[] = $this->storeOrderProofImage($file, $targetOrder, 'proof');
             }
 
@@ -1704,18 +1710,20 @@ class OrderController extends Controller
             return [
                 'orders' => $orders,
                 'uploaded_paths' => $paths,
+                'temp_local_paths' => $tempLocalPaths,
             ];
         });
 
         $orders = $uploadResult['orders'];
         $uploadedPaths = $uploadResult['uploaded_paths'] ?? [];
+        $tempLocalPaths = $uploadResult['temp_local_paths'] ?? [];
 
-        // Verifikasi otomatis bukti bayar dengan Google Gemini AI Vision (Mendukung multi-gambar)
+        // Verifikasi otomatis bukti bayar dengan Google Gemini AI Vision (Mendukung multi-gambar & Opsi 1 scan langsung)
         $aiResult = null;
         if (!empty($uploadedPaths)) {
             try {
                 $scanner = app(\App\Domains\Canteen\Services\ReceiptScannerService::class);
-                $aiResult = $scanner->verifyAndApplyPayment($orders, $uploadedPaths);
+                $aiResult = $scanner->verifyAndApplyPayment($orders, $uploadedPaths, $tempLocalPaths);
             } catch (\Throwable $e) {
                 \Illuminate\Support\Facades\Log::error("[OrderController] Gagal verifikasi checkout proof AI: " . $e->getMessage());
             }

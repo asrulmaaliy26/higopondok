@@ -197,4 +197,53 @@ class OrderLifecycle_Phase3_AiValidationTest extends TestCase
         $this->assertNotEquals('paid', $newOrder->payment_status);
         $this->assertEquals('waiting_confirmation', $newOrder->payment_status);
     }
+
+    public function test_option1_local_temp_path_is_used_for_scanning_when_drive_url_is_stored()
+    {
+        $order = Order::create([
+            'checkout_id' => 'CHK-AI-DRIVE-01',
+            'user_id' => $this->santriUser->id,
+            'canteen_id' => $this->canteen->id,
+            'status' => 'pending',
+            'payment_status' => 'unpaid',
+            'total_price' => 50000,
+            'delivery_fee' => 3000,
+            'admin_fee' => 1000,
+            'delivery_location' => 'Kamar Abu Bakar 09',
+        ]);
+
+        $tempFile = tempnam(sys_get_temp_dir(), 'proof_test_');
+        file_put_contents($tempFile, 'dummy-image-binary-data');
+
+        $driveUrl = 'https://drive.google.com/uc?id=mockDriveId999';
+
+        $mockScanner = Mockery::mock(ReceiptScannerService::class)->makePartial();
+        $mockScanner->shouldReceive('scanReceipt')
+            ->once()
+            ->with($tempFile) // Memastikan AI menerima path lokal sementara, bukan Drive URL
+            ->andReturn([
+                'is_transfer_receipt' => true,
+                'status' => 'SUCCESS',
+                'amount' => 50000.0,
+                'ref_number' => 'REF-DRIVE-OPTI-1',
+                'source_bank' => 'BCA',
+                'date' => '2026-10-16',
+                'time' => '20:00',
+                'ai_note' => 'Struk via local temp berhasil dibaca.',
+            ]);
+
+        $this->app->instance(ReceiptScannerService::class, $mockScanner);
+
+        $result = $mockScanner->verifyAndApplyPayment(collect([$order]), [$driveUrl], [$tempFile]);
+
+        @unlink($tempFile);
+
+        $this->assertTrue($result['verified']);
+        // Pastikan path yang tercatat ke DB tetap Drive URL
+        $this->assertEquals($driveUrl, $result['scan']['file_path']);
+
+        $order->refresh();
+        $this->assertEquals('paid', $order->payment_status);
+        $this->assertEquals('processing', $order->status);
+    }
 }
