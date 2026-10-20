@@ -3006,7 +3006,8 @@ export default function TugasKurir() {
           
           <div className="flex-1 overflow-y-auto flex flex-col items-center gap-3 p-3 pb-10">
             {selectedProofs.map((proof, idx) => {
-              const fileType = getFileType(proof);
+              const displayUrl = getStorageUrl(proof);
+              const fileType = getFileType(displayUrl);
               const fileName = getFileNameFromPath(proof);
 
               if (fileType === 'pdf') {
@@ -3019,12 +3020,12 @@ export default function TugasKurir() {
                       <span className="px-1.5 py-0.2 bg-red-900/40 text-red-300 rounded-none font-mono text-[10px]">PDF</span>
                     </div>
                     <iframe 
-                      src={proof} 
+                      src={displayUrl} 
                       title={`Bukti PDF ${idx + 1}`} 
                       className="w-full h-[55vh] rounded-none bg-white border border-gray-700" 
                     />
                     <a
-                      href={proof}
+                      href={displayUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="w-full py-2 px-3 bg-green-700 hover:bg-green-800 active:scale-98 text-white rounded-none text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-md"
@@ -3041,7 +3042,7 @@ export default function TugasKurir() {
                     <div className="w-full flex items-center justify-between px-1 text-xs text-gray-400">
                       <span className="font-medium">Bukti {idx + 1} dari {selectedProofs.length}</span>
                       <a 
-                        href={proof} 
+                        href={displayUrl} 
                         target="_blank" 
                         rel="noreferrer" 
                         className="text-green-400 hover:text-green-300 flex items-center gap-1 text-[11px]"
@@ -3050,7 +3051,7 @@ export default function TugasKurir() {
                       </a>
                     </div>
                     <img 
-                      src={proof}
+                      src={displayUrl}
                       alt={`Foto ${idx + 1}`}
                       className="w-full rounded-none shadow-2xl object-contain bg-black/40"
                       style={{ maxHeight: '75vh' }}

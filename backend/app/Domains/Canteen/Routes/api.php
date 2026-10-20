@@ -89,3 +89,4 @@ Route::get('/vouchers', [\App\Domains\Canteen\Controllers\VoucherController::cla
 Route::get('/banners', [\App\Domains\Canteen\Controllers\CanteenBannerController::class, 'index']);
 Route::get('/pricing-config', [\App\Domains\Canteen\Controllers\OrderController::class, 'pricingConfig']);
 Route::get('/ai/support-contacts', [\App\Domains\Canteen\Controllers\AiChatOrderController::class, 'supportContacts']);
+Route::get('/media/drive-stream', [\App\Domains\Canteen\Controllers\MediaStreamController::class, 'stream']);

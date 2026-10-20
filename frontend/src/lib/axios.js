@@ -12,6 +12,17 @@ const baseURL = `${baseApiUrl}/api`;
 
 export const getStorageUrl = (path) => {
   if (!path) return null;
+  if (typeof path !== 'string') return path;
+
+  // Intersep Google Drive URL agar bisa ditampilkan langsung di browser tanpa terblokir CORS / 403
+  const driveIdMatch = path.match(/[?&]id=([a-zA-Z0-9_-]{15,100})/) ||
+                       path.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]{15,100})/);
+
+  if (driveIdMatch && driveIdMatch[1]) {
+    const fileId = driveIdMatch[1];
+    return `${baseApiUrl}/api/media/drive-stream?id=${fileId}`;
+  }
+
   if (path.startsWith('http')) return path;
   const cleanPath = path.startsWith('/storage/')
     ? path.substring(9)
@@ -22,6 +33,7 @@ export const getStorageUrl = (path) => {
     : path;
   return `${baseApiUrl}/storage/${cleanPath}`;
 };
+
 
 export const getPublicUrl = (path) => {
   if (!path) return null;

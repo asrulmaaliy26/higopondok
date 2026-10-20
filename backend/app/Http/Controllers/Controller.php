@@ -240,4 +240,77 @@ abstract class Controller
         $dir = $this->getOrderProofUploadPath($order, $proofType);
         return $this->storeOptimizedImage($file, null, null, $disk, $dir);
     }
+
+    /**
+     * Upload / pindahkan bukti pembayaran dari disk lokal ke Google Drive
+     * saat status pesanan diverifikasi / diubah menjadi lunas.
+     *
+     * @param \App\Domains\Canteen\Order $order
+     * @param string $proofField ('proof_of_payment', 'proof_of_purchase', 'proof_of_delivery')
+     * @return array Updated proofs
+     */
+    public function syncProofToGoogleDrive($order, string $proofField = 'proof_of_payment'): array
+    {
+        $proofs = $order->{$proofField};
+        if (empty($proofs)) {
+            return [];
+        }
+
+        $proofList = is_array($proofs) ? $proofs : [$proofs];
+        $updatedProofs = [];
+        $changed = false;
+
+        $hasGoogleDisk = !empty(config('filesystems.disks.google.clientId')) || config('filesystems.default') === 'google';
+
+        foreach ($proofList as $path) {
+            if (!is_string($path)) {
+                $updatedProofs[] = $path;
+                continue;
+            }
+
+            // Jika sudah berupa Google Drive URL, pertahankan
+            if (str_contains($path, 'drive.google.com') || str_contains($path, 'drive-stream') || !$hasGoogleDisk) {
+                $updatedProofs[] = $path;
+                continue;
+            }
+
+            // Bersihkan path lokal di disk public
+            $cleanPath = ltrim(str_replace(['/storage/', 'storage/'], '', $path), '/');
+
+            try {
+                if (\Illuminate\Support\Facades\Storage::disk('public')->exists($cleanPath)) {
+                    $content = \Illuminate\Support\Facades\Storage::disk('public')->get($cleanPath);
+                    
+                    // Upload ke Google Drive
+                    \Illuminate\Support\Facades\Storage::disk('google')->put($cleanPath, $content);
+                    $driveUrl = \Illuminate\Support\Facades\Storage::disk('google')->url($cleanPath);
+
+                    if ($driveUrl) {
+                        $updatedProofs[] = $driveUrl;
+                        $changed = true;
+                        continue;
+                    }
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning("[syncProofToGoogleDrive] Gagal upload {$cleanPath} ke Google Drive: " . $e->getMessage());
+            }
+
+            $updatedProofs[] = $path;
+        }
+
+        if ($changed) {
+            $order->{$proofField} = $updatedProofs;
+            $order->save();
+
+            // Jika ada checkout_id, sinkronkan ke pesanan terkait
+            if (!empty($order->checkout_id)) {
+                \App\Domains\Canteen\Order::where('checkout_id', $order->checkout_id)
+                    ->where('id', '!=', $order->id)
+                    ->update([$proofField => json_encode($updatedProofs)]);
+            }
+        }
+
+        return $updatedProofs;
+    }
 }
+

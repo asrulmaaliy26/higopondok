@@ -4205,7 +4205,8 @@ ${itemsListText}
           {/* Images & Documents */}
           <div className="flex-1 overflow-y-auto flex flex-col items-center gap-3 p-3 pb-8">
             {selectedProofs.map((proof, idx) => {
-              const fileType = getFileType(proof);
+              const displayUrl = getStorageUrl(proof);
+              const fileType = getFileType(displayUrl);
               const fileName = getFileNameFromPath(proof);
 
               if (fileType === 'pdf') {
@@ -4218,12 +4219,12 @@ ${itemsListText}
                       <span className="px-1.5 py-0.5 bg-red-900/40 text-red-300 rounded-none font-mono text-[9px]">PDF</span>
                     </div>
                     <iframe 
-                      src={proof} 
+                      src={displayUrl} 
                       title={`Bukti PDF ${idx + 1}`} 
                       className="w-full h-[55vh] rounded-none bg-white border border-gray-700" 
                     />
                     <a
-                      href={proof}
+                      href={displayUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="w-full py-1.5 px-3 bg-green-600 hover:bg-green-700 text-white rounded-none text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs"
@@ -4242,7 +4243,7 @@ ${itemsListText}
                       <div className="flex items-center gap-1.5">
                         <button 
                           type="button"
-                          onClick={() => setFullscreenImage(proof)}
+                          onClick={() => setFullscreenImage(displayUrl)}
                           className="px-2 py-0.5 bg-green-600/20 hover:bg-green-600/30 text-green-400 hover:text-green-300 rounded-none text-[10px] font-bold flex items-center gap-1 transition-all border border-green-500/30 cursor-pointer"
                           title="Buka Pratinjau Layar Penuh"
                         >
@@ -4250,7 +4251,7 @@ ${itemsListText}
                           <span>Layar Penuh</span>
                         </button>
                         <a 
-                          href={proof} 
+                          href={displayUrl} 
                           target="_blank" 
                           rel="noopener noreferrer" 
                           className="p-1 text-gray-400 hover:text-white rounded-none hover:bg-white/10 transition-colors"
@@ -4261,9 +4262,10 @@ ${itemsListText}
                       </div>
                     </div>
                     <img 
-                      src={proof} 
+                      src={displayUrl} 
                       alt={`Bukti ${idx + 1}`}
-                      onClick={() => setFullscreenImage(proof)}
+                      onClick={() => setFullscreenImage(displayUrl)}
+
                       className="w-full rounded-none shadow-xl object-contain bg-black/40 cursor-zoom-in hover:brightness-105 transition-all"
                       style={{ maxHeight: '75vh' }}
                       title="Klik gambar untuk memperbesar"

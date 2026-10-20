@@ -579,20 +579,26 @@ class OrderController extends Controller
         }
 
         // Jika pembayaran LUNAS dan status pesanan masih pending, otomatis lanjutkan ke processing & kurir
-        if ($paymentStatus === 'paid' && $order->status === 'pending') {
-            $order->status = 'processing';
-            if (!$order->courier_id) {
-                $assignedCourierId = DB::table('canteen_couriers')
-                    ->where('canteen_id', $order->canteen_id)
-                    ->value('courier_id');
-                if (!$assignedCourierId) {
-                    $assignedCourierId = \App\Domains\Auth\User::role('kurir')->value('id');
-                }
-                if ($assignedCourierId) {
-                    $order->courier_id = $assignedCourierId;
+        if ($paymentStatus === 'paid') {
+            // Sinkronkan dan upload berkas bukti lokal ke Google Drive begitu status pembayaran sah Lunas
+            $this->syncProofToGoogleDrive($order, 'proof_of_payment');
+
+            if ($order->status === 'pending') {
+                $order->status = 'processing';
+                if (!$order->courier_id) {
+                    $assignedCourierId = DB::table('canteen_couriers')
+                        ->where('canteen_id', $order->canteen_id)
+                        ->value('courier_id');
+                    if (!$assignedCourierId) {
+                        $assignedCourierId = \App\Domains\Auth\User::role('kurir')->value('id');
+                    }
+                    if ($assignedCourierId) {
+                        $order->courier_id = $assignedCourierId;
+                    }
                 }
             }
         }
+
 
         $order->save();
 
@@ -1540,7 +1546,8 @@ class OrderController extends Controller
             $tempLocalPaths = [];
             foreach ($request->file('proof_of_payment') as $file) {
                 $tempLocalPaths[] = $file->getRealPath();
-                $paths[] = $this->storeOrderProofImage($file, $order, 'proof');
+                // Simpan di disk 'public' lokal terlebih dahulu untuk pengecekan cepat AI
+                $paths[] = $this->storeOrderProofImage($file, $order, 'proof', 'public');
             }
 
             $existingProofs = is_array($order->proof_of_payment) ? $order->proof_of_payment : [];
@@ -1594,6 +1601,13 @@ class OrderController extends Controller
                 \Illuminate\Support\Facades\Log::error("[OrderController] Gagal verifikasi bukti transfer AI: " . $e->getMessage());
             }
         }
+
+        // Jika AI berhasil memvalidasi pembayaran dan mengubah status menjadi LUNAS,
+        // otomatis sinkronkan & unggah berkas bukti lokal ke Google Drive!
+        if (!empty($aiResult) && ($aiResult['verified'] ?? false)) {
+            $this->syncProofToGoogleDrive($order, 'proof_of_payment');
+        }
+
 
         // --- Catat Activity Log hasil verifikasi AI ---
         $uploaderUser = $request->user();
@@ -1693,7 +1707,8 @@ class OrderController extends Controller
             $tempLocalPaths = [];
             foreach ($request->file('proof_of_payment') as $file) {
                 $tempLocalPaths[] = $file->getRealPath();
-                $paths[] = $this->storeOrderProofImage($file, $targetOrder, 'proof');
+                // Simpan di disk 'public' lokal terlebih dahulu untuk pengecekan cepat AI
+                $paths[] = $this->storeOrderProofImage($file, $targetOrder, 'proof', 'public');
             }
 
             $now = now('Asia/Jakarta');
@@ -1728,6 +1743,13 @@ class OrderController extends Controller
                 \Illuminate\Support\Facades\Log::error("[OrderController] Gagal verifikasi checkout proof AI: " . $e->getMessage());
             }
         }
+
+        // Jika AI berhasil memvalidasi pembayaran dan mengubah status menjadi LUNAS,
+        // otomatis sinkronkan & unggah berkas bukti lokal ke Google Drive!
+        if (!empty($aiResult) && ($aiResult['verified'] ?? false) && $orders->isNotEmpty()) {
+            $this->syncProofToGoogleDrive($orders->first(), 'proof_of_payment');
+        }
+
 
         // --- Catat Activity Log hasil verifikasi AI (Checkout Batch) ---
         $uploaderUser  = $request->user();

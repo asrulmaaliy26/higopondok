@@ -246,4 +246,49 @@ class OrderLifecycle_Phase3_AiValidationTest extends TestCase
         $this->assertEquals('paid', $order->payment_status);
         $this->assertEquals('processing', $order->status);
     }
+
+    public function test_ai_checks_first_and_automatically_uploads_to_drive_when_status_becomes_paid()
+    {
+        $order = Order::create([
+            'checkout_id' => 'CHK-AI-SYNC-DRIVE-TEST',
+            'user_id' => $this->santriUser->id,
+            'canteen_id' => $this->canteen->id,
+            'status' => 'pending',
+            'payment_status' => 'unpaid',
+            'total_price' => 50000,
+            'delivery_fee' => 3000,
+            'admin_fee' => 1000,
+            'delivery_location' => 'Kamar Abu Bakar 09',
+        ]);
+
+        $localPath = 'proofs/test_struk.jpg';
+        $order->proof_of_payment = [$localPath];
+        $order->save();
+
+        $mockPublicDisk = Mockery::mock();
+        $mockPublicDisk->shouldReceive('exists')->with('proofs/test_struk.jpg')->andReturn(true);
+        $mockPublicDisk->shouldReceive('get')->with('proofs/test_struk.jpg')->andReturn('dummy-binary-content');
+
+        $mockGoogleDisk = Mockery::mock();
+        $mockGoogleDisk->shouldReceive('put')->with('proofs/test_struk.jpg', 'dummy-binary-content')->once()->andReturn(true);
+        $mockGoogleDisk->shouldReceive('url')->with('proofs/test_struk.jpg')->once()->andReturn('https://drive.google.com/uc?id=mockGoogleDriveId12345&export=media');
+
+        \Illuminate\Support\Facades\Storage::shouldReceive('disk')->with('public')->andReturn($mockPublicDisk);
+        \Illuminate\Support\Facades\Storage::shouldReceive('disk')->with('google')->andReturn($mockGoogleDisk);
+
+        // Controller menjalankan syncProofToGoogleDrive saat status LUNAS
+        $controller = new class extends \App\Http\Controllers\Controller {
+            public function sync($ord) {
+                return $this->syncProofToGoogleDrive($ord, 'proof_of_payment');
+            }
+        };
+
+        $synced = $controller->sync($order);
+
+        $this->assertEquals(['https://drive.google.com/uc?id=mockGoogleDriveId12345&export=media'], $synced);
+        $order->refresh();
+        $this->assertEquals(['https://drive.google.com/uc?id=mockGoogleDriveId12345&export=media'], $order->proof_of_payment);
+    }
+
 }
+

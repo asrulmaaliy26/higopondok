@@ -3231,7 +3231,8 @@ export default function AdminPesanan() {
 
           <div className="flex-1 overflow-y-auto p-3 flex flex-col items-center gap-3 pb-8">
             {selectedProofs.map((proof, idx) => {
-              const fileType = getFileType(proof);
+              const displayUrl = getStorageUrl(proof);
+              const fileType = getFileType(displayUrl);
               const fileName = getFileNameFromPath(proof);
 
               return (
@@ -3239,7 +3240,7 @@ export default function AdminPesanan() {
                   <div className="w-full flex items-center justify-between px-1 text-xs text-gray-400">
                     <span className="font-medium text-[11px]">Bukti {idx + 1} dari {selectedProofs.length}</span>
                     <a 
-                      href={proof} 
+                      href={displayUrl} 
                       target="_blank" 
                       rel="noreferrer" 
                       className="text-green-400 hover:text-green-300 flex items-center gap-1 text-[11px]"
@@ -3247,23 +3248,35 @@ export default function AdminPesanan() {
                       Buka Resolusi Penuh <ExternalLink className="w-3 h-3" />
                     </a>
                   </div>
-                  <img
-                    src={proof}
-                    alt={`Bukti ${idx + 1}`}
-                    className="w-full rounded-none object-contain max-h-[75vh] bg-black/40 border border-gray-800"
-                    onError={(e) => {
-                      e.target.onerror = null;
-                      e.target.style.display = 'none';
-                      e.target.nextSibling.style.display = 'flex';
-                    }}
-                  />
+
+                  {fileType === 'pdf' ? (
+                    <iframe 
+                      src={displayUrl} 
+                      title={`Bukti ${idx + 1}`} 
+                      className="w-full h-[60vh] rounded-none bg-white border border-gray-800" 
+                    />
+                  ) : (
+                    <img
+                      src={displayUrl}
+                      alt={`Bukti ${idx + 1}`}
+                      className="w-full rounded-none object-contain max-h-[75vh] bg-black/40 border border-gray-800"
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.style.display = 'none';
+                        if (e.target.nextSibling) {
+                          e.target.nextSibling.style.display = 'flex';
+                        }
+                      }}
+                    />
+                  )}
+
                   <div
                     style={{ display: 'none' }}
                     className="w-full h-40 rounded-none bg-gray-800 border border-gray-700 flex flex-col items-center justify-center text-gray-400 text-sm gap-2"
                   >
                     <FileText className="w-8 h-8 opacity-40 text-green-400" />
                     <span className="text-xs">Pratinjau langsung tidak tersedia untuk format ini</span>
-                    <a href={proof} target="_blank" rel="noreferrer" className="text-green-400 text-xs underline break-all px-4 text-center">Buka Berkas ({fileName})</a>
+                    <a href={displayUrl} target="_blank" rel="noreferrer" className="text-green-400 text-xs underline break-all px-4 text-center">Buka Berkas ({fileName})</a>
                   </div>
                 </div>
               );

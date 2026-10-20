@@ -4,6 +4,12 @@
 
 export const getFileType = (urlOrName = '') => {
   if (!urlOrName) return 'unknown';
+
+  // Google Drive proxy stream atau direct drive link adalah gambar/foto bukti
+  if (urlOrName.includes('/api/media/drive-stream') || urlOrName.includes('drive.google.com')) {
+    return 'image';
+  }
+
   const clean = urlOrName.split('?')[0].toLowerCase();
   
   if (clean.match(/\.(jpeg|jpg|png|webp|gif|svg|bmp|ico)$/)) {
@@ -60,6 +66,9 @@ export const formatFileSize = (bytes) => {
 
 export const getFileNameFromPath = (path = '') => {
   if (!path) return 'Berkas Bukti';
+  if (path.includes('drive.google.com') || path.includes('/api/media/drive-stream')) {
+    return 'Foto Bukti (Google Drive)';
+  }
   const parts = path.split('/');
   return parts[parts.length - 1] || path;
 };
