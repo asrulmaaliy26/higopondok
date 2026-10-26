@@ -7,12 +7,12 @@ use App\Domains\Auth\User;
 use App\Domains\Canteen\Canteen;
 use App\Domains\Canteen\Product;
 use App\Domains\Canteen\Order;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Spatie\Permission\Models\Role;
 
 class AiSmartOrderingTest extends TestCase
 {
-    use RefreshDatabase;
+    use DatabaseTransactions;
 
     protected $user;
     protected $canteen;
@@ -48,12 +48,22 @@ class AiSmartOrderingTest extends TestCase
             ['name' => 'Mie Gacoan AI Pondok'],
             [
                 'user_id' => $canteenUser->id,
+                'category' => 'kota',
+                'delivery_fee' => 3000,
                 'status' => 'approved',
                 'is_open' => true,
                 'open_time' => '00:00:00',
                 'close_time' => '23:59:59',
             ]
         );
+        $this->canteen->update([
+            'category' => 'kota',
+            'delivery_fee' => 3000,
+            'status' => 'approved',
+            'is_open' => true,
+            'open_time' => '00:00:00',
+            'close_time' => '23:59:59',
+        ]);
 
         $this->mieProduct = Product::firstOrCreate(
             ['canteen_id' => $this->canteen->id, 'name' => 'Mie Gacoan AI'],

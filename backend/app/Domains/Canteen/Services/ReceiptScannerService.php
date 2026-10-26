@@ -12,32 +12,15 @@ use Carbon\Carbon;
 
 class ReceiptScannerService
 {
-    /**
-     * Model Gemini yang digunakan secara berurutan jika terjadi kendala/demand spike
-     */
-    protected array $models = [
-        'gemini-2.5-flash',
-        'gemini-2.0-flash',
-        'gemini-flash-latest',
-        'gemini-flash-lite-latest',
-        'gemini-3-flash-preview',
-    ];
-
-    /**
-     * Dapatkan API Key Gemini
-     */
-    protected function getApiKey(): ?string
-    {
-        return config('services.gemini.api_key') ?: env('GEMINI_API_KEY');
-    }
+    use GeminiModelPoolTrait;
 
     /**
      * Pindai dan ekstrak data dari gambar struk / bukti pembayaran
      */
     public function scanReceipt(string $imagePath): array
     {
-        $apiKey = $this->getApiKey();
-        if (empty($apiKey)) {
+        $apiKeys = $this->getActiveApiKeys();
+        if (empty($apiKeys)) {
             Log::warning('[ReceiptScanner] GEMINI_API_KEY belum disetel di backend/.env');
             return [
                 'is_transfer_receipt' => false,
@@ -101,13 +84,13 @@ Kembalikan respon HANYA dalam format JSON valid tanpa tanda markdown (```json):
   "is_transfer_receipt": boolean (true jika gambar ini memang bukti bayar/transfer uang/m-banking/QRIS/struk e-wallet),
   "status": "SUCCESS" | "FAILED" | "PENDING" | "UNKNOWN" (status transfer: Berhasil/Sukses/Selesai/Paid => "SUCCESS", Gagal => "FAILED", Menunggu => "PENDING"),
   "amount": integer atau null (total nominal bersih yang ditransfer/dibayar, angka bulat tanpa simbol mata uang Rp atau titik/koma, contoh: 25000),
-  "date": "YYYY-MM-DD" atau null (tanggal transaksi jika tertera),
-  "time": "HH:MM" atau null (jam & menit transaksi jika tertera),
-  "ref_number": string atau null (nomor referensi / ID transaksi / no ref unik),
+  "date": "YYYY-MM-DD" atau null (WAJIB cari dan isi tanggal transaksi pada struk. Konversikan ke format YYYY-MM-DD, contoh: "26 Okt 2026" atau "26/10/2026" menjadi "2026-10-26"),
+  "time": "HH:MM" atau null (jam & menit transaksi, contoh: "14:35"),
+  "ref_number": string atau null (nomor referensi / ID transaksi / no ref unik / RRN),
   "source_bank": string atau null (nama bank atau aplikasi pengirim seperti BCA, BRI, Mandiri, BNI, BSI, QRIS, Dana, GoPay, OVO, ShopeePay),
   "recipient_name": string atau null (nama penerima transfer jika terlihat),
   "confidence_score": float (skor keyakinan AI antara 0.0 hingga 1.0),
-  "ai_note": string (catatan detail kondisi bukti transfer untuk superadmin: sebutkan apakah gambar jelas/buram/terpotong, ada tanggal transaksi atau tidak, kejelasan nominal, atau jika bukan bukti bayar)
+  "ai_note": string (catatan detail kondisi bukti transfer untuk superadmin: sebutkan apakah gambar jelas/buram/terpotong, tanggal transaksi, kejelasan nominal, atau jika bukan bukti bayar)
 }';
 
         $payload = [
@@ -130,31 +113,39 @@ Kembalikan respon HANYA dalam format JSON valid tanpa tanda markdown (```json):
             ],
         ];
 
-        foreach ($this->models as $modelName) {
-            try {
-                $endpoint = "https://generativelanguage.googleapis.com/v1beta/models/{$modelName}:generateContent?key={$apiKey}";
+        $models = $this->getAvailableModels();
 
-                $response = Http::withHeaders([
-                    'Content-Type' => 'application/json',
-                ])
-                ->timeout(10)
-                ->post($endpoint, $payload);
+        foreach ($apiKeys as $apiKey) {
+            foreach ($models as $modelName) {
+                try {
+                    $endpoint = "https://generativelanguage.googleapis.com/v1beta/models/{$modelName}:generateContent?key={$apiKey}";
 
-                if ($response->successful()) {
-                    $jsonRes = $response->json();
-                    $text = $jsonRes['candidates'][0]['content']['parts'][0]['text'] ?? null;
-                    if ($text) {
-                        $parsed = json_decode(trim($text), true);
-                        if (is_array($parsed)) {
-                            $parsed['model_used'] = $modelName;
-                            return $parsed;
+                    $response = Http::withHeaders([
+                        'Content-Type' => 'application/json',
+                    ])
+                    ->timeout(10)
+                    ->post($endpoint, $payload);
+
+                    if ($response->successful()) {
+                        $jsonRes = $response->json();
+                        $text = $jsonRes['candidates'][0]['content']['parts'][0]['text'] ?? null;
+                        if ($text) {
+                            $parsed = json_decode(trim($text), true);
+                            if (is_array($parsed)) {
+                                $parsed['model_used'] = $modelName;
+                                return $this->normalizeScanResult($parsed);
+                            }
                         }
+                    } elseif ($response->status() === 429 || $response->status() === 403) {
+                        Log::warning("[ReceiptScanner] Rate limit pada model {$modelName}: HTTP {$response->status()}");
+                        $this->recordModelRateLimit($modelName, 30);
+                        continue;
+                    } else {
+                        Log::warning("[ReceiptScanner] Model {$modelName} gagal: HTTP {$response->status()} - {$response->body()}");
                     }
-                } else {
-                    Log::warning("[ReceiptScanner] Model {$modelName} gagal: HTTP {$response->status()} - {$response->body()}");
+                } catch (\Throwable $e) {
+                    Log::warning("[ReceiptScanner] Error memanggil model {$modelName}: " . $e->getMessage());
                 }
-            } catch (\Throwable $e) {
-                Log::warning("[ReceiptScanner] Error memanggil model {$modelName}: " . $e->getMessage());
             }
         }
 
@@ -164,6 +155,78 @@ Kembalikan respon HANYA dalam format JSON valid tanpa tanda markdown (```json):
             'amount' => null,
             'error' => 'Semua model AI sedang sibuk atau tidak dapat merespons.',
         ];
+    }
+
+    /**
+     * Normalisasi & fallback ekstraksi cerdas tanggal, waktu, dan bank jika AI tidak mengisinya di JSON
+     */
+    protected function normalizeScanResult(array $parsed): array
+    {
+        $note = $parsed['ai_note'] ?? '';
+
+        // Ekstraksi tanggal cadangan dari ai_note jika date kosong
+        if (empty($parsed['date']) && $note) {
+            $monthMap = [
+                'jan' => '01', 'januari' => '01',
+                'feb' => '02', 'februari' => '02',
+                'mar' => '03', 'maret' => '03',
+                'apr' => '04', 'april' => '04',
+                'mei' => '05',
+                'jun' => '06', 'juni' => '06',
+                'jul' => '07', 'juli' => '07',
+                'agu' => '08', 'agustus' => '08',
+                'sep' => '09', 'september' => '09',
+                'okt' => '10', 'oktober' => '10',
+                'nov' => '11', 'november' => '11',
+                'des' => '12', 'desember' => '12',
+            ];
+
+            if (preg_match('/(\d{4})-(\d{2})-(\d{2})/', $note, $m)) {
+                $parsed['date'] = "{$m[1]}-{$m[2]}-{$m[3]}";
+            } elseif (preg_match('/(\d{1,2})\s+(jan(?:uari)?|feb(?:ruari)?|mar(?:et)?|apr(?:il)?|mei|jun(?:i)?|jul(?:i)?|agu(?:stus)?|sep(?:tember)?|okt(?:ober)?|nov(?:ember)?|des(?:ember)?)\s+(\d{4})/i', $note, $m)) {
+                $day = str_pad($m[1], 2, '0', STR_PAD_LEFT);
+                $month = $monthMap[strtolower($m[2])] ?? '01';
+                $year = $m[3];
+                $parsed['date'] = "{$year}-{$month}-{$day}";
+            } elseif (preg_match('/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/', $note, $m)) {
+                $day = str_pad($m[1], 2, '0', STR_PAD_LEFT);
+                $month = str_pad($m[2], 2, '0', STR_PAD_LEFT);
+                $year = $m[3];
+                $parsed['date'] = "{$year}-{$month}-{$day}";
+            }
+        }
+
+        // Ekstraksi jam transaksi jika kosong
+        if (empty($parsed['time']) && $note) {
+            if (preg_match('/(?:pukul|jam|waktu|pkl)?\s*([0-2]?\d:[0-5]\d)(?::[0-5]\d)?/i', $note, $m)) {
+                $parsed['time'] = $m[1];
+            }
+        }
+
+        // Ekstraksi nama bank jika kosong
+        if (empty($parsed['source_bank']) && $note) {
+            if (preg_match('/(?:mandiri|livin)/i', $note)) {
+                $parsed['source_bank'] = 'Mandiri';
+            } elseif (preg_match('/(?:brimo|bri)/i', $note)) {
+                $parsed['source_bank'] = 'BRI';
+            } elseif (preg_match('/(?:byond|bsi)/i', $note)) {
+                $parsed['source_bank'] = 'BSI';
+            } elseif (preg_match('/(?:bca)/i', $note)) {
+                $parsed['source_bank'] = 'BCA';
+            } elseif (preg_match('/(?:bni)/i', $note)) {
+                $parsed['source_bank'] = 'BNI';
+            } elseif (preg_match('/(?:dana)/i', $note)) {
+                $parsed['source_bank'] = 'Dana';
+            } elseif (preg_match('/(?:shopeepay|shopee)/i', $note)) {
+                $parsed['source_bank'] = 'ShopeePay';
+            } elseif (preg_match('/(?:gopay)/i', $note)) {
+                $parsed['source_bank'] = 'GoPay';
+            } elseif (preg_match('/(?:qris)/i', $note)) {
+                $parsed['source_bank'] = 'QRIS';
+            }
+        }
+
+        return $parsed;
     }
 
     /**
@@ -335,12 +398,19 @@ Kembalikan respon HANYA dalam format JSON valid tanpa tanda markdown (```json):
                     }
                 }
 
+                $firstValid = !empty($validReceipts[0]) ? $validReceipts[0] : ($allProofsCombined[0] ?? []);
                 $ocrData = [
                     'summary' => count($allProofsCombined) === 1 ? ($allProofsCombined[0]['summary'] ?? 'single_proof_verified') : 'multi_proof_verified',
                     'total_accumulated' => $accumulatedAmount,
                     'total_expected' => $totalExpected,
                     'valid_receipts_count' => count($validReceipts),
                     'proofs' => $allProofsCombined,
+                    'date' => $firstValid['date'] ?? null,
+                    'time' => $firstValid['time'] ?? null,
+                    'source_bank' => $firstValid['source_bank'] ?? null,
+                    'ref_number' => $firstValid['ref_number'] ?? $refNumbersString,
+                    'amount' => $accumulatedAmount,
+                    'is_transfer_receipt' => true,
                 ];
                 if ($overpaid > 0) {
                     $ocrData['overpaid_amount'] = $overpaid;
@@ -378,6 +448,7 @@ Kembalikan respon HANYA dalam format JSON valid tanpa tanda markdown (```json):
                     'amount' => $accumulatedAmount,
                     'valid_receipts_count' => count($validReceipts),
                     'ref_number' => $refNumbersString,
+                    'file_path' => $paths[0] ?? null,
                     'proofs' => $allProofsCombined,
                     'ai_note' => $combinedAiNotes,
                     'condition_note' => $conditionNote,
@@ -415,12 +486,19 @@ Kembalikan respon HANYA dalam format JSON valid tanpa tanda markdown (```json):
             if (!empty($refNumbersString)) {
                 $ord->payment_ref_number = $refNumbersString;
             }
+            $firstProof = !empty($validReceipts[0]) ? $validReceipts[0] : ($allProofsCombined[0] ?? []);
             $ocrData = [
                 'summary' => count($allProofsCombined) === 1 ? ($allProofsCombined[0]['summary'] ?? 'single_proof_pending') : 'multi_proof_pending',
                 'total_accumulated' => $accumulatedAmount,
                 'total_expected' => $totalExpected,
                 'valid_receipts_count' => count($validReceipts),
                 'proofs' => $allProofsCombined,
+                'date' => $firstProof['date'] ?? null,
+                'time' => $firstProof['time'] ?? null,
+                'source_bank' => $firstProof['source_bank'] ?? null,
+                'ref_number' => $firstProof['ref_number'] ?? $refNumbersString,
+                'amount' => $accumulatedAmount,
+                'is_transfer_receipt' => !empty($validReceipts) || (!empty($firstProof['is_transfer_receipt'])),
             ];
             $ocrData['ai_note'] = $combinedAiNotes ?: ($allProofsCombined[0]['ai_note'] ?? null);
             $ocrData['condition_note'] = $fullConditionNote;
@@ -437,6 +515,7 @@ Kembalikan respon HANYA dalam format JSON valid tanpa tanda markdown (```json):
                 'amount' => $accumulatedAmount,
                 'valid_receipts_count' => count($validReceipts),
                 'ref_number' => $refNumbersString,
+                'file_path' => $paths[0] ?? null,
                 'proofs' => $allProofsCombined,
                 'ai_note' => $combinedAiNotes,
                 'condition_note' => $fullConditionNote,

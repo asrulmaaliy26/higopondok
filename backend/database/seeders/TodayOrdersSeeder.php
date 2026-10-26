@@ -201,6 +201,16 @@ class TodayOrdersSeeder extends Seeder
                         }
                     }
 
+                    if ($status === 'cancelled') {
+                        \App\Domains\Admin\ActivityLog::create([
+                            'user_id' => $user->id,
+                            'action' => 'cancelled',
+                            'model_type' => 'Order',
+                            'model_id' => $order->id,
+                            'description' => "Pembatalan pesanan #{$order->id}: Pesanan dibatalkan oleh santri/admin",
+                        ]);
+                    }
+
                     $createdCount++;
                 }
             }

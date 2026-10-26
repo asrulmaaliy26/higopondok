@@ -50,6 +50,7 @@ class ComprehensiveSystemTest extends TestCase
             [
                 'name' => 'Kantin Barokah Test',
                 'description' => 'Kantin Uji Coba',
+                'category' => 'kota',
                 'delivery_fee' => 3000,
                 'status' => 'approved',
                 'open_time' => '00:00:00',
@@ -57,6 +58,8 @@ class ComprehensiveSystemTest extends TestCase
             ]
         );
         $this->canteen->update([
+            'category' => 'kota',
+            'delivery_fee' => 3000,
             'status' => 'approved',
             'open_time' => '00:00:00',
             'close_time' => '23:59:59',

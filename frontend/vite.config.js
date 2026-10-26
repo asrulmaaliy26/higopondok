@@ -10,7 +10,7 @@ export default defineConfig(({ command }) => ({
     VitePWA({
       registerType: 'autoUpdate',
       devOptions: {
-        enabled: true,
+        enabled: false,
       },
       includeAssets: [
         'favicon.svg',
@@ -128,6 +128,18 @@ export default defineConfig(({ command }) => ({
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
+  },
+  optimizeDeps: {
+    include: [
+      'react',
+      'react-dom',
+      'react-dom/client',
+      '@tanstack/react-query',
+      'react-hot-toast',
+      'lucide-react',
+      'axios',
+      'zustand',
+    ],
   },
   build: {
     outDir: 'dist',

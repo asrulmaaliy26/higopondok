@@ -5,13 +5,13 @@ namespace Tests\Feature;
 use App\Domains\Auth\User;
 use App\Domains\Canteen\Canteen;
 use App\Domains\Canteen\Services\AiSmartOrderingService;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class WhatsAppDefaultGreetingTest extends TestCase
 {
-    use RefreshDatabase;
+    use DatabaseTransactions;
 
     protected User $adminUser;
     protected User $waliUser;

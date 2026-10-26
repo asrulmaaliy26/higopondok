@@ -268,6 +268,7 @@ class OrderLifecycle_Phase3_AiValidationTest extends TestCase
         $mockPublicDisk = Mockery::mock();
         $mockPublicDisk->shouldReceive('exists')->with('proofs/test_struk.jpg')->andReturn(true);
         $mockPublicDisk->shouldReceive('get')->with('proofs/test_struk.jpg')->andReturn('dummy-binary-content');
+        $mockPublicDisk->shouldReceive('delete')->with('proofs/test_struk.jpg')->andReturn(true);
 
         $mockGoogleDisk = Mockery::mock();
         $mockGoogleDisk->shouldReceive('put')->with('proofs/test_struk.jpg', 'dummy-binary-content')->once()->andReturn(true);

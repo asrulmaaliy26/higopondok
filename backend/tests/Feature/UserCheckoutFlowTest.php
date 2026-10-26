@@ -66,6 +66,7 @@ class UserCheckoutFlowTest extends TestCase
             [
                 'name' => 'Kantin A Flow Test',
                 'description' => 'Kantin A Pengetesan Alur',
+                'category' => 'kota',
                 'delivery_fee' => 3000,
                 'status' => 'approved',
                 'open_time' => '00:00:00',
@@ -73,6 +74,8 @@ class UserCheckoutFlowTest extends TestCase
             ]
         );
         $this->canteenA->update([
+            'category' => 'kota',
+            'delivery_fee' => 3000,
             'status' => 'approved',
             'open_time' => '00:00:00',
             'close_time' => '23:59:59',
@@ -90,6 +93,7 @@ class UserCheckoutFlowTest extends TestCase
             [
                 'name' => 'Kantin B Flow Test',
                 'description' => 'Kantin B Pengetesan Alur',
+                'category' => 'kota',
                 'delivery_fee' => 3000,
                 'status' => 'approved',
                 'open_time' => '00:00:00',
@@ -97,6 +101,8 @@ class UserCheckoutFlowTest extends TestCase
             ]
         );
         $this->canteenB->update([
+            'category' => 'kota',
+            'delivery_fee' => 3000,
             'status' => 'approved',
             'open_time' => '00:00:00',
             'close_time' => '23:59:59',

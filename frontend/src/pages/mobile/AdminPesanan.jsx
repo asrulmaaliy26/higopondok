@@ -1432,12 +1432,11 @@ export default function AdminPesanan() {
                 // Data OCR dan Catatan AI untuk Wadah
                 const ocrOrder = group.orders.find(o => o.payment_ocr_data);
                 const ocr = ocrOrder?.payment_ocr_data;
-                const isMultiOcr = ocr?.summary === 'multi_proof_verified' || ocr?.summary === 'multi_proof_pending';
-                const mainProof = isMultiOcr ? (ocr?.proofs?.[0] || {}) : (ocr || {});
-                const transDate = mainProof.date || ocr?.date;
-                const transTime = mainProof.time || ocr?.time;
-                const detectedBank = mainProof.source_bank || ocr?.source_bank;
-                const refNo = mainProof.ref_number || ocr?.ref_number || ocrOrder?.payment_ref_number;
+                const mainProof = (Array.isArray(ocr?.proofs) && ocr.proofs.length > 0) ? ocr.proofs[0] : (ocr || {});
+                let transDate = mainProof.date || ocr?.date || null;
+                let transTime = mainProof.time || ocr?.time || null;
+                let detectedBank = mainProof.source_bank || ocr?.source_bank || null;
+                let refNo = mainProof.ref_number || ocr?.ref_number || ocrOrder?.payment_ref_number || null;
                 const detectedAmount = typeof ocr?.total_accumulated === 'number'
                   ? ocr.total_accumulated
                   : (typeof ocr?.amount === 'number' ? ocr.amount : (typeof mainProof.amount === 'number' ? mainProof.amount : null));
@@ -1454,6 +1453,33 @@ export default function AdminPesanan() {
                     ? 'Tanggal transaksi tidak tertera atau buram pada struk transfer.'
                     : 'Struk transfer valid dan sesuai dengan total tagihan pesanan.'
                 );
+
+                // Smart fallback ekstraksi tanggal jika belum tertera langsung di field date
+                if (!transDate && aiNoteText) {
+                  const mIso = aiNoteText.match(/(\d{4}-\d{2}-\d{2})/);
+                  const mIndo = aiNoteText.match(/(\d{1,2})\s+(Jan(?:uari)?|Feb(?:ruari)?|Mar(?:et)?|Apr(?:il)?|Mei|Jun(?:i)?|Jul(?:i)?|Agu(?:stus)?|Sep(?:tember)?|Okt(?:ober)?|Nov(?:ember)?|Des(?:ember)?)\s+(\d{4})/i);
+                  if (mIso) {
+                    transDate = mIso[1];
+                  } else if (mIndo) {
+                    transDate = `${mIndo[1]} ${mIndo[2]} ${mIndo[3]}`;
+                  } else if (group.isAllPaid) {
+                    transDate = group.date;
+                  }
+                }
+
+                // Smart fallback deteksi nama bank / e-wallet jika belum tertera
+                if (!detectedBank && aiNoteText) {
+                  if (/mandiri|livin/i.test(aiNoteText)) detectedBank = 'Mandiri';
+                  else if (/brimo|bri/i.test(aiNoteText)) detectedBank = 'BRI';
+                  else if (/byond|bsi/i.test(aiNoteText)) detectedBank = 'BSI';
+                  else if (/bca/i.test(aiNoteText)) detectedBank = 'BCA';
+                  else if (/dana/i.test(aiNoteText)) detectedBank = 'Dana';
+                  else if (/qris/i.test(aiNoteText)) detectedBank = 'QRIS';
+                  else if (/gopay/i.test(aiNoteText)) detectedBank = 'GoPay';
+                  else if (/shopee/i.test(aiNoteText)) detectedBank = 'ShopeePay';
+                }
+
+                const isTransferReceipt = mainProof.is_transfer_receipt !== false && ocr?.is_transfer_receipt !== false && (detectedAmount > 0 || mainProof.status === 'SUCCESS' || (ocr?.valid_receipts_count || 0) > 0);
 
                 const santriDetails = [];
                 if (santriClass) santriDetails.push(`Kelas: ${santriClass}`);
@@ -1738,10 +1764,14 @@ export default function AdminPesanan() {
                                         💡 Lebih Rp {overpaidAmount.toLocaleString('id-ID')}
                                       </span>
                                     )}
-                                    {transDate ? (
+                                    {!isTransferReceipt ? (
+                                      <span className="text-red-700 dark:text-red-400 font-bold bg-white dark:bg-gray-900 px-1 border border-red-300 dark:border-red-800">
+                                        ⚠️ Bukan Struk Resmi
+                                      </span>
+                                    ) : transDate ? (
                                       <span className="font-mono">📅 {transDate}{transTime ? ` ${transTime}` : ''}</span>
                                     ) : (
-                                      <span className="text-red-700 dark:text-red-400 font-bold bg-white dark:bg-gray-900 px-1 border border-red-300 dark:border-red-800">
+                                      <span className="text-amber-700 dark:text-amber-400 font-bold bg-white dark:bg-gray-900 px-1 border border-amber-300 dark:border-amber-800">
                                         ⚠️ Tgl tidak tertera
                                       </span>
                                     )}

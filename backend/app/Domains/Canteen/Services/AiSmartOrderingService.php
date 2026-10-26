@@ -8,14 +8,11 @@ use App\Domains\Canteen\Order;
 use App\Domains\Canteen\Product;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Carbon\Carbon;
 
 class AiSmartOrderingService
 {
-    protected array $models = [
-        'gemini-3.5-flash-lite',
-        'gemini-3.1-flash-lite',
-        'gemini-3.8-flash',
-    ];
+    use GeminiModelPoolTrait;
 
     protected array $chatStopwords = [
         'saya', 'aku', 'kami', 'kita', 'gue', 'gua', 'lu', 'kamu', 'anda', 
@@ -26,11 +23,6 @@ class AiSmartOrderingService
         'dong', 'kak', 'mas', 'mbak', 'bang', 'pak', 'bu', 'ya', 'kan', 'nih', 
         'buat', 'untuk', 'yang', 'ini', 'itu', 'ada', 'lagi', 'tambah'
     ];
-
-    protected function getApiKey(): ?string
-    {
-        return config('services.gemini.api_key') ?: env('GEMINI_API_KEY');
-    }
 
     /**
      * Normalisasi teks santri: mengatasi angka menempel ("4MIa" -> "4 mie"),
@@ -213,9 +205,19 @@ class AiSmartOrderingService
      */
     public function checkRecentOrderStatus(?User $user, string $queryMessage = ''): array
     {
+        $nowWib = Carbon::now('Asia/Jakarta');
+        $currentHour = (int) $nowWib->format('G'); // 0 s/d 23
+        $currentTimeStr = $nowWib->format('H:i') . ' WIB';
+        $isPast8PM = $currentHour >= 20; // Pukul 20:00 (jam 8 malam) ke atas
+
+        $scheduleBanner = "ℹ️ **Ketentuan Pengantaran & Pengambilan Pesanan Pondok**:\n"
+            . "• 🛵 **Jadwal Antar Kurir**: Mulai pukul **17:00 s/d 21:00 WIB** (jam 5 sore - 9 malam).\n"
+            . "• 📦 **Waktu Pengambilan Santri**: Santri dapat mulai mengambil pesanan mulai **pukul 20:00 WIB** (jam 8 malam).\n"
+            . "• ✉️ **Notifikasi Email**: Begitu pesanan selesai diantar oleh kurir, bukti foto serah terima dan status selesai otomatis terkirim ke email akun Kakak.";
+
         if (!$user) {
             return [
-                'reply_text' => "Mohon maaf kak, untuk mengecek status pesanan terkini, pastikan Kakak sudah login ke akun Santri / Wali ya! 😊",
+                'reply_text' => "Mohon maaf kak, untuk mengecek status pesanan terkini, pastikan Kakak sudah login ke akun Santri / Wali ya! 😊\n\n{$scheduleBanner}",
                 'is_order_ready' => false,
                 'is_check_order' => true,
                 'order_status_info' => null,
@@ -245,7 +247,9 @@ class AiSmartOrderingService
 
         if (!$order) {
             return [
-                'reply_text' => "Saat ini belum ada riwayat pesanan aktif atas nama akun Kakak ({$user->name}). 😊\n\nMau pesan makan, minum, atau titip beli sekarang? Tulis saja pesananmu langsung, misalnya:\n• *\"Pesan 1 Bakso Mercon antar ke kamar\"*\n• *\"2 Mie Gacoan Lv 1 sama Es Teh 2\"*",
+                'reply_text' => "Saat ini belum ada riwayat pesanan aktif atas nama akun Kakak ({$user->name}). 😊\n\n"
+                    . "{$scheduleBanner}\n\n"
+                    . "Mau pesan makan, minum, atau titip beli sekarang? Tulis saja pesananmu langsung, misalnya:\n• *\"Pesan 1 Bakso Mercon antar ke kamar\"*\n• *\"2 Mie Gacoan Lv 1 sama Es Teh 2\"*",
                 'is_order_ready' => false,
                 'is_check_order' => true,
                 'order_status_info' => null,
@@ -288,35 +292,71 @@ class AiSmartOrderingService
 
         if ($order->status === 'completed') {
             $isReceived = true;
-            $statusLabel = 'SELESAI (Sudah Diterima Santri)';
-            $replyText = "Alhamdulillah kak! Pesanan **#ORD-{$order->id}** ({$canteenName}) **SUDAH DITERIMA OLEH SANTRI**! 🎉\n\n"
-                . "📋 **Rincian Penerimaan**:\n"
-                . "• **Penerima**: {$recipient} ({$room})\n"
-                . "• **Menu**: {$itemsList}\n"
-                . "• **Kurir Pengantar**: " . ($courierName ?: 'Kurir Pondok') . "\n"
-                . "• **Waktu Pemesanan**: {$timeStr}\n"
-                . ($hasProof ? "• **Bukti Serah Terima**: Foto bukti serah terima telah tersimpan di sistem ✅\n\n" : "\n")
-                . "Pesanan sudah aman sampai di tangan santri. Selamat menikmati ya kak! 😊";
+            $statusLabel = 'SELESAI (Sudah Bisa Diambil Santri)';
+
+            if ($isPast8PM) {
+                $replyText = "🕒 *Waktu Pengecekan: {$currentTimeStr} (Sudah lewat pukul 20:00 WIB)*\n\n"
+                    . "✅ **HASIL PENGECEKAN: PESANAN SUDAH SELESAI & SUDAH DITERIMA OLEH SANTRI!** 🎉\n\n"
+                    . "Alhamdulillah kak, kami sudah cek ke sistem: pesanan **#ORD-{$order->id}** ({$canteenName}) **SUDAH SELESAI DIANTAR OLEH KURIR** ke lokasi tujuan santri (**{$room}**)!\n\n"
+                    . "Santri saat ini **sudah bisa mengambil pesanannya sekarang** di lokasi pengambilan santri. 📦\n\n"
+                    . "📋 **Rincian Serah Terima**:\n"
+                    . "• **Penerima**: {$recipient} ({$room})\n"
+                    . "• **Menu**: {$itemsList}\n"
+                    . "• **Kurir**: " . ($courierName ?: 'Kurir Pondok') . "\n"
+                    . "• **Waktu Pesan**: {$timeStr}\n"
+                    . ($hasProof ? "• **Bukti Serah Terima**: Foto bukti fisik pengantaran telah tersimpan di sistem ✅\n" : "")
+                    . "• **Notifikasi Email**: Laporan konfirmasi penyelesaian otomatis telah terkirim ke email akun Kakak. ✉️\n\n"
+                    . "Pesanan sudah aman sampai. Selamat menikmati ya kak! 😊";
+            } else {
+                $replyText = "Alhamdulillah kak! Pesanan **#ORD-{$order->id}** ({$canteenName}) **SUDAH DITERIMA OLEH SANTRI** (Selesai diantar lebih awal)! 🎉\n\n"
+                    . "Santri sudah dapat mengambil pesanannya di lokasi tujuan (**{$room}**).\n\n"
+                    . "📋 **Rincian Penerimaan**:\n"
+                    . "• **Penerima**: {$recipient} ({$room})\n"
+                    . "• **Menu**: {$itemsList}\n"
+                    . "• **Kurir**: " . ($courierName ?: 'Kurir Pondok') . "\n"
+                    . ($hasProof ? "• **Bukti Serah Terima**: Foto bukti fisik tersimpan di sistem ✅\n" : "")
+                    . "• **Notifikasi Email**: Laporan pesanan telah kami kirimkan ke email akun Kakak. ✉️\n\n"
+                    . "Selamat menikmati ya kak! 😊";
+            }
         } elseif ($order->status === 'processing') {
             $statusLabel = 'Sedang Diproses & Diantar Kurir';
-            $replyText = "Pesanan **#ORD-{$order->id}** ({$canteenName}) saat ini **BELUM DITERIMA**, tetapi **SEDANG DALAM PROSES PENGANTARAN** oleh kurir! 🛵💨\n\n"
-                . "📋 **Status Terkini**:\n"
-                . "• **Tujuan Antar**: {$recipient} ({$room})\n"
-                . "• **Menu**: {$itemsList}\n"
-                . "• **Kurir yang Bertugas**: " . ($courierName ? "**{$courierName}**" : "Sedang disiapkan toko/kurir") . "\n"
-                . "• **Status Pembayaran**: " . ($order->payment_status === 'paid' ? 'Lunas / Terverifikasi ✅' : 'Menunggu Verifikasi') . "\n\n"
-                . "Mohon ditunggu ya kak, kurir sedang bergegas mengantarkan pesanan ke kamar santri. 😊";
+
+            if ($isPast8PM) {
+                // Santri cek saat sudah jam 8 malam ke atas dan pesanan masih processing
+                $replyText = "🕒 *Waktu Pengecekan: {$currentTimeStr} (Sudah melewati pukul 20:00 WIB)*\n\n"
+                    . "⏳ **HASIL PENGECEKAN: PESANAN BELUM SELESAI (Sedang Diantar Kurir)** 🛵💨\n\n"
+                    . "Kami telah mengecek ke sistem kurir: pesanan **#ORD-{$order->id}** ({$canteenName}) saat ini **SEDANG DALAM PERJALANAN / PROSES PENGANTARAN OLEH KURIR** (" . ($courierName ? "**{$courierName}**" : "Kurir Pondok") . ") menuju tujuan (**{$room}**).\n\n"
+                    . "📋 **Status Terkini**:\n"
+                    . "• **Penerima**: {$recipient} ({$room})\n"
+                    . "• **Menu**: {$itemsList}\n"
+                    . "• **Status Bayar**: " . ($order->payment_status === 'paid' ? 'Lunas / Terverifikasi ✅' : 'Menunggu Verifikasi') . "\n\n"
+                    . "Jadwal pengantaran kurir berlangsung mulai pukul 17:00 hingga pukul 21:00 WIB (jam 9 malam). Mohon ditunggu sebentar ya kak, kurir sedang bergegas.\n\n"
+                    . "✉️ **Begitu kurir selesai mengantarkan pesanan, foto bukti serah terima dan notifikasi otomatis akan langsung terkirim ke email akun Kakak!**";
+            } else {
+                // Santri cek sebelum jam 8 malam (misal sore jam 17.00 - 19.59)
+                $replyText = "Pesanan **#ORD-{$order->id}** ({$canteenName}) saat ini **SEDANG DALAM PROSES PENYIAPAN & PENGANTARAN** oleh kurir! 🛵💨\n\n"
+                    . "🕒 *Waktu saat ini: {$currentTimeStr}*\n\n"
+                    . "{$scheduleBanner}\n\n"
+                    . "📋 **Status Terkini**:\n"
+                    . "• **Tujuan Antar**: {$recipient} ({$room})\n"
+                    . "• **Menu**: {$itemsList}\n"
+                    . "• **Kurir yang Bertugas**: " . ($courierName ? "**{$courierName}**" : "Kurir Pondok") . "\n"
+                    . "• **Status Bayar**: " . ($order->payment_status === 'paid' ? 'Lunas / Terverifikasi ✅' : 'Menunggu Verifikasi') . "\n\n"
+                    . "Santri dapat mulai mengambil pesanan mulai **pukul 20:00 WIB (jam 8 malam)** nanti ya kak. Begitu pengantaran selesai, notifikasi otomatis akan langsung terkirim ke email Kakak. Mohon ditunggu! 😊";
+            }
         } elseif ($order->status === 'pending') {
             $statusLabel = 'Menunggu Konfirmasi / Pembayaran';
             $replyText = "Pesanan **#ORD-{$order->id}** ({$canteenName}) saat ini berstatus **MENUNGGU KONFIRMASI / PEMBAYARAN** (Belum diproses kurir). ⏳\n\n"
+                . "{$scheduleBanner}\n\n"
                 . "📋 **Status Terkini**:\n"
                 . "• **Penerima**: {$recipient} ({$room})\n"
                 . "• **Menu**: {$itemsList}\n"
                 . "• **Status Bayar**: " . ($order->payment_status === 'paid' ? 'Lunas' : 'Belum Dibayar / Menunggu Bukti Transfer') . "\n\n"
-                . "Silakan pastikan bukti transfer sudah diunggah di menu Pembayaran agar pesanan segera disiapkan oleh kantin ya kak!";
+                . "Silakan pastikan bukti transfer sudah diunggah di menu Pembayaran agar pesanan segera disiapkan toko dan diantarkan oleh kurir sore ini ya kak!";
         } else {
             $statusLabel = 'Dibatalkan';
             $replyText = "Pesanan **#ORD-{$order->id}** ({$canteenName}) berstatus **DIBATALKAN**. ⚠️\n\n"
+                . "{$scheduleBanner}\n\n"
                 . "Jika ini kekeliruan atau ingin memesan ulang, silakan ketik menu yang ingin Kakak pesan kembali ya!";
         }
 
@@ -656,33 +696,43 @@ class AiSmartOrderingService
             ],
         ];
 
-        $apiKey = $this->getApiKey();
-        foreach ($this->models as $model) {
-            try {
-                $endpoint = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$apiKey}";
-                $res = Http::withHeaders(['Content-Type' => 'application/json'])
-                    ->timeout(3.5)
-                    ->post($endpoint, $payload);
+        $apiKeys = $this->getActiveApiKeys();
+        $models = $this->getAvailableModels();
 
-                if ($res->successful()) {
-                    $json = $res->json();
-                    $text = $json['candidates'][0]['content']['parts'][0]['text'] ?? null;
-                    if ($text) {
-                        $decoded = json_decode(trim($text), true);
-                        if (is_array($decoded) && isset($decoded['reply_text'])) {
-                            return $decoded;
+        if (empty($apiKeys)) {
+            return null;
+        }
+
+        foreach ($apiKeys as $apiKey) {
+            foreach ($models as $model) {
+                try {
+                    $endpoint = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$apiKey}";
+                    $res = Http::withHeaders(['Content-Type' => 'application/json'])
+                        ->timeout(3.5)
+                        ->post($endpoint, $payload);
+
+                    if ($res->successful()) {
+                        $json = $res->json();
+                        $text = $json['candidates'][0]['content']['parts'][0]['text'] ?? null;
+                        if ($text) {
+                            $decoded = json_decode(trim($text), true);
+                            if (is_array($decoded) && isset($decoded['reply_text'])) {
+                                return $decoded;
+                            }
                         }
+                    } elseif ($res->status() === 429 || $res->status() === 403) {
+                        Log::warning("[AiSmartOrdering] Gemini API rate limit pada model {$model}: " . substr($res->body(), 0, 150));
+                        $this->recordModelRateLimit($model, 30);
+                        continue; // Langsung lompat ke model cadangan berikutnya
                     }
-                } elseif ($res->status() === 429 || $res->status() === 403) {
-                    // Google Rate Limit / Free Tier Quota Exceeded: simpan circuit breaker 10 menit agar tidak lag
-                    Log::warning("[AiSmartOrdering] Gemini API rate limit / 403 error on {$model}: " . substr($res->body(), 0, 150));
-                    \Illuminate\Support\Facades\Cache::put('gemini_api_rate_limited', true, now()->addMinutes(10));
-                    break;
+                } catch (\Throwable $e) {
+                    Log::info("[AiSmartOrdering] Model {$model} error: " . $e->getMessage());
                 }
-            } catch (\Throwable $e) {
-                Log::info("[AiSmartOrdering] Model {$model} error: " . $e->getMessage());
             }
         }
+
+        // Jika semua model gagal karena rate limit, kunci sementara 3 menit agar tidak membebani server
+        \Illuminate\Support\Facades\Cache::put('gemini_api_rate_limited', true, now()->addMinutes(3));
 
         return null;
     }

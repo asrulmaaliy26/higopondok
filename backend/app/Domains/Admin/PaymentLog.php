@@ -16,7 +16,13 @@ class PaymentLog extends Model
         'order_id',
         'amount',
         'type',
+        'status',
+        'payment_method',
         'description',
+    ];
+
+    protected $attributes = [
+        'status' => 'success',
     ];
 
     public function user()

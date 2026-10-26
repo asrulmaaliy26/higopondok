@@ -7,24 +7,7 @@ use Illuminate\Support\Facades\Log;
 
 class CustomOrderParserService
 {
-    /**
-     * Model Gemini yang digunakan secara berurutan
-     */
-    protected array $models = [
-        'gemini-2.5-flash',
-        'gemini-2.5-flash-lite',
-        'gemini-1.5-flash',
-        'gemini-flash-latest',
-        'gemini-3-flash-preview',
-    ];
-
-    /**
-     * Dapatkan API Key Gemini dari config atau .env
-     */
-    protected function getApiKey(): ?string
-    {
-        return config('services.gemini.api_key') ?: env('GEMINI_API_KEY');
-    }
+    use GeminiModelPoolTrait;
 
     /**
      * Parse catatan titip beli (pesanan khusus) bebas santri menjadi daftar checklist belanja terstruktur
@@ -99,25 +82,38 @@ class CustomOrderParserService
             ],
         ];
 
-        foreach ($this->models as $model) {
-            try {
-                $endpoint = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$apiKey}";
-                $response = Http::withHeaders(['Content-Type' => 'application/json'])
-                    ->timeout(10)
-                    ->post($endpoint, $payload);
+        $apiKeys = $this->getActiveApiKeys();
+        $models = $this->getAvailableModels();
 
-                if ($response->successful()) {
-                    $json = $response->json();
-                    $text = $json['candidates'][0]['content']['parts'][0]['text'] ?? null;
-                    if ($text) {
-                        $parsed = json_decode(trim($text), true);
-                        if (is_array($parsed) && !empty($parsed)) {
-                            return $parsed;
+        if (empty($apiKeys)) {
+            return null;
+        }
+
+        foreach ($apiKeys as $apiKey) {
+            foreach ($models as $model) {
+                try {
+                    $endpoint = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$apiKey}";
+                    $response = Http::withHeaders(['Content-Type' => 'application/json'])
+                        ->timeout(10)
+                        ->post($endpoint, $payload);
+
+                    if ($response->successful()) {
+                        $json = $response->json();
+                        $text = $json['candidates'][0]['content']['parts'][0]['text'] ?? null;
+                        if ($text) {
+                            $parsed = json_decode(trim($text), true);
+                            if (is_array($parsed) && !empty($parsed)) {
+                                return $parsed;
+                            }
                         }
+                    } elseif ($response->status() === 429 || $response->status() === 403) {
+                        Log::warning("[CustomOrderParser] Rate limit pada model {$model}: HTTP {$response->status()}");
+                        $this->recordModelRateLimit($model, 30);
+                        continue;
                     }
+                } catch (\Throwable $e) {
+                    Log::info("[CustomOrderParser] Model {$model} error: " . $e->getMessage());
                 }
-            } catch (\Throwable $e) {
-                Log::info("[CustomOrderParser] Model {$model} error: " . $e->getMessage());
             }
         }
 
