@@ -4,6 +4,7 @@ namespace App\Domains\Canteen\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Domains\Auth\User;
+use App\Domains\Canteen\AiChatLog;
 use App\Domains\Canteen\Canteen;
 use App\Domains\Canteen\Order;
 use App\Domains\Canteen\OrderItem;
@@ -92,7 +93,49 @@ class AiChatOrderController extends Controller
 
         $user = $request->user();
         $history = $request->input('history', []);
-        $result = $this->aiService->processUserChat($request->message, $user, $history);
+        $rawMessage = $request->message;
+        $result = $this->aiService->processUserChat($rawMessage, $user, $history);
+
+        // Rekam percakapan santri untuk Continuous Learning Dataset (Aman & Kilat < 0.5ms)
+        try {
+            $intent = 'conversation';
+            if (!empty($result['is_order_ready'])) {
+                $intent = !empty($result['is_custom']) ? 'titip_beli' : 'order';
+            } elseif (!empty($result['is_help_intent'])) {
+                $intent = 'help_admin';
+            } elseif (!empty($result['is_check_order'])) {
+                $intent = 'check_order';
+            } elseif (str_contains(strtolower($rawMessage), 'harga') || str_contains(strtolower($rawMessage), 'berapa')) {
+                $intent = 'price_inquiry';
+            } elseif (str_contains(strtolower($rawMessage), 'ongkir')) {
+                $intent = 'delivery_fee';
+            } elseif (str_contains(strtolower($rawMessage), 'rekomendasi') || str_contains(strtolower($rawMessage), 'menu')) {
+                $intent = 'menu_explore';
+            }
+
+            AiChatLog::create([
+                'user_id' => $user?->id,
+                'session_id' => $request->header('X-Session-ID') ?: null,
+                'raw_message' => $rawMessage,
+                'normalized_message' => $result['normalized_message'] ?? null,
+                'model_used' => $result['engine_used'] ?? 'local_nlp',
+                'intent' => $intent,
+                'is_order_ready' => !empty($result['is_order_ready']),
+                'ai_response_text' => $result['reply_text'] ?? null,
+                'extracted_data' => [
+                    'recipient_name' => $result['recipient_name'] ?? null,
+                    'recipient_room' => $result['recipient_room'] ?? null,
+                    'delivery_location' => $result['delivery_location'] ?? null,
+                    'canteens' => $result['canteens'] ?? [],
+                    'summary' => $result['summary'] ?? [],
+                    'quick_replies' => $result['quick_replies'] ?? [],
+                    'custom_items' => $result['custom_items'] ?? [],
+                ],
+                'ip_address' => $request->ip(),
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('[AiChatOrderController] Gagal menyimpan ai_chat_log: ' . $e->getMessage());
+        }
 
         return response()->json(array_merge([
             'success' => true,
@@ -230,7 +273,7 @@ class AiChatOrderController extends Controller
                     $totalQty = collect($items)->sum('quantity');
                     $today = now('Asia/Jakarta')->format('Y-m-d');
                     $userIndex = Order::getUserDailyIndex($user->id, $canteen->id, $today);
-                    $fees = Order::calculateUserRankedFees($totalQty, $userIndex);
+                    $fees = Order::calculateUserRankedFees($totalQty, $userIndex, $canteen);
 
                     $order = Order::create([
                         'checkout_id' => $checkoutId,
@@ -282,6 +325,22 @@ class AiChatOrderController extends Controller
 
             DB::commit();
 
+            // Tandai chat log santri terakhir berhasil dikonversi menjadi pesanan nyata
+            if ($user && !empty($createdOrderIds)) {
+                try {
+                    AiChatLog::where('user_id', $user->id)
+                        ->where('is_converted', false)
+                        ->latest()
+                        ->first()
+                        ?->update([
+                            'is_converted' => true,
+                            'order_id' => $createdOrderIds[0] ?? null,
+                        ]);
+                } catch (\Throwable $e) {
+                    Log::warning('[AiChatOrderController] Gagal mengupdate konversi ai_chat_log: ' . $e->getMessage());
+                }
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => 'Pesanan berhasil dibuat otomatis oleh Asisten AI!',
@@ -296,5 +355,74 @@ class AiChatOrderController extends Controller
                 'message' => 'Gagal membuat pesanan: ' . $e->getMessage(),
             ], 422);
         }
+    }
+
+    /**
+     * Ambil data log percakapan santri untuk evaluasi dan peningkatan akurasi AI (Admin / Kantin)
+     */
+    public function getLogs(Request $request)
+    {
+        $query = AiChatLog::with(['user:id,name,santri_name', 'order:id,status,total_price'])
+            ->latest();
+
+        if ($request->has('intent')) {
+            $query->where('intent', $request->query('intent'));
+        }
+
+        if ($request->has('is_converted')) {
+            $query->where('is_converted', filter_var($request->query('is_converted'), FILTER_VALIDATE_BOOLEAN));
+        }
+
+        $logs = $query->paginate(20);
+
+        $stats = [
+            'total_chats' => AiChatLog::count(),
+            'total_order_ready' => AiChatLog::where('is_order_ready', true)->count(),
+            'total_converted' => AiChatLog::where('is_converted', true)->count(),
+            'conversion_rate' => AiChatLog::count() > 0 
+                ? round((AiChatLog::where('is_converted', true)->count() / AiChatLog::count()) * 100, 1) . '%' 
+                : '0%',
+        ];
+
+        return response()->json([
+            'success' => true,
+            'stats' => $stats,
+            'data' => $logs,
+        ]);
+    }
+
+    /**
+     * Export data log chat menjadi format dataset JSONL untuk Fine-Tuning Model Gemini / Vertex AI
+     */
+    public function exportTrainingData(Request $request)
+    {
+        $logs = AiChatLog::where('is_order_ready', true)
+            ->whereNotNull('ai_response_text')
+            ->latest()
+            ->take(500)
+            ->get();
+
+        $lines = [];
+        foreach ($logs as $log) {
+            $lines[] = json_encode([
+                'messages' => [
+                    [
+                        'role' => 'user',
+                        'content' => $log->raw_message,
+                    ],
+                    [
+                        'role' => 'model',
+                        'content' => json_encode($log->extracted_data, JSON_UNESCAPED_UNICODE),
+                    ]
+                ]
+            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        }
+
+        $content = implode("\n", $lines);
+
+        return response($content, 200, [
+            'Content-Type' => 'application/x-jsonlines',
+            'Content-Disposition' => 'attachment; filename="higo_ai_training_dataset_' . date('Ymd_His') . '.jsonl"',
+        ]);
     }
 }

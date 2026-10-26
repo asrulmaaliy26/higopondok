@@ -113,7 +113,7 @@ class OrderController extends Controller
             $totalQuantity = collect($request->items)->sum('quantity');
             $today = now('Asia/Jakarta')->format('Y-m-d');
             $userIndex = Order::getUserDailyIndex($user->id, $canteen->id, $today);
-            $fees = Order::calculateUserRankedFees($totalQuantity, $userIndex);
+            $fees = Order::calculateUserRankedFees($totalQuantity, $userIndex, $canteen);
             $delivery_fee = $fees['delivery_fee'];
             $admin_fee    = $fees['admin_fee'];
 
@@ -302,7 +302,7 @@ class OrderController extends Controller
                 $totalQuantity = collect($cData['items'])->sum('quantity');
                 $today = now('Asia/Jakarta')->format('Y-m-d');
                 $userIndex = Order::getUserDailyIndex($user->id, $canteen->id, $today);
-                $fees = Order::calculateUserRankedFees($totalQuantity, $userIndex);
+                $fees = Order::calculateUserRankedFees($totalQuantity, $userIndex, $canteen);
                 $delivery_fee = $fees['delivery_fee'];
                 $admin_fee    = $fees['admin_fee'];
 
@@ -858,7 +858,7 @@ class OrderController extends Controller
         if ($request->hasFile('proof_of_delivery')) {
             $paths = [];
             foreach ($request->file('proof_of_delivery') as $file) {
-                $paths[] = $this->storeOrderProofImage($file, $order, 'proff_delivery');
+                $paths[] = $this->storeOrderProofImage($file, $order, 'proff_delivery', 'public');
             }
         }
 
@@ -926,6 +926,10 @@ class OrderController extends Controller
                         'description' => "Penerimaan ongkir pesanan #" . $order->id,
                     ]);
                 }
+            }
+
+            if (!empty($paths)) {
+                \App\Domains\Canteen\Jobs\SyncOrderProofToGoogleDriveJob::dispatchAfterResponse($order->id, 'proof_of_delivery');
             }
 
             return response()->json(['message' => 'Pesanan berhasil diselesaikan', 'order' => $order]);
@@ -1202,13 +1206,25 @@ class OrderController extends Controller
 
         $newPaths = [];
         foreach ($request->file('proof_of_purchase') as $file) {
-            $newPaths[] = $this->storeOrderProofImage($file, $order, 'proff_kantin');
+            $newPaths[] = $this->storeOrderProofImage($file, $order, 'proff_kantin', 'public');
         }
 
         $existing = is_array($order->proof_of_purchase) ? $order->proof_of_purchase : ($order->proof_of_purchase ? [$order->proof_of_purchase] : []);
-        $merged = array_merge($existing, $newPaths);
+        $merged = array_values(array_unique(array_merge($existing, $newPaths)));
 
         $order->update(['proof_of_purchase' => $merged]);
+
+        // Jika pesanan memiliki checkout_id, sinkronkan ke seluruh pesanan terkait dalam checkout bundle yang sama
+        if (!empty($order->checkout_id)) {
+            Order::where('checkout_id', $order->checkout_id)
+                ->where('id', '!=', $order->id)
+                ->update(['proof_of_purchase' => json_encode($merged)]);
+        }
+
+        // Sinkronisasi ke Google Drive di latar belakang & bersihkan file fisik lokal agar server hemat memori
+        if (!empty($newPaths)) {
+            \App\Domains\Canteen\Jobs\SyncOrderProofToGoogleDriveJob::dispatchAfterResponse($order->id, 'proof_of_purchase');
+        }
 
         return response()->json(['message' => 'Bukti pesanan/struk berhasil ditambahkan', 'order' => $order->load(['canteen', 'user', 'items.product', 'courier'])]);
     }
@@ -1235,13 +1251,25 @@ class OrderController extends Controller
 
         $newPaths = [];
         foreach ($request->file('proof_of_delivery') as $file) {
-            $newPaths[] = $this->storeOrderProofImage($file, $order, 'proff_delivery');
+            $newPaths[] = $this->storeOrderProofImage($file, $order, 'proff_delivery', 'public');
         }
 
         $existing = is_array($order->proof_of_delivery) ? $order->proof_of_delivery : ($order->proof_of_delivery ? [$order->proof_of_delivery] : []);
-        $merged = array_merge($existing, $newPaths);
+        $merged = array_values(array_unique(array_merge($existing, $newPaths)));
 
         $order->update(['proof_of_delivery' => $merged]);
+
+        // Jika pesanan memiliki checkout_id, sinkronkan ke seluruh pesanan terkait dalam checkout bundle yang sama
+        if (!empty($order->checkout_id)) {
+            Order::where('checkout_id', $order->checkout_id)
+                ->where('id', '!=', $order->id)
+                ->update(['proof_of_delivery' => json_encode($merged)]);
+        }
+
+        // Sinkronisasi ke Google Drive di latar belakang & bersihkan file fisik lokal agar server hemat memori
+        if (!empty($newPaths)) {
+            \App\Domains\Canteen\Jobs\SyncOrderProofToGoogleDriveJob::dispatchAfterResponse($order->id, 'proof_of_delivery');
+        }
 
         return response()->json(['message' => 'Bukti serah terima berhasil ditambahkan', 'order' => $order->load(['canteen', 'user', 'items.product', 'courier'])]);
     }
@@ -1278,7 +1306,24 @@ class OrderController extends Controller
             $type => count($filtered) > 0 ? $filtered : null,
         ]);
 
-        \Illuminate\Support\Facades\Storage::disk('public')->delete($targetPath);
+        if (!empty($order->checkout_id)) {
+            Order::where('checkout_id', $order->checkout_id)
+                ->where('id', '!=', $order->id)
+                ->update([$type => count($filtered) > 0 ? json_encode($filtered) : null]);
+        }
+
+        try {
+            if (str_contains($targetPath, 'drive.google.com') && preg_match('/id=([a-zA-Z0-9_-]+)/', $targetPath, $m)) {
+                \Illuminate\Support\Facades\Storage::disk('google')->delete($m[1]);
+            } else if (config('filesystems.default') === 'google') {
+                \Illuminate\Support\Facades\Storage::disk('google')->delete($targetPath);
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning("[deleteProofPhoto] Drive delete fallback: " . $e->getMessage());
+        }
+
+        $cleanLocalPath = ltrim(str_replace(['/storage/', 'storage/'], '', $targetPath), '/');
+        \Illuminate\Support\Facades\Storage::disk('public')->delete($cleanLocalPath);
 
         return response()->json(['message' => 'Foto berhasil dihapus', 'order' => $order->load(['canteen', 'user', 'items.product', 'courier'])]);
     }

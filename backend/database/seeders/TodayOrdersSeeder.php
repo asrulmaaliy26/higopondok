@@ -231,21 +231,21 @@ class TodayOrdersSeeder extends Seeder
 
                 $prodPangsit = Product::firstOrCreate(
                     ['canteen_id' => $gacoanCanteen->id, 'name' => 'Pangsit Goreng'],
-                    ['price' => 12000, 'hpj' => 12000, 'hpp' => 10000, 'stock' => 100, 'is_available' => 1, 'category' => 'Camilan']
+                    ['price' => 12000, 'hpj' => 12000, 'hpp' => 10000, 'stock' => 100, 'is_available' => 1, 'category' => 'Snack']
                 );
-                $prodPangsit->update(['category' => 'Camilan', 'price' => 12000]);
+                $prodPangsit->update(['category' => 'Snack', 'price' => 12000]);
 
                 $prodUdangKeju = Product::firstOrCreate(
                     ['canteen_id' => $gacoanCanteen->id, 'name' => 'Udang Keju'],
-                    ['price' => 12000, 'hpj' => 12000, 'hpp' => 10000, 'stock' => 100, 'is_available' => 1, 'category' => 'Camilan']
+                    ['price' => 12000, 'hpj' => 12000, 'hpp' => 10000, 'stock' => 100, 'is_available' => 1, 'category' => 'Snack']
                 );
-                $prodUdangKeju->update(['category' => 'Camilan', 'price' => 12000]);
+                $prodUdangKeju->update(['category' => 'Snack', 'price' => 12000]);
 
                 $prodUdangRambutan = Product::firstOrCreate(
                     ['canteen_id' => $gacoanCanteen->id, 'name' => 'Udang Rambutan'],
-                    ['price' => 12000, 'hpj' => 12000, 'hpp' => 10000, 'stock' => 100, 'is_available' => 1, 'category' => 'Camilan']
+                    ['price' => 12000, 'hpj' => 12000, 'hpp' => 10000, 'stock' => 100, 'is_available' => 1, 'category' => 'Snack']
                 );
-                $prodUdangRambutan->update(['category' => 'Camilan', 'price' => 12000]);
+                $prodUdangRambutan->update(['category' => 'Snack', 'price' => 12000]);
 
                 $prodIceTea = Product::firstOrCreate(
                     ['canteen_id' => $gacoanCanteen->id, 'name' => 'Ice Tea'],

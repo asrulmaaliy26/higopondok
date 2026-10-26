@@ -12,11 +12,19 @@ use Illuminate\Support\Facades\Log;
 class AiSmartOrderingService
 {
     protected array $models = [
+        'gemini-3.5-flash-lite',
+        'gemini-3.1-flash-lite',
         'gemini-3.8-flash',
-        'gemini-2.0-flash',
-        'gemini-2.5-flash',
-        'gemini-1.5-flash',
-        'gemini-flash-latest',
+    ];
+
+    protected array $chatStopwords = [
+        'saya', 'aku', 'kami', 'kita', 'gue', 'gua', 'lu', 'kamu', 'anda', 
+        'mau', 'pengen', 'ingin', 'beli', 'pesan', 'order', 'tolong', 'minta', 'ambil',
+        'antar', 'antarkan', 'kirim', 'ke', 'di', 'kamar', 'asrama', 'gedung',
+        'level', 'lv', 'lvl', 'pedas', 'porsi', 'buah', 'bungkus', 'pcs', 'cup', 
+        'gelas', 'mangkok', 'mangkuk', 'sama', 'dan', 'aja', 'cuma', 'saja', 'hanya', 
+        'dong', 'kak', 'mas', 'mbak', 'bang', 'pak', 'bu', 'ya', 'kan', 'nih', 
+        'buat', 'untuk', 'yang', 'ini', 'itu', 'ada', 'lagi', 'tambah'
     ];
 
     protected function getApiKey(): ?string
@@ -64,6 +72,14 @@ class AiSmartOrderingService
         $text = preg_replace('/\baym\b/iu', 'ayam', $text);
         $text = preg_replace('/\bayamm\b/iu', 'ayam', $text);
 
+        // Kosa kata santri pesantren & takaran
+        $text = preg_replace('/\bana\b/iu', 'saya', $text);
+        $text = preg_replace('/\bantum\b/iu', 'kamu', $text);
+        $text = preg_replace('/\bseporsi\b/iu', '1 porsi', $text);
+        $text = preg_replace('/\bsebungkus\b/iu', '1 bungkus', $text);
+        $text = preg_replace('/\bsegelas\b/iu', '1 gelas', $text);
+        $text = preg_replace('/\bsecangkir\b/iu', '1 cangkir', $text);
+
         // 4. Typo ejaan makanan populer & phonetic slips
         // Mie: "mia", "mye", "mee", "mi" (bila berdiri sendiri sebagai kata makanan)
         $text = preg_replace('/\b(?:mia|mye|mee|mi)\b/iu', 'mie', $text);
@@ -77,10 +93,24 @@ class AiSmartOrderingService
         $text = preg_replace('/\bgaco\s+an\b/iu', 'gacoan', $text);
         // Hompimpa: "hom pim pa", "hompim pa"
         $text = preg_replace('/\bhom\s*pim\s*pa\b/iu', 'hompimpa', $text);
-        // Es teh: "esteh"
+        // Es teh: "esteh", "estehmanis"
+        $text = preg_replace('/\bestehmanis\b/iu', 'es teh manis', $text);
         $text = preg_replace('/\besteh\b/iu', 'es teh', $text);
+        // Es jeruk: "esjeruk"
+        $text = preg_replace('/\besjeruk\b/iu', 'es jeruk', $text);
+        // Kopi susu: "kopisusu"
+        $text = preg_replace('/\bkopisusu\b/iu', 'kopi susu', $text);
+        // Ayam: "ayambakar", "ayamgoreng", "ayamgeprek", "ayampenyet"
+        $text = preg_replace('/\bayambakar\b/iu', 'ayam bakar', $text);
+        $text = preg_replace('/\bayamgoreng\b/iu', 'ayam goreng', $text);
+        $text = preg_replace('/\bayamgeprek\b/iu', 'ayam geprek', $text);
+        $text = preg_replace('/\bayampenyet\b/iu', 'ayam penyet', $text);
         // Nasi goreng: "nasgor"
         $text = preg_replace('/\bnasgor\b/iu', 'nasi goreng', $text);
+        // Mie goreng/kuah: "migor", "mikuah", "miegoreng"
+        $text = preg_replace('/\bmiegoreng\b/iu', 'mie goreng', $text);
+        $text = preg_replace('/\bmigor\b/iu', 'mie goreng', $text);
+        $text = preg_replace('/\bmikuah\b/iu', 'mie kuah', $text);
         // Dimsum: "dim sum", "dinsum"
         $text = preg_replace('/\b(?:dim\s+sum|dinsum)\b/iu', 'dimsum', $text);
 
@@ -129,17 +159,23 @@ class AiSmartOrderingService
 
         $apiKey = $this->getApiKey();
         $result = null;
-        if (!empty($apiKey)) {
+        $engineUsed = 'local_nlp';
+        if (!empty($apiKey) && !\Illuminate\Support\Facades\Cache::get('gemini_api_rate_limited')) {
             $aiResult = $this->callGemini($normalizedMessage, $products, $userLocation, $history);
             if (!empty($aiResult) && is_array($aiResult)) {
                 $result = $this->formatResult($aiResult, $userLocation);
+                $engineUsed = 'gemini';
             }
         }
 
-        // Fallback: Rule-based & Fuzzy catalog matcher (100% offline & instan)
+        // Fallback: Rule-based & Fuzzy catalog matcher (100% offline & instan < 50ms)
         if (!$result) {
             $result = $this->ruleBasedMatcher($normalizedMessage, $products, $userLocation, $history, $user);
+            $engineUsed = 'local_nlp';
         }
+
+        $result['engine_used'] = $engineUsed;
+        $result['normalized_message'] = $normalizedMessage;
 
         // Cek apakah ada hal yang tidak diketahui AI atau santri butuh bantuan admin:
         // 1) Ada flag is_unknown_query dari AI
@@ -625,7 +661,7 @@ class AiSmartOrderingService
             try {
                 $endpoint = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$apiKey}";
                 $res = Http::withHeaders(['Content-Type' => 'application/json'])
-                    ->timeout(12)
+                    ->timeout(3.5)
                     ->post($endpoint, $payload);
 
                 if ($res->successful()) {
@@ -637,6 +673,11 @@ class AiSmartOrderingService
                             return $decoded;
                         }
                     }
+                } elseif ($res->status() === 429 || $res->status() === 403) {
+                    // Google Rate Limit / Free Tier Quota Exceeded: simpan circuit breaker 10 menit agar tidak lag
+                    Log::warning("[AiSmartOrdering] Gemini API rate limit / 403 error on {$model}: " . substr($res->body(), 0, 150));
+                    \Illuminate\Support\Facades\Cache::put('gemini_api_rate_limited', true, now()->addMinutes(10));
+                    break;
                 }
             } catch (\Throwable $e) {
                 Log::info("[AiSmartOrdering] Model {$model} error: " . $e->getMessage());
@@ -672,34 +713,66 @@ class AiSmartOrderingService
 
         // Cocokkan dengan data santri asli di database jika ada penyebutan nama penerima
         if ($recipientName) {
-            $dbSantri = User::where(function ($q) use ($recipientName) {
-                    $q->where('santri_name', $recipientName)
-                      ->orWhere('name', $recipientName);
-                })
-                ->where(function ($q) {
-                    $q->whereNotNull('santri_name')
-                      ->orWhereHas('roles', fn($rq) => $rq->where('name', 'user'));
-                })
-                ->first();
-
-            if (!$dbSantri) {
+            try {
                 $dbSantri = User::where(function ($q) use ($recipientName) {
-                        $q->where('santri_name', 'LIKE', "%{$recipientName}%")
-                          ->orWhere('name', 'LIKE', "%{$recipientName}%");
+                        $q->where('santri_name', $recipientName)
+                          ->orWhere('name', $recipientName);
                     })
                     ->where(function ($q) {
                         $q->whereNotNull('santri_name')
                           ->orWhereHas('roles', fn($rq) => $rq->where('name', 'user'));
                     })
                     ->first();
-            }
 
-            if ($dbSantri) {
-                $recipientName = $dbSantri->santri_name ?: $dbSantri->name;
-                if ($dbSantri->santri_room) {
-                    $loc = $dbSantri->santri_room;
+                if (!$dbSantri) {
+                    $dbSantri = User::where(function ($q) use ($recipientName) {
+                            $q->where('santri_name', 'LIKE', "%{$recipientName}%")
+                              ->orWhere('name', 'LIKE', "%{$recipientName}%");
+                        })
+                        ->where(function ($q) {
+                            $q->whereNotNull('santri_name')
+                              ->orWhereHas('roles', fn($rq) => $rq->where('name', 'user'));
+                        })
+                        ->first();
                 }
+
+                if ($dbSantri) {
+                    $recipientName = $dbSantri->santri_name ?: $dbSantri->name;
+                    if ($dbSantri->santri_room) {
+                        $loc = $dbSantri->santri_room;
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::warning("AiSmartOrderingService::ruleBasedMatcher user lookup skipped: " . $e->getMessage());
             }
+        }
+
+        // 1a. Cek apakah santri bertanya tentang tarif ongkir & biaya kurir
+        if (preg_match('/(?:ongkir\s*(?:berapa|nya\s*berapa|pengantaran|ke\s*kamar)?|biaya\s*ongkir|biaya\s*(?:antar|kirim|pengantaran)|tarif\s*ongkir|tarif\s*kurir)\b/i', $lower)) {
+            return [
+                'reply_text' => "Siap kak! Tarif ongkir kurir santri di Pondok Pesantren Al-Mannan sangat terjangkau:\n\n"
+                    . "🛵 **Pesanan Kantin Pondok**: Flat **Rp 3.000** (antar langsung ke depan kamar/asrama)\n"
+                    . "🛍️ **Titip Beli Luar (Apotek/Swalayan)**: Flat **Rp 3.500**\n"
+                    . "📱 **Biaya Layanan Admin**: Rp 2.000 (kantin) / Rp 2.500 (titip beli)\n\n"
+                    . "Mau pesan menu kantin atau titip beli barang sekarang kak? Silakan ketik pesananmu! 😊",
+                'is_order_ready' => false,
+                'recipient_name' => $recipientName,
+                'recipient_room' => $loc,
+                'quick_replies' => [
+                    "Ada menu apa aja?",
+                    "Rekomendasi makanan enak",
+                    "Pesan 2 Mie Gacoan Lv 1",
+                    "Titip beli obat di apotek"
+                ],
+                'canteens' => [],
+                'summary' => [
+                    'subtotal' => 0,
+                    'items_subtotal' => 0,
+                    'delivery_fee' => 3000,
+                    'admin_fee' => 2000,
+                    'grand_total' => 5000,
+                ],
+            ];
         }
 
         // 1. Cek apakah pesan hanya sapaan santai
@@ -799,173 +872,191 @@ class AiSmartOrderingService
         }
 
         // A. Cek kecocokan produk spesifik terlebih dahulu
-        foreach ($sortedProducts as $p) {
-            $pNameClean = preg_replace('/\s+/', ' ', trim($p->name));
-            $pNameLower = strtolower($pNameClean);
-            
-            // Hindari double match jika produk yang lebih spesifik sudah dicocokkan
-            $isAlreadyCovered = false;
-            foreach ($coveredPhrases as $cov) {
-                if (str_contains($cov, $pNameLower)) {
-                    $isAlreadyCovered = true;
-                    break;
+        // Pass 1: Prioritaskan produk spesifik / frase multi-kata (misal: "dimsum mentai", "mie ayam bakso", "nasi ayam geprek")
+        // Pass 2: Baru cocokkan alias kata tunggal dasar (misal: "dimsum", "bakso") jika teks belum terkonsumsi
+        $workText = $lower;
+        foreach ([false, true] as $allowSingleWord) {
+            foreach ($sortedProducts as $p) {
+                if (in_array($p->id, $matchedProductIds)) {
+                    continue;
                 }
-            }
-            if ($isAlreadyCovered) {
-                continue;
-            }
-
-            // Cek kecocokan kata nama produk secara cerdas
-            $isMatch = $this->isProductMatch($lower, $pNameClean);
-
-            if ($isMatch && !in_array($p->id, $matchedProductIds)) {
-                $matchedProductIds[] = $p->id;
-                $coveredPhrases[] = $pNameLower;
-
-                $cId = $p->canteen_id;
-                $cName = $p->canteen ? $p->canteen->name : 'Kantin';
-                $price = (float) ($p->discount_price ?: $p->price);
-
-                if (!isset($matchedCanteens[$cId])) {
-                    $matchedCanteens[$cId] = [
-                        'canteen_id' => $cId,
-                        'canteen_name' => $cName,
-                        'items' => [],
-                    ];
+                $pNameClean = preg_replace('/\s+/', ' ', trim($p->name));
+                $pNameLower = strtolower($pNameClean);
+                
+                // Hindari double match jika produk yang lebih spesifik sudah dicocokkan
+                $isAlreadyCovered = false;
+                foreach ($coveredPhrases as $cov) {
+                    if (str_contains($cov, $pNameLower)) {
+                        $isAlreadyCovered = true;
+                        break;
+                    }
+                }
+                if ($isAlreadyCovered) {
+                    continue;
                 }
 
-                // Jika terdeteksi multi-varian untuk produk bervarian (misal: 1 Lv 1 dan 1 Lv 2)
-                $cfg = $p->variant_config;
-                if (!empty($detectedMultiVariants) && !empty($cfg['spicy']['enabled'])) {
-                    foreach ($detectedMultiVariants as $mv) {
-                        $subtotal = $price * $mv['qty'];
+                // Cek kecocokan kata nama produk secara cerdas terhadap sisa teks santri
+                $matchedPhrase = null;
+                $isMatch = $this->isProductMatch($workText, $pNameClean, $matchedPhrase, $allowSingleWord);
+
+                if ($isMatch && !in_array($p->id, $matchedProductIds)) {
+                    $matchedProductIds[] = $p->id;
+                    $coveredPhrases[] = $pNameLower;
+
+                    // Konsumsi frase yang cocok dari $workText agar tidak dicocokkan dobel oleh produk turunan
+                    if ($matchedPhrase) {
+                        $workText = preg_replace('/\b' . preg_quote($matchedPhrase, '/') . '\b/i', ' ___CONSUMED___ ', $workText, 1);
+                        $workText = preg_replace('/\s+/', ' ', trim($workText));
+                    }
+
+                    $cId = $p->canteen_id;
+                    $cName = $p->canteen ? $p->canteen->name : 'Kantin';
+                    $price = (float) ($p->discount_price ?: $p->price);
+
+                    if (!isset($matchedCanteens[$cId])) {
+                        $matchedCanteens[$cId] = [
+                            'canteen_id' => $cId,
+                            'canteen_name' => $cName,
+                            'items' => [],
+                        ];
+                    }
+
+                    // Jika terdeteksi multi-varian untuk produk bervarian (misal: 1 Lv 1 dan 1 Lv 2)
+                    $cfg = $p->variant_config;
+                    if (!empty($detectedMultiVariants) && !empty($cfg['spicy']['enabled'])) {
+                        foreach ($detectedMultiVariants as $mv) {
+                            $subtotal = $price * $mv['qty'];
+                            $itemsSubtotal += $subtotal;
+                            $matchedCanteens[$cId]['items'][] = [
+                                'product_id' => $p->id,
+                                'name' => $p->name,
+                                'quantity' => $mv['qty'],
+                                'price' => $price,
+                                'notes' => $mv['notes'],
+                                'subtotal' => $subtotal,
+                                'variant_config' => $p->variant_config,
+                            ];
+                        }
+                    } else {
+                        // Cari quantity spesifik untuk produk ini menggunakan seluruh variasi aliasnya
+                        $qty = 1;
+                        $aliases = $this->getProductAliases($p->name);
+                        $pattList = array_map(fn($a) => preg_quote($a, '/'), $aliases);
+                        $nameRegex = '(?:' . implode('|', $pattList) . ')';
+
+                        if (preg_match('/(\d+)\s*(?:porsi|buah|bungkus|pcs|cup|gelas|mangkok|mangkuk)?\s*' . $nameRegex . '/i', $lower, $mQty)) {
+                            $qty = (int) $mQty[1];
+                        } elseif (preg_match('/' . $nameRegex . '\s*(?:aja\s*|level\s*\d+\s*|lv\s*\d+\s*)?(\d+)/i', $lower, $mQty)) {
+                            $qty = (int) $mQty[1];
+                        } elseif (preg_match('/(?:dua|2)\s*(?:porsi\s*)?' . $nameRegex . '/i', $lower)) {
+                            $qty = 2;
+                        } elseif (preg_match('/(?:tiga|3)\s*(?:porsi\s*)?' . $nameRegex . '/i', $lower)) {
+                            $qty = 3;
+                        } elseif (preg_match('/(?:empat|4)\s*(?:porsi\s*)?' . $nameRegex . '/i', $lower)) {
+                            $qty = 4;
+                        } elseif (preg_match('/(?:lima|5)\s*(?:porsi\s*)?' . $nameRegex . '/i', $lower)) {
+                            $qty = 5;
+                        }
+
+                        // Fallback kuantitas HANYA jika kuantitas belum terdeteksi secara spesifik
+                        if ($qty === 1) {
+                            if (preg_match('/^(\d+)\s+' . $nameRegex . '/i', $lower, $mAwal)) {
+                                $qty = (int) $mAwal[1];
+                            } elseif (preg_match('/(?:dua|2)\s*porsi/i', $lower) && count($matchedProductIds) === 1) {
+                                $qty = 2;
+                            } elseif (preg_match('/(?:tiga|3)\s*porsi/i', $lower) && count($matchedProductIds) === 1) {
+                                $qty = 3;
+                            } elseif (preg_match('/(\d+)\s*porsi/i', $lower, $mPorsi) && count($matchedProductIds) === 1) {
+                                $qty = (int) $mPorsi[1];
+                            } elseif (preg_match('/(?:pesan|beli|mau)\s+(\d+)\s+/i', $lower, $mDepan) && count($matchedProductIds) === 1) {
+                                $qty = (int) $mDepan[1];
+                            }
+                        }
+
+                        // Cari catatan varian berdasarkan konfigurasi resmi toko
+                        $notes = null;
+                        $cfg = $p->variant_config;
+                        $hasSpicy = !empty($cfg['spicy']['enabled']) || (!empty($cfg['spicy']['options']) && is_array($cfg['spicy']['options']));
+
+                        if ($hasSpicy) {
+                            $spicyOpts = $cfg['spicy']['options'] ?? [];
+                            $matchedOpt = null;
+                            foreach ($spicyOpts as $so) {
+                                $soName = is_array($so) ? ($so['name'] ?? '') : (string)$so;
+                                if (!empty($soName) && str_contains($lower, strtolower($soName))) {
+                                    $matchedOpt = $soName;
+                                    break;
+                                }
+                            }
+
+                            if ($matchedOpt) {
+                                $notes = "[{$matchedOpt}]";
+                            } elseif (preg_match('/(?:level|lv|lvl)\s*(\d+)/i', $lower, $mLv)) {
+                                $notes = "[Lv {$mLv[1]}]";
+                            } elseif (str_contains($lower, 'tidak pedas') || str_contains($lower, 'gak pedas') || str_contains($lower, 'level 0') || str_contains($lower, 'lv 0')) {
+                                $notes = "[Tidak Pedas]";
+                            } elseif (str_contains($lower, 'pedas')) {
+                                // Cari opsi pedas resmi toko jika ada
+                                $pedasMatch = null;
+                                foreach ($spicyOpts as $so) {
+                                    $soName = is_array($so) ? ($so['name'] ?? '') : (string)$so;
+                                    if (str_contains(strtolower($soName), 'pedas') || str_contains(strtolower($soName), 'mercon')) {
+                                        $pedasMatch = $soName;
+                                        break;
+                                    }
+                                }
+                                $notes = $pedasMatch ? "[{$pedasMatch}]" : "[Pedas]";
+                            } else {
+                                // Default varian resmi toko pertama
+                                if (!empty($spicyOpts)) {
+                                    $firstOpt = is_array($spicyOpts[0]) ? ($spicyOpts[0]['name'] ?? 'Biasa') : (string)$spicyOpts[0];
+                                    $notes = "[{$firstOpt}]";
+                                } else {
+                                    $notes = '[Lv 1]';
+                                }
+                            }
+                        } else {
+                            // Cek apakah produk adalah minuman
+                            $hasTemp = !empty($cfg['temperature']['enabled']);
+                            $isDrink = $hasTemp 
+                                || strtolower($p->category ?? '') === 'minuman' 
+                                || preg_match('/(?:es|teh|kopi|jus|susu|jeruk|wedang|soda)/i', $pNameLower);
+                            
+                            if ($isDrink) {
+                                if (str_contains($lower, 'hangat') || str_contains($lower, 'panas')) {
+                                    $notes = '[Panas / Hangat]';
+                                } elseif (str_contains($lower, 'es') || str_contains($lower, 'dingin')) {
+                                    $notes = '[Es / Dingin]';
+                                } else {
+                                    $notes = '[Es / Dingin]';
+                                }
+                            }
+                        }
+
+                        // Cek catatan kustom tambahan (misal: kuah dipisah, kuah campur, tanpa sayur, dsb)
+                        if (preg_match('/(?:kuah\s*dipisah|kuah\s*campur|tanpa\s*(?:sayur|seledri|bawang|es|sambal)|ekstra\s*sambal)/i', $lower, $mCustomNote)) {
+                            $cNote = ucwords(strtolower(trim($mCustomNote[0])));
+                            $notes = $notes ? "{$notes} [{$cNote}]" : "[{$cNote}]";
+                        }
+
+                        $subtotal = $price * $qty;
                         $itemsSubtotal += $subtotal;
+
                         $matchedCanteens[$cId]['items'][] = [
                             'product_id' => $p->id,
                             'name' => $p->name,
-                            'quantity' => $mv['qty'],
+                            'quantity' => $qty,
                             'price' => $price,
-                            'notes' => $mv['notes'],
+                            'notes' => $notes,
                             'subtotal' => $subtotal,
                             'variant_config' => $p->variant_config,
                         ];
                     }
-                } else {
-                    // Cari quantity
-                    $qty = 1;
-                    $normalizedP = preg_replace('/baksosapi/i', 'bakso sapi', $pNameLower);
-                    $cleanP = trim(preg_replace('/\b(?:sapi|ai)\b/i', ' ', $normalizedP));
-                    $cleanP = preg_replace('/\s+/', ' ', $cleanP);
 
-                    $pattList = [preg_quote($pNameLower, '/')];
-                    if ($cleanP !== $pNameLower && strlen($cleanP) >= 4) {
-                        $pattList[] = preg_quote($cleanP, '/');
+                    if ($isExclusiveOrder) {
+                        // Jika santri bilang "mie gacoan aja 2", batasi hanya produk ini
+                        break 2;
                     }
-                    $nameRegex = '(?:' . implode('|', $pattList) . ')';
-
-                    if (preg_match('/(\d+)\s*(?:porsi|buah|bungkus|pcs|cup|gelas|mangkok|mangkuk)?\s*' . $nameRegex . '/i', $lower, $mQty)) {
-                        $qty = (int) $mQty[1];
-                    } elseif (preg_match('/' . $nameRegex . '\s*(?:aja\s*)?(\d+)/i', $lower, $mQty)) {
-                        $qty = (int) $mQty[1];
-                    } elseif (preg_match('/(?:dua|2)\s*(?:porsi\s*)?' . $nameRegex . '/i', $lower)) {
-                        $qty = 2;
-                    } elseif (preg_match('/(?:tiga|3)\s*(?:porsi\s*)?' . $nameRegex . '/i', $lower)) {
-                        $qty = 3;
-                    } elseif (preg_match('/(?:dua|2)\s*porsi/i', $lower)) {
-                        $qty = 2;
-                    } elseif (preg_match('/(?:tiga|3)\s*porsi/i', $lower)) {
-                        $qty = 3;
-                    } elseif (preg_match('/(\d+)\s*porsi/i', $lower, $mPorsi)) {
-                        $qty = (int) $mPorsi[1];
-                    } elseif (preg_match('/(?:pesan|beli|mau)\s+(\d+)\s+/i', $lower, $mDepan)) {
-                        $qty = (int) $mDepan[1];
-                    } elseif (preg_match('/^(\d+)\s+/i', $lower, $mAwal)) {
-                        $qty = (int) $mAwal[1];
-                    }
-
-                    // Cari catatan varian berdasarkan konfigurasi resmi toko
-                    $notes = null;
-                    $cfg = $p->variant_config;
-                    $hasSpicy = !empty($cfg['spicy']['enabled']) || (!empty($cfg['spicy']['options']) && is_array($cfg['spicy']['options']));
-
-                    if ($hasSpicy) {
-                        $spicyOpts = $cfg['spicy']['options'] ?? [];
-                        $matchedOpt = null;
-                        foreach ($spicyOpts as $so) {
-                            $soName = is_array($so) ? ($so['name'] ?? '') : (string)$so;
-                            if (!empty($soName) && str_contains($lower, strtolower($soName))) {
-                                $matchedOpt = $soName;
-                                break;
-                            }
-                        }
-
-                        if ($matchedOpt) {
-                            $notes = "[{$matchedOpt}]";
-                        } elseif (preg_match('/(?:level|lv|lvl)\s*(\d+)/i', $lower, $mLv)) {
-                            $notes = "[Lv {$mLv[1]}]";
-                        } elseif (str_contains($lower, 'tidak pedas') || str_contains($lower, 'gak pedas') || str_contains($lower, 'level 0') || str_contains($lower, 'lv 0')) {
-                            $notes = "[Tidak Pedas]";
-                        } elseif (str_contains($lower, 'pedas')) {
-                            // Cari opsi pedas resmi toko jika ada
-                            $pedasMatch = null;
-                            foreach ($spicyOpts as $so) {
-                                $soName = is_array($so) ? ($so['name'] ?? '') : (string)$so;
-                                if (str_contains(strtolower($soName), 'pedas') || str_contains(strtolower($soName), 'mercon')) {
-                                    $pedasMatch = $soName;
-                                    break;
-                                }
-                            }
-                            $notes = $pedasMatch ? "[{$pedasMatch}]" : "[Pedas]";
-                        } else {
-                            // Default varian resmi toko pertama
-                            if (!empty($spicyOpts)) {
-                                $firstOpt = is_array($spicyOpts[0]) ? ($spicyOpts[0]['name'] ?? 'Biasa') : (string)$spicyOpts[0];
-                                $notes = "[{$firstOpt}]";
-                            } else {
-                                $notes = '[Lv 1]';
-                            }
-                        }
-                    } else {
-                        // Cek apakah produk adalah minuman
-                        $hasTemp = !empty($cfg['temperature']['enabled']);
-                        $isDrink = $hasTemp 
-                            || strtolower($p->category ?? '') === 'minuman' 
-                            || preg_match('/(?:es|teh|kopi|jus|susu|jeruk|wedang|soda)/i', $pNameLower);
-                        
-                        if ($isDrink) {
-                            if (str_contains($lower, 'hangat') || str_contains($lower, 'panas')) {
-                                $notes = '[Panas / Hangat]';
-                            } elseif (str_contains($lower, 'es') || str_contains($lower, 'dingin')) {
-                                $notes = '[Es / Dingin]';
-                            } else {
-                                $notes = '[Es / Dingin]';
-                            }
-                        }
-                    }
-
-                    // Cek catatan kustom tambahan (misal: kuah dipisah, kuah campur, tanpa sayur, dsb)
-                    if (preg_match('/(?:kuah\s*dipisah|kuah\s*campur|tanpa\s*(?:sayur|seledri|bawang|es|sambal)|ekstra\s*sambal)/i', $lower, $mCustomNote)) {
-                        $cNote = ucwords(strtolower(trim($mCustomNote[0])));
-                        $notes = $notes ? "{$notes} [{$cNote}]" : "[{$cNote}]";
-                    }
-
-                    $subtotal = $price * $qty;
-                    $itemsSubtotal += $subtotal;
-
-                    $matchedCanteens[$cId]['items'][] = [
-                        'product_id' => $p->id,
-                        'name' => $p->name,
-                        'quantity' => $qty,
-                        'price' => $price,
-                        'notes' => $notes,
-                        'subtotal' => $subtotal,
-                        'variant_config' => $p->variant_config,
-                    ];
-                }
-
-                if ($isExclusiveOrder) {
-                    // Jika santri bilang "mie gacoan aja 2", batasi hanya produk ini
-                    break;
                 }
             }
         }
@@ -1019,9 +1110,57 @@ class AiSmartOrderingService
             ];
         }
 
+        // Cek apakah santri menanyakan harga menu tertentu (Price Inquiry)
+        $isPriceInquiry = preg_match('/(?:berapa\s*hargan?y?a?|harga\s*(?:menu\s*)?([a-zA-Z0-9\s]{2,20})?\s*berapa|hargan?y?a?\s*berapa|berapaan)\b/i', $lower);
+        if ($isPriceInquiry && !empty($matchedCanteens)) {
+            $priceLines = [];
+            $quickReplies = [];
+            $sampleName = '';
+            foreach ($matchedCanteens as $c) {
+                foreach ($c['items'] as $it) {
+                    $priceFmt = number_format($it['price'], 0, ',', '.');
+                    $priceLines[] = "• **{$it['name']}** [{$c['canteen_name']}] seharga **Rp {$priceFmt}** per porsi.";
+                    if (empty($sampleName)) {
+                        $sampleName = $it['name'];
+                    }
+                    if (count($quickReplies) < 3) {
+                        $quickReplies[] = "Pesan {$it['name']} 1 porsi";
+                        $quickReplies[] = "Pesan {$it['name']} 2 porsi";
+                    }
+                }
+            }
+            $replyText = "Tentu kak! Berikut informasi harga menu yang kamu tanyakan:\n\n"
+                . implode("\n", $priceLines) . "\n\n"
+                . "Mau saya pesankan sekarang? Ketik saja jumlah dan kamarmu (contoh: *\"Pesan 1 {$sampleName} antar ke kamar {$loc}\"*), atau tap tombol cepat di bawah! 😊";
+
+            return [
+                'reply_text' => $replyText,
+                'is_order_ready' => false,
+                'recipient_name' => $recipientName,
+                'recipient_room' => $loc,
+                'quick_replies' => array_values(array_unique($quickReplies)),
+                'canteens' => [],
+                'summary' => [
+                    'subtotal' => 0,
+                    'items_subtotal' => 0,
+                    'delivery_fee' => 3000,
+                    'admin_fee' => 2000,
+                    'grand_total' => 5000,
+                ],
+            ];
+        }
+
         // B. DETEKSI PERTANYAAN / EKSPLORASI MENU & KATEGORI UMUM (Misal: "saya mau beli bakso", "ada bakso apa aja", "mau pesen mie apa ada", "jual apa")
         if (empty($matchedCanteens)) {
             $foodKeywords = [
+                'nasi goreng' => 'Nasi Goreng',
+                'terang bulan' => 'Terang Bulan',
+                'es teh' => 'Es Teh',
+                'makanan' => 'Makanan',
+                'minuman' => 'Minuman',
+                'snack' => 'Snack / Camilan',
+                'camilan' => 'Snack / Camilan',
+                'cemilan' => 'Snack / Camilan',
                 'bakso' => 'Bakso',
                 'mie' => 'Mie',
                 'seblak' => 'Seblak',
@@ -1029,20 +1168,15 @@ class AiSmartOrderingService
                 'ayam' => 'Ayam',
                 'bebek' => 'Bebek',
                 'nasgor' => 'Nasi Goreng',
-                'nasi goreng' => 'Nasi Goreng',
                 'nasi' => 'Nasi',
                 'sate' => 'Sate',
                 'martabak' => 'Martabak',
-                'terang bulan' => 'Terang Bulan',
                 'gorengan' => 'Gorengan',
-                'snack' => 'Snack / Camilan',
-                'camilan' => 'Camilan',
-                'minum' => 'Minuman',
-                'minuman' => 'Minuman',
-                'es teh' => 'Es Teh',
-                'es' => 'Minuman Es',
                 'kopi' => 'Kopi',
                 'jus' => 'Jus',
+                'minum' => 'Minuman',
+                'makan' => 'Makanan',
+                'es' => 'Minuman Es',
             ];
 
             $matchedKeyword = null;
@@ -1055,19 +1189,146 @@ class AiSmartOrderingService
                 }
             }
 
-            $isAskingExplore = $matchedKeyword !== null || preg_match('/(?:apa\s*(?:ada|aja)|ada\s*apa|menu\s*apa|jual\s*apa|pilihan|rekomendasi|list|daftar|spesial|apakah\s*ada|mau\s*(?:beli|pesan|makan|minum)|ingin\s*(?:beli|pesan)|pengen\s*(?:beli|makan|minum)?|cari|butuh)/i', $lower);
+            $isAskingGeneralRecommend = preg_match('/(?:rekomendasi|saran|menu\s*(?:enak|favorit|laris|spesial|best\s*seller|andal)|makanan\s*enak|jajan\s*apa|bingung\s*mau\s*(?:makan|pesan|beli)|apa\s*yang\s*enak|yang\s*enak\s*apa)/i', $lower);
+            $isAskingStoreExplore = preg_match('/(?:toko\s*apa|kantin\s*apa|ada\s*toko\s*apa|daftar\s*toko|toko\s*(?:buka|mana)|kantin\s*(?:buka|mana))/i', $lower);
+            $isAskingExplore = $matchedKeyword !== null || $isAskingGeneralRecommend || $isAskingStoreExplore || preg_match('/(?:apa\s*(?:ada|aja)|ada\s*apa|menu\s*apa|jual\s*apa|pilihan|list|daftar|spesial|apakah\s*ada|mau\s*(?:beli|pesan|makan|minum)|ingin\s*(?:beli|pesan)|pengen\s*(?:beli|makan|minum)?|cari|butuh)/i', $lower);
 
             if ($isAskingExplore) {
+                // 1. Rekomendasi / Informasi Toko & Kantin yang Buka
+                if ($isAskingStoreExplore) {
+                    try {
+                        $canteens = Canteen::approved()->with('user')->get();
+                    } catch (\Throwable $e) {
+                        Log::warning("AiSmartOrderingService store explore DB skipped: " . $e->getMessage());
+                        $canteens = collect();
+                    }
+                    $lines = ["🏪 **Daftar Toko & Kantin Resmi di Pondok Pesantren Al-Mannan**:\n"];
+                    $quickReplies = [];
+                    foreach ($canteens as $c) {
+                        $openStatus = $c->is_open ? "🟢 Buka" : "🔴 Tutup";
+                        $hours = ($c->open_time && $c->close_time) ? " (" . substr($c->open_time, 0, 5) . " - " . substr($c->close_time, 0, 5) . " WIB)" : "";
+                        $lines[] = "• **{$c->name}** [{$c->category}] — {$openStatus}{$hours}";
+                        if (count($quickReplies) < 4) {
+                            $quickReplies[] = "Lihat menu {$c->name}";
+                        }
+                    }
+                    $lines[] = "\nKakak mau pesan menu dari toko mana? Ketik nama toko atau langsung ketik menu yang ingin dipesan! 😊";
+
+                    return [
+                        'reply_text' => implode("\n", $lines),
+                        'is_order_ready' => false,
+                        'recipient_name' => $recipientName,
+                        'recipient_room' => $loc,
+                        'quick_replies' => array_values(array_unique($quickReplies)),
+                        'canteens' => [],
+                        'summary' => [
+                            'subtotal' => 0,
+                            'items_subtotal' => 0,
+                            'delivery_fee' => 3000,
+                            'admin_fee' => 2000,
+                            'grand_total' => 5000,
+                        ],
+                    ];
+                }
+
+                // 2. Rekomendasi Umum Terstruktur (Makanan Favorit + Minuman Segar + Camilan)
+                if ($isAskingGeneralRecommend || empty($matchedKeyword)) {
+                    $foods = $products->filter(fn($p) => in_array(strtolower($p->category ?? ''), ['makanan', 'food', 'berat', 'utama']) || preg_match('/(?:mie|bakso|ayam|nasi|geprek|bebek|sate)/i', $p->name))->take(4);
+                    $drinks = $products->filter(fn($p) => in_array(strtolower($p->category ?? ''), ['minuman', 'drink', 'beverage']) || preg_match('/(?:es|teh|kopi|jus|boba|susu|lemon|tea)/i', $p->name))->take(3);
+                    $snacks = $products->filter(fn($p) => in_array(strtolower($p->category ?? ''), ['camilan', 'snack', 'jajanan']) || preg_match('/(?:dimsum|gorengan|roti|kentang|nugget|tahu|cireng|siomay)/i', $p->name))->take(3);
+
+                    if ($foods->isEmpty()) $foods = $products->take(4);
+                    if ($drinks->isEmpty()) $drinks = $products->skip(4)->take(3);
+
+                    $lines = ["🌟 **Rekomendasi Menu Terfavorit & Paling Laris Hari Ini di Higo Pondok**:\n"];
+                    $quickReplies = [];
+
+                    if ($foods->isNotEmpty()) {
+                        $lines[] = "🍛 **Makanan Terfavorit**:";
+                        foreach ($foods as $f) {
+                            $cName = $f->canteen ? $f->canteen->name : 'Kantin';
+                            $lines[] = "• **{$f->name}** - Rp " . number_format($f->price, 0, ',', '.') . " [{$cName}]";
+                            if (count($quickReplies) < 2) {
+                                $quickReplies[] = "Pesan {$f->name} 1 porsi";
+                            }
+                        }
+                        $lines[] = "";
+                    }
+
+                    if ($drinks->isNotEmpty()) {
+                        $lines[] = "🥤 **Minuman Segar**:";
+                        foreach ($drinks as $d) {
+                            $cName = $d->canteen ? $d->canteen->name : 'Kantin';
+                            $lines[] = "• **{$d->name}** - Rp " . number_format($d->price, 0, ',', '.') . " [{$cName}]";
+                            if (count($quickReplies) < 3) {
+                                $quickReplies[] = "Pesan {$d->name} 1";
+                            }
+                        }
+                        $lines[] = "";
+                    }
+
+                    if ($snacks->isNotEmpty()) {
+                        $lines[] = "🍟 **Camilan / Snack Asyik**:";
+                        foreach ($snacks as $s) {
+                            $cName = $s->canteen ? $s->canteen->name : 'Kantin';
+                            $lines[] = "• **{$s->name}** - Rp " . number_format($s->price, 0, ',', '.') . " [{$cName}]";
+                            if (count($quickReplies) < 4) {
+                                $quickReplies[] = "Pesan {$s->name} 1 porsi";
+                            }
+                        }
+                        $lines[] = "";
+                    }
+
+                    $lines[] = "Kakak mau pesan yang mana? Cukup ketik menu dan kamarmu (contoh: *\"Pesan Mie Gacoan Lv 1 sama Es Teh antar ke kamar {$loc}\"*), atau tap tombol cepat di bawah! 😊";
+
+                    return [
+                        'reply_text' => implode("\n", $lines),
+                        'is_order_ready' => false,
+                        'recipient_name' => $recipientName,
+                        'recipient_room' => $loc,
+                        'quick_replies' => array_values(array_unique($quickReplies)),
+                        'canteens' => [],
+                        'summary' => [
+                            'subtotal' => 0,
+                            'items_subtotal' => 0,
+                            'delivery_fee' => 3000,
+                            'admin_fee' => 2000,
+                            'grand_total' => 5000,
+                        ],
+                    ];
+                }
+
+                // 3. Rekomendasi / Eksplorasi Kategori Tertentu (Makanan, Minuman, Snack, Mie, Bakso, dsb.)
                 $matchedList = $products->filter(function ($p) use ($matchedKeyword) {
                     if ($matchedKeyword) {
-                        return str_contains(strtolower($p->name), $matchedKeyword) 
-                            || str_contains(strtolower($p->category ?? ''), $matchedKeyword);
+                        $pNameLower = strtolower($p->name);
+                        $pCatLower = strtolower($p->category ?? '');
+
+                        if (in_array($matchedKeyword, ['makanan', 'makan'])) {
+                            return in_array($pCatLower, ['makanan', 'food', 'berat', 'utama'])
+                                || preg_match('/(?:mie|bakso|ayam|nasi|geprek|bebek|sate|soto|penyet|lele|steak)/i', $pNameLower);
+                        }
+
+                        if (in_array($matchedKeyword, ['snack', 'camilan', 'cemilan'])) {
+                            return in_array($pCatLower, ['snack', 'camilan', 'snack & camilan'])
+                                || str_contains($pCatLower, 'snack')
+                                || str_contains($pCatLower, 'camilan')
+                                || preg_match('/(?:dimsum|gorengan|roti|kentang|nugget|tahu|cireng|siomay|terang bulan|seblak|udang keju|pangsit)/i', $pNameLower);
+                        }
+
+                        if (in_array($matchedKeyword, ['minuman', 'minum'])) {
+                            return in_array($pCatLower, ['minuman', 'drink', 'beverage'])
+                                || preg_match('/(?:es|teh|kopi|jus|boba|susu|lemon|tea)/i', $pNameLower);
+                        }
+
+                        return str_contains($pNameLower, $matchedKeyword) 
+                            || str_contains($pCatLower, $matchedKeyword);
                     }
-                    return true;
+                    return false;
                 })->take(7);
 
                 if ($matchedList->isNotEmpty()) {
-                    $label = $matchedCategoryLabel ?: 'favorit';
+                    $label = $matchedCategoryLabel ?: 'pilihan';
                     $lines = ["Tentu ada kak! Di kantin pondok tersedia aneka pilihan menu **{$label}** yang siap dipesan:"];
                     $quickReplies = [];
                     foreach ($matchedList as $item) {
@@ -1110,7 +1371,12 @@ class AiSmartOrderingService
 
         // C. Cek apakah ini instruksi Titip Beli Luar (obat di apotek, sabun di swalayan, pulpen, buku, dll)
         if (empty($matchedCanteens) && $isTitipBeliIntent) {
-            $defaultCanteen = Canteen::first();
+            $defaultCanteen = null;
+            try {
+                $defaultCanteen = Canteen::first();
+            } catch (\Throwable $e) {
+                Log::warning("AiSmartOrderingService titip beli DB skipped: " . $e->getMessage());
+            }
             $cId = $defaultCanteen ? $defaultCanteen->id : 4;
             $cName = $defaultCanteen ? $defaultCanteen->name : 'Kantin / Toko Titip Beli';
 
@@ -1225,68 +1491,163 @@ class AiSmartOrderingService
     }
 
     /**
-     * Pencocokan cerdas teks santri dengan nama produk katalog (Toleran Typo, Voice Slips & Spasi)
+     * Dapatkan daftar alias, singkatan, dan frasa khas yang sering digunakan santri untuk sebuah produk
      */
-    protected function isProductMatch(string $userText, string $productName): bool
+    public function getProductAliases(string $productName): array
+    {
+        $nameLower = preg_replace('/\s+/', ' ', strtolower(trim($productName)));
+        $aliases = [$nameLower];
+
+        // 1. Bersihkan kata imbuhan umum spesifikasi (sapi, ai)
+        $clean = preg_replace('/baksosapi/i', 'bakso sapi', $nameLower);
+        $clean = trim(preg_replace('/\b(?:sapi|ai)\b/i', ' ', $clean));
+        $clean = preg_replace('/\s+/', ' ', $clean);
+        if ($clean !== $nameLower && strlen($clean) >= 4) {
+            $aliases[] = $clean;
+        }
+
+        // 2. Hilangkan kata pengubah sekunder (manis, krispi, crispy, gula aren, dsb)
+        $modifiers = [
+            'manis', 'krispi', 'crispy', 'gula aren', 'aren', 'keju', 
+            'udang keju', 'spesial', 'special', 'jumbo', 'biasa', 
+            'original', 'ori', 'aneka rasa'
+        ];
+        foreach ($modifiers as $mod) {
+            $stripped = trim(preg_replace('/\b' . preg_quote($mod, '/') . '\b/i', '', $clean));
+            $stripped = preg_replace('/\s+/', ' ', $stripped);
+            if (strlen($stripped) >= 4 && $stripped !== $clean && !in_array($stripped, ['es', 'mie', 'nasi', 'ayam', 'bakso'])) {
+                $aliases[] = $stripped;
+            }
+        }
+
+        // 3. Jika berawalan "nasi " (contoh: "nasi ayam geprek" -> "ayam geprek")
+        if (str_starts_with($nameLower, 'nasi ') && strlen($nameLower) > 5) {
+            $withoutNasi = trim(substr($nameLower, 5));
+            if (strlen($withoutNasi) >= 4 && !in_array($withoutNasi, ['goreng', 'putih', 'uduk', 'kuning'])) {
+                $aliases[] = $withoutNasi;
+            }
+        }
+
+        // 4. Deteksi kata kunci khas unik/spesifik makanan
+        $distinctiveWords = ['gacoan', 'hompimpa', 'cireng', 'batagor', 'pempek'];
+        foreach ($distinctiveWords as $dw) {
+            if (str_contains($nameLower, $dw)) {
+                $aliases[] = $dw;
+            }
+        }
+        // Menu kategori dasar (dimsum, seblak, geprek, mercon) hanya jadi alias jika murni produk dasar (bukan varian khusus)
+        $baseWords = ['dimsum', 'geprek', 'mercon', 'seblak'];
+        foreach ($baseWords as $bw) {
+            if (str_contains($nameLower, $bw)) {
+                $cleanWithoutOri = trim(preg_replace('/\b(?:original|ori|biasa|standar)\b/i', '', $clean));
+                $cleanWithoutOri = preg_replace('/\s+/', ' ', $cleanWithoutOri);
+                if ($cleanWithoutOri === $bw) {
+                    $aliases[] = $bw;
+                }
+            }
+        }
+
+        // 5. Variasi susunan 2 kata (contoh: "ayam kulit" -> "kulit ayam")
+        $words = explode(' ', $clean);
+        if (count($words) === 2 && strlen($words[0]) >= 3 && strlen($words[1]) >= 3) {
+            $aliases[] = $words[1] . ' ' . $words[0];
+        }
+
+        // 6. Variasi tanpa spasi populer
+        if (str_contains($clean, 'es teh')) {
+            $aliases[] = 'esteh';
+        }
+
+        $aliases = array_values(array_unique(array_filter($aliases, fn($a) => strlen(trim($a)) >= 3)));
+        usort($aliases, fn($a, $b) => strlen($b) <=> strlen($a));
+
+        return $aliases;
+    }
+
+    /**
+     * Pencocokan cerdas teks santri dengan nama produk katalog (Toleran Typo, Voice Slips, Alias & Spasi)
+     */
+    protected function isProductMatch(string $userText, string $productName, ?string &$matchedPhrase = null, bool $allowSingleWordAlias = true): bool
     {
         $userText = preg_replace('/\s+/', ' ', strtolower(trim($userText)));
         $pLower = preg_replace('/\s+/', ' ', strtolower(trim($productName)));
+        $matchedPhrase = null;
 
-        // 1. Kecocokan langsung (exact substring)
-        if (strlen($pLower) >= 4 && str_contains($userText, $pLower)) {
-            return true;
-        }
+        // 1. Cek semua alias / subfrasa khas resmi produk (prioritas nama/alias terpanjang)
+        $aliases = $this->getProductAliases($productName);
+        foreach ($aliases as $alias) {
+            $aliasLower = strtolower(trim($alias));
+            $isSingleWord = !str_contains($aliasLower, ' ') && $aliasLower !== 'esteh';
 
-        // 2. Normalisasi kata imbuhan / pelengkap ("sapi", "ai", spasi ganda)
-        // Contoh: "BaksoSapi telur" -> "bakso telur", "Bakso Sapi Urat" -> "bakso urat"
-        $normalizedP = preg_replace('/baksosapi/i', 'bakso sapi', $pLower);
-        $cleanP = trim(preg_replace('/\b(?:sapi|ai)\b/i', ' ', $normalizedP));
-        $cleanP = preg_replace('/\s+/', ' ', $cleanP);
-
-        if (strlen($cleanP) >= 4 && str_contains($userText, $cleanP)) {
-            return true;
-        }
-
-        // 3. Kecocokan Token Kunci dengan toleransi Typo (Levenshtein / similar_text)
-        $tokens = array_values(array_filter(explode(' ', $cleanP), fn($t) => strlen($t) >= 3));
-        $userWords = array_values(array_filter(explode(' ', $userText), fn($w) => strlen($w) >= 2));
-
-        if (count($tokens) >= 2) {
-            $allMatch = true;
-            foreach ($tokens as $token) {
-                $matchedToken = false;
-                foreach ($userWords as $uWord) {
-                    if ($uWord === $token) {
-                        $matchedToken = true;
-                        break;
-                    }
-                    // Toleransi 1 karakter typo (misal: "kulis" vs "kulit", "baso" vs "bakso", "mia" vs "mie")
-                    if (strlen($token) >= 3 && levenshtein($uWord, $token) <= 1) {
-                        $matchedToken = true;
-                        break;
-                    }
-                    if (strlen($token) >= 4) {
-                        similar_text($uWord, $token, $pct);
-                        if ($pct >= 75) {
-                            $matchedToken = true;
-                            break;
-                        }
-                    }
-                }
-                if (!$matchedToken) {
-                    $allMatch = false;
-                    break;
-                }
+            if (!$allowSingleWordAlias && $isSingleWord) {
+                continue;
             }
-            if ($allMatch) {
+
+            if (strlen($aliasLower) >= 4) {
+                if (preg_match('/\b' . preg_quote($aliasLower, '/') . '\b/i', $userText, $m)) {
+                    $matchedPhrase = $m[0];
+                    return true;
+                }
+            } elseif ($aliasLower === 'esteh' && preg_match('/\besteh\b/i', $userText, $m)) {
+                $matchedPhrase = $m[0];
                 return true;
             }
         }
 
-        // 4. Full phrase fuzzy similarity (jika kemiripan teks di atas 80%)
-        if (strlen($cleanP) >= 6) {
+        // 2. Normalisasi kata imbuhan / pelengkap ("sapi", "ai", spasi ganda)
+        $normalizedP = preg_replace('/baksosapi/i', 'bakso sapi', $pLower);
+        $cleanP = trim(preg_replace('/\b(?:sapi|ai)\b/i', ' ', $normalizedP));
+        $cleanP = preg_replace('/\s+/', ' ', $cleanP);
+
+        if (strlen($cleanP) >= 4 && preg_match('/\b' . preg_quote($cleanP, '/') . '\b/i', $userText, $m)) {
+            $matchedPhrase = $m[0];
+            return true;
+        }
+
+        // 3. Kecocokan Token Kunci yang ketat (Bebas Stopword & Typo Terkendali)
+        $tokens = array_values(array_filter(explode(' ', $cleanP), fn($t) => strlen($t) >= 3 && !in_array($t, $this->chatStopwords)));
+        $rawUserWords = array_values(array_filter(explode(' ', $userText), fn($w) => strlen($w) >= 2));
+        $userWords = array_values(array_filter($rawUserWords, fn($w) => !in_array($w, $this->chatStopwords)));
+
+        if (count($tokens) >= 2 && count($userWords) >= 2) {
+            $allMatched = true;
+            $matchedWordsInText = [];
+            foreach ($tokens as $token) {
+                $tokenFound = false;
+                foreach ($userWords as $uWord) {
+                    if ($uWord === $token) {
+                        $tokenFound = true;
+                        $matchedWordsInText[] = $uWord;
+                        break;
+                    }
+                    if (strlen($token) >= 5 && strlen($uWord) >= 5 && levenshtein($uWord, $token) <= 1) {
+                        $tokenFound = true;
+                        $matchedWordsInText[] = $uWord;
+                        break;
+                    }
+                    if (strlen($token) === 4 && strlen($uWord) === 4 && $token[0] === $uWord[0] && levenshtein($uWord, $token) <= 1) {
+                        $tokenFound = true;
+                        $matchedWordsInText[] = $uWord;
+                        break;
+                    }
+                }
+                if (!$tokenFound) {
+                    $allMatched = false;
+                    break;
+                }
+            }
+
+            if ($allMatched) {
+                $matchedPhrase = implode(' ', $tokens);
+                return true;
+            }
+        }
+
+        // 4. Full phrase fuzzy similarity (jika kemiripan teks di atas 88% untuk nama panjang)
+        if (strlen($cleanP) >= 10 && strlen($userText) >= 10) {
             similar_text($userText, $cleanP, $simPct);
-            if ($simPct >= 80) {
+            if ($simPct >= 88) {
+                $matchedPhrase = $cleanP;
                 return true;
             }
         }
@@ -1308,34 +1669,38 @@ class AiSmartOrderingService
         $recipientRoom = $aiData['recipient_room'] ?? $deliveryLocation;
 
         if ($recipientName) {
-            $dbSantri = User::where(function ($q) use ($recipientName) {
-                    $q->where('santri_name', $recipientName)
-                      ->orWhere('name', $recipientName);
-                })
-                ->where(function ($q) {
-                    $q->whereNotNull('santri_name')
-                      ->orWhereHas('roles', fn($rq) => $rq->where('name', 'user'));
-                })
-                ->first();
-
-            if (!$dbSantri) {
+            try {
                 $dbSantri = User::where(function ($q) use ($recipientName) {
-                        $q->where('santri_name', 'LIKE', "%{$recipientName}%")
-                          ->orWhere('name', 'LIKE', "%{$recipientName}%");
+                        $q->where('santri_name', $recipientName)
+                          ->orWhere('name', $recipientName);
                     })
                     ->where(function ($q) {
                         $q->whereNotNull('santri_name')
                           ->orWhereHas('roles', fn($rq) => $rq->where('name', 'user'));
                     })
                     ->first();
-            }
 
-            if ($dbSantri) {
-                $recipientName = $dbSantri->santri_name ?: $dbSantri->name;
-                if ($dbSantri->santri_room) {
-                    $deliveryLocation = $dbSantri->santri_room;
-                    $recipientRoom = $dbSantri->santri_room;
+                if (!$dbSantri) {
+                    $dbSantri = User::where(function ($q) use ($recipientName) {
+                            $q->where('santri_name', 'LIKE', "%{$recipientName}%")
+                              ->orWhere('name', 'LIKE', "%{$recipientName}%");
+                        })
+                        ->where(function ($q) {
+                            $q->whereNotNull('santri_name')
+                              ->orWhereHas('roles', fn($rq) => $rq->where('name', 'user'));
+                        })
+                        ->first();
                 }
+
+                if ($dbSantri) {
+                    $recipientName = $dbSantri->santri_name ?: $dbSantri->name;
+                    if ($dbSantri->santri_room) {
+                        $deliveryLocation = $dbSantri->santri_room;
+                        $recipientRoom = $dbSantri->santri_room;
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::warning("AiSmartOrderingService formatResult user lookup skipped: " . $e->getMessage());
             }
         }
 
@@ -1345,16 +1710,20 @@ class AiSmartOrderingService
                 if (!empty($canteen['items']) && is_array($canteen['items'])) {
                     foreach ($canteen['items'] as &$item) {
                         $p = null;
-                        if (!empty($item['product_id'])) {
-                            $p = Product::find($item['product_id']);
-                        }
-                        if (!empty($item['name'])) {
-                            $item['name'] = trim(preg_replace('/\s+/', ' ', $item['name']));
-                        }
-                        if (!$p && !empty($item['name'])) {
-                            $p = Product::where('name', $item['name'])
-                                ->orWhere('name', 'LIKE', "%{$item['name']}%")
-                                ->first();
+                        try {
+                            if (!empty($item['product_id'])) {
+                                $p = Product::find($item['product_id']);
+                            }
+                            if (!empty($item['name'])) {
+                                $item['name'] = trim(preg_replace('/\s+/', ' ', $item['name']));
+                            }
+                            if (!$p && !empty($item['name'])) {
+                                $p = Product::where('name', $item['name'])
+                                    ->orWhere('name', 'LIKE', "%{$item['name']}%")
+                                    ->first();
+                            }
+                        } catch (\Throwable $e) {
+                            // Offline fallback
                         }
                         if ($p) {
                             $item['product_id'] = $p->id;

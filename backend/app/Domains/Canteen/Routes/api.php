@@ -54,6 +54,10 @@ Route::middleware(['auth:sanctum', 'impersonate'])->group(function () {
         Route::put('/canteen/orders/{id}/custom-price', [\App\Domains\Canteen\Controllers\OrderController::class, 'setCustomOrderPrice']);
         
         Route::get('/couriers', [\App\Domains\Canteen\Controllers\OrderController::class, 'getCouriers']);
+
+        // AI Chat Dataset & Training Logs (Continuous Learning)
+        Route::get('/canteen/ai-chat-logs', [\App\Domains\Canteen\Controllers\AiChatOrderController::class, 'getLogs']);
+        Route::get('/canteen/ai-chat-logs/export-jsonl', [\App\Domains\Canteen\Controllers\AiChatOrderController::class, 'exportTrainingData']);
     });
     
     // Courier routes

@@ -120,8 +120,15 @@ class AdminController extends Controller
         $canteen = Canteen::findOrFail($id);
         
         $category = $request->input('category', $canteen->category ?? 'kauman');
-        $defaultDelivery = 3500;
-        $defaultAdmin = 1500;
+
+        $defaultMap = [
+            'kauman' => ['delivery' => 2000, 'admin' => 1000],
+            'kota' => ['delivery' => 3000, 'admin' => 2000],
+            'luar_zona' => ['delivery' => 5000, 'admin' => 2000],
+        ];
+
+        $defaultDelivery = $defaultMap[$category]['delivery'] ?? 3000;
+        $defaultAdmin = $defaultMap[$category]['admin'] ?? 2000;
 
         $canteen->update([
             'category' => $category,
@@ -224,6 +231,7 @@ class AdminController extends Controller
             'all', null, '' => 'Semua Toko',
             'kauman' => 'Zona Kauman',
             'kota' => 'Zona Kota',
+            'luar_zona' => 'Luar Zona',
             default => 'Zona ' . ucfirst($request->category)
         };
 

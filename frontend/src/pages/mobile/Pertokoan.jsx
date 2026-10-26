@@ -305,7 +305,12 @@ export default function Pertokoan() {
   // Update Category & Fees
   const updateCategoryMutation = useMutation({
     mutationFn: async ({ id, category }) => {
-      const res = await axios.put(`/admin/canteens/${id}/fees`, { category });
+      const targetZone = getZone(category);
+      const res = await axios.put(`/admin/canteens/${id}/fees`, { 
+        category,
+        delivery_fee: targetZone?.deliveryFee,
+        admin_fee: targetZone?.adminFee
+      });
       return res.data;
     },
     onSuccess: (data) => {

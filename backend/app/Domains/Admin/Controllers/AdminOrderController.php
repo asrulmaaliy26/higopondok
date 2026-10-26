@@ -767,7 +767,7 @@ class AdminOrderController extends Controller
      */
     public function uploadPaymentProof(AdminUploadPaymentProofRequest $request, $id)
     {
-        return DB::transaction(function () use ($request, $id) {
+        $uploadResult = DB::transaction(function () use ($request, $id) {
             $order = Order::with(['user', 'canteen', 'courier', 'items.product'])->lockForUpdate()->findOrFail($id);
 
             $files = $request->file('proof_of_payment');
@@ -775,13 +775,11 @@ class AdminOrderController extends Controller
                 $files = [$files];
             }
 
-            // Target user for folder path naming: the user who owns the order (or fallback to admin)
-            $targetUser = $order->user ?: $request->user();
-
+            // Simpan berkas di disk lokal 'public' terlebih dahulu agar respons upload instan (<0.3s)
             $paths = [];
             foreach ($files as $file) {
                 if ($file) {
-                    $paths[] = $this->storeOrderProofImage($file, $order, 'proof');
+                    $paths[] = $this->storeOrderProofImage($file, $order, 'proof', 'public');
                 }
             }
 
@@ -791,30 +789,6 @@ class AdminOrderController extends Controller
             // Default payment status to 'paid' when admin uploads, or accept admin's choice
             $newPaymentStatus = $request->input('payment_status', 'paid');
             $now = now('Asia/Jakarta');
-
-            // Jalankan scanner AI untuk mendeteksi tanggal transfer & nomor referensi dari struk
-            $detectedDateInfo = '';
-            if (!empty($paths)) {
-                try {
-                    $scanner = app(\App\Domains\Canteen\Services\ReceiptScannerService::class);
-                    $firstScan = $scanner->scanReceipt($paths[0]);
-                    if (!empty($firstScan['is_transfer_receipt'])) {
-                        $order->payment_ocr_data = $firstScan;
-                        if (!empty($firstScan['ref_number'])) {
-                            $order->payment_ref_number = $firstScan['ref_number'];
-                        }
-                        $transDate = $firstScan['date'] ?? null;
-                        $transTime = $firstScan['time'] ?? null;
-                        if ($transDate) {
-                            $detectedDateInfo = " | Tgl Struk: {$transDate}" . ($transTime ? " {$transTime}" : '');
-                        } else {
-                            $detectedDateInfo = " | Tgl Struk: Tidak tertera";
-                        }
-                    }
-                } catch (\Throwable $e) {
-                    // Ignore scanner error, prioritize upload
-                }
-            }
 
             if ($request->filled('admin_notes')) {
                 $order->admin_notes = $request->input('admin_notes');
@@ -872,12 +846,6 @@ class AdminOrderController extends Controller
                         }
                     }
 
-                    if ($order->payment_ocr_data) {
-                        $linked->payment_ocr_data = $order->payment_ocr_data;
-                    }
-                    if ($order->payment_ref_number) {
-                        $linked->payment_ref_number = $order->payment_ref_number;
-                    }
                     if ($request->filled('admin_notes')) {
                         $linked->admin_notes = $request->input('admin_notes');
                     }
@@ -896,14 +864,65 @@ class AdminOrderController extends Controller
                 'action' => 'upload_payment_proof',
                 'model_type' => Order::class,
                 'model_id' => $order->id,
-                'description' => "Admin {$request->user()->name} mengunggah {$filesCount} berkas bukti pembayaran untuk pesanan #{$order->id} ({$canteenName} - {$customerName}). Status pembayaran: {$newPaymentStatus}{$detectedDateInfo}{$notesLog}",
+                'description' => "Admin {$request->user()->name} mengunggah {$filesCount} berkas bukti pembayaran untuk pesanan #{$order->id} ({$canteenName} - {$customerName}). Status pembayaran: {$newPaymentStatus}{$notesLog}",
             ]);
 
-            return response()->json([
-                'message' => "Bukti pembayaran berhasil diunggah! Status pembayaran ditandai sebagai " . ($newPaymentStatus === 'paid' ? 'Lunas.' : 'Menunggu Validasi.'),
-                'order' => $order->fresh()->load(['user', 'canteen', 'courier', 'items.product'])
-            ]);
+            return [
+                'order' => $order,
+                'paths' => $paths,
+                'newPaymentStatus' => $newPaymentStatus,
+            ];
         });
+
+        $order = $uploadResult['order'];
+        $paths = $uploadResult['paths'];
+        $newPaymentStatus = $uploadResult['newPaymentStatus'];
+
+        // Sinkronisasi ke Google Drive & Scanner AI di latar belakang (Non-Blocking Fast Response)
+        if (!empty($paths)) {
+            $orderId = $order->id;
+            $firstLocalPath = $paths[0];
+            dispatch(function () use ($orderId, $firstLocalPath) {
+                try {
+                    $order = Order::find($orderId);
+                    if (!$order) return;
+
+                    // 1. Eksekusi scanner AI pada file lokal (sangat cepat & akurat)
+                    try {
+                        $scanner = app(\App\Domains\Canteen\Services\ReceiptScannerService::class);
+                        $firstScan = $scanner->scanReceipt($firstLocalPath);
+                        if (!empty($firstScan['is_transfer_receipt'])) {
+                            $order->payment_ocr_data = $firstScan;
+                            if (!empty($firstScan['ref_number'])) {
+                                $order->payment_ref_number = $firstScan['ref_number'];
+                            }
+                            $order->save();
+                            if ($order->checkout_id) {
+                                Order::where('checkout_id', $order->checkout_id)
+                                    ->where('id', '!=', $order->id)
+                                    ->update([
+                                        'payment_ocr_data' => json_encode($firstScan),
+                                        'payment_ref_number' => $order->payment_ref_number
+                                    ]);
+                            }
+                        }
+                    } catch (\Throwable $scanErr) {
+                        \Illuminate\Support\Facades\Log::warning("[Admin uploadPaymentProof] OCR background failed: " . $scanErr->getMessage());
+                    }
+
+                    // 2. Pindahkan bukti dari disk lokal ke Google Drive, lalu hapus file fisik lokal agar server bersih
+                    $controller = app(\App\Http\Controllers\Controller::class);
+                    $controller->syncProofToGoogleDrive($order, 'proof_of_payment');
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::warning("[Admin uploadPaymentProof] Background sync to Google Drive failed: " . $e->getMessage());
+                }
+            })->afterResponse();
+        }
+
+        return response()->json([
+            'message' => "Bukti pembayaran berhasil diunggah! Status pembayaran ditandai sebagai " . ($newPaymentStatus === 'paid' ? 'Lunas.' : 'Menunggu Validasi.'),
+            'order' => $order->fresh()->load(['user', 'canteen', 'courier', 'items.product'])
+        ]);
     }
 
     /**

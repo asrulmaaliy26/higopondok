@@ -41,6 +41,7 @@ export const PRICING_CONFIG = {
 export const CANTEEN_ZONES = [
   { id: 'kauman', label: 'Zona Kauman', deliveryFee: 2000, adminFee: 1000 },
   { id: 'kota',   label: 'Zona Kota',   deliveryFee: PRICING_CONFIG.BASE_DELIVERY_FEE, adminFee: PRICING_CONFIG.BASE_ADMIN_FEE },
+  { id: 'luar_zona', label: 'Luar Zona', deliveryFee: 5000, adminFee: 2000 },
 ];
 
 export const getCanteenZone = (id) => CANTEEN_ZONES.find(z => z.id === id) ?? CANTEEN_ZONES[0];
@@ -58,17 +59,22 @@ export function formatRupiah(amount) {
  * @param {number} totalQuantity - Jumlah total item yang dibeli
  * @param {number} userRank      - Urutan pemesan harian di toko (1 = Santri ke-1, 2 = Santri ke-2, 3+ = Santri ke-3+)
  * @param {boolean} hasCourier   - Apakah pesanan diantar kurir (true) atau diambil mandiri/toko (false)
+ * @param {string} zoneId        - ID Zona toko ('kauman', 'kota', 'luar_zona')
  * @returns {object} Rincian lengkap biaya
  */
-export function calculateOrderFees(totalQuantity = 1, userRank = 1, hasCourier = true) {
+export function calculateOrderFees(totalQuantity = 1, userRank = 1, hasCourier = true, zoneId = 'kota') {
   const qty = Math.max(1, parseInt(totalQuantity, 10) || 1);
   const extraBlocks = Math.max(0, Math.floor((qty - 1) / 5));
 
   const extraCourierFee = extraBlocks * PRICING_CONFIG.EXTRA_DELIVERY_PER_5_ITEMS;
   const extraAdminFee = extraBlocks * PRICING_CONFIG.EXTRA_ADMIN_PER_5_ITEMS;
 
-  const rawDeliveryFee = PRICING_CONFIG.BASE_DELIVERY_FEE + extraCourierFee;
-  const baseAdminFee = PRICING_CONFIG.BASE_ADMIN_FEE + extraAdminFee;
+  const zone = getCanteenZone(zoneId);
+  const baseDelivery = zone?.deliveryFee ?? PRICING_CONFIG.BASE_DELIVERY_FEE;
+  const baseAdmin = zone?.adminFee ?? PRICING_CONFIG.BASE_ADMIN_FEE;
+
+  const rawDeliveryFee = baseDelivery + extraCourierFee;
+  const baseAdminFee = baseAdmin + extraAdminFee;
 
   // Potongan ongkir bertingkat dialihkan ke kas admin pada hari yang sama:
   // Rank 1: Rp 0 (Kurir Rp 3.000, Admin Rp 2.000)

@@ -561,22 +561,27 @@ export default function TugasKurir() {
     mutationFn: async ({ id, orderIds, files, type }) => {
       const ids = orderIds && orderIds.length > 0 ? orderIds : [id];
       const fieldName = type === 'delivery' ? 'proof_of_delivery[]' : 'proof_of_purchase[]';
-      let lastRes = null;
       
-      for (const targetId of ids) {
+      // Kirim secara paralel instan ke server
+      const uploadPromises = ids.map(async (targetId) => {
         const formData = new FormData();
         files.forEach(file => {
           formData.append(fieldName, file);
         });
-        const endpoint = type === 'delivery' ? `/courier/orders/${targetId}/upload-delivery` : `/courier/orders/${targetId}/upload-receipt`;
+        const endpoint = type === 'delivery' 
+          ? `/courier/orders/${targetId}/upload-delivery` 
+          : `/courier/orders/${targetId}/upload-receipt`;
         const res = await api.post(endpoint, formData, {
           headers: {
             'Content-Type': 'multipart/form-data'
-          }
+          },
+          timeout: 25000
         });
-        lastRes = res.data;
-      }
-      return lastRes;
+        return res.data;
+      });
+
+      const results = await Promise.all(uploadPromises);
+      return results[results.length - 1];
     },
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['courier_orders'] });

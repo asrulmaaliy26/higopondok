@@ -189,8 +189,8 @@ export default function Keranjang() {
     const subtotal = itemList.reduce((s, i) => s + parseFloat(i.product.price) * i.quantity, 0);
     const qty = itemList.reduce((s, i) => s + i.quantity, 0);
     
-    // Perhitungan Terpusat (Opsi B: Ongkir Rp 3.000 + Admin Rp 2.000)
-    const feeDetails = calculateOrderFees(qty, 1, true);
+    // Perhitungan Terpusat (Berdasarkan Zona Toko & Kuantitas)
+    const feeDetails = calculateOrderFees(qty, 1, true, canteen?.category || 'kota');
     const { deliveryFee, adminFee, extraBlocks, extraCourierFee, extraAdminFee } = feeDetails;
 
     const total = subtotal + deliveryFee + adminFee;

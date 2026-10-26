@@ -199,7 +199,7 @@ class TokoBarokahTestingSeeder extends Seeder
             ],
             [
                 'name' => 'Tahu Bakso Krispi (Isi 4)',
-                'category' => 'Snack & Camilan',
+                'category' => 'Snack',
                 'description' => 'Tahu pong isi adonan bakso sapi gurih, digoreng renyah dengan saus cocolan pedas.',
                 'price' => 10000,
                 'hpp' => 7500,
@@ -209,7 +209,7 @@ class TokoBarokahTestingSeeder extends Seeder
             ],
             [
                 'name' => 'Roti Bakar Coklat Keju Susu',
-                'category' => 'Snack & Camilan',
+                'category' => 'Snack',
                 'description' => 'Roti tawar tebal dipanggang dengan olesan mentega, taburan meses coklat, dan parutan keju cheddar melimpah.',
                 'price' => 12000,
                 'hpp' => 8500,
@@ -219,7 +219,7 @@ class TokoBarokahTestingSeeder extends Seeder
             ],
             [
                 'name' => 'Cireng Krispi Bumbu Rujak',
-                'category' => 'Snack & Camilan',
+                'category' => 'Snack',
                 'description' => 'Cireng kenyal gurih dengan cocolan sambal rujak asam manis pedas yang nendang.',
                 'price' => 8000,
                 'hpp' => 5500,
@@ -229,7 +229,7 @@ class TokoBarokahTestingSeeder extends Seeder
             ],
             [
                 'name' => 'Pisang Bakar Keju Coklat',
-                'category' => 'Snack & Camilan',
+                'category' => 'Snack',
                 'description' => 'Pisang raja manis dibakar caramel, disajikan dengan parutan keju melimpah dan susu kental.',
                 'price' => 9000,
                 'hpp' => 6500,

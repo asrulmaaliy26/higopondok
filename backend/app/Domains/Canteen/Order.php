@@ -179,20 +179,40 @@ class Order extends Model
      * Aturan Dasar: Mengambil dari konfigurasi getPricingConfig() (Default Opsi B: Driver 3.000 + Admin 2.000).
      * Setiap kelipatan 5 produk (>5): +2.000 ke driver, +3.000 ke admin.
      */
-    public static function calculateOrderFees(int $totalQuantity): array
+    public static function calculateOrderFees(int $totalQuantity, $canteen = null): array
     {
         $cfg = self::getPricingConfig();
         $extraBlocks = max(0, (int) floor(($totalQuantity - 1) / 5));
         $extraDelivery = $extraBlocks * $cfg['extra_delivery_per_5_items'];
         $extraAdmin = $extraBlocks * $cfg['extra_admin_per_5_items'];
 
-        $deliveryFee = $cfg['base_delivery_fee'] + $extraDelivery;
-        $adminFee = $cfg['base_admin_fee'] + $extraAdmin;
+        $baseDelivery = $cfg['base_delivery_fee'];
+        $baseAdmin = $cfg['base_admin_fee'];
+
+        if ($canteen) {
+            $cat = strtolower(is_object($canteen) ? ($canteen->category ?? 'kauman') : (string)$canteen);
+            if ($cat === 'kauman') {
+                $baseDelivery = 2000.0;
+                $baseAdmin = 1000.0;
+            } elseif ($cat === 'luar_zona' || $cat === 'luar') {
+                $baseDelivery = 5000.0;
+                $baseAdmin = 2000.0;
+            } elseif ($cat === 'kota') {
+                $baseDelivery = 3000.0;
+                $baseAdmin = 2000.0;
+            } elseif (is_object($canteen) && ((float)$canteen->delivery_fee > 0 || (float)$canteen->admin_fee > 0)) {
+                if ((float)$canteen->delivery_fee > 0) $baseDelivery = (float)$canteen->delivery_fee;
+                if ((float)$canteen->admin_fee > 0) $baseAdmin = (float)$canteen->admin_fee;
+            }
+        }
+
+        $deliveryFee = $baseDelivery + $extraDelivery;
+        $adminFee = $baseAdmin + $extraAdmin;
 
         return [
             'extra_blocks'       => $extraBlocks,
-            'base_delivery_fee'  => $cfg['base_delivery_fee'],
-            'base_admin_fee'     => $cfg['base_admin_fee'],
+            'base_delivery_fee'  => $baseDelivery,
+            'base_admin_fee'     => $baseAdmin,
             'extra_delivery_fee' => $extraDelivery,
             'extra_admin_fee'    => $extraAdmin,
             'delivery_fee'       => $deliveryFee,
@@ -212,11 +232,12 @@ class Order extends Model
      *
      * @param int $totalQuantity  Total jumlah item dalam pesanan ini.
      * @param int $userDailyIndex Urutan user unik di toko ini hari ini (1-based).
+     * @param mixed $canteen      Model Canteen atau string kategori zona.
      */
-    public static function calculateUserRankedFees(int $totalQuantity, int $userDailyIndex): array
+    public static function calculateUserRankedFees(int $totalQuantity, int $userDailyIndex, $canteen = null): array
     {
         $cfg = self::getPricingConfig();
-        $base = self::calculateOrderFees($totalQuantity);
+        $base = self::calculateOrderFees($totalQuantity, $canteen);
 
         $courierCut = ($userDailyIndex > $cfg['user_threshold_limit'])
             ? min($base['delivery_fee'], (float) $cfg['user_threshold_courier_cut'])
