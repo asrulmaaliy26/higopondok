@@ -122,6 +122,14 @@ class Order extends Model
         return $this->belongsTo(User::class, 'courier_id');
     }
 
+    /**
+     * Kirim notifikasi email latar belakang saat pesanan berstatus selesai (completed)
+     */
+    public function dispatchCompletedNotifications(): void
+    {
+        \App\Domains\Canteen\Jobs\SendOrderCompletedNotificationJob::dispatchAfterResponse($this->id);
+    }
+
     // ==========================================
     // LOCAL SCOPES
     // ==========================================

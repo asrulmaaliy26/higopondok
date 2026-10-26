@@ -932,6 +932,8 @@ class OrderController extends Controller
                 \App\Domains\Canteen\Jobs\SyncOrderProofToGoogleDriveJob::dispatchAfterResponse($order->id, 'proof_of_delivery');
             }
 
+            $order->dispatchCompletedNotifications();
+
             return response()->json(['message' => 'Pesanan berhasil diselesaikan', 'order' => $order]);
         });
     }
@@ -1403,6 +1405,8 @@ class OrderController extends Controller
                     'description' => "Penerimaan ongkir pesanan #" . $order->id . ($delivery_fee <= 0 ? " (Subsidi Voucher)" : ""),
                 ]);
             }
+            
+            $order->dispatchCompletedNotifications();
             
             return response()->json(['message' => 'Pesanan berhasil diselesaikan', 'order' => $order->load(['canteen', 'user', 'items.product', 'courier'])]);
         });

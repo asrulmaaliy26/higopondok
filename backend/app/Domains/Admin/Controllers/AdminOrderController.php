@@ -650,6 +650,8 @@ class AdminOrderController extends Controller
                             $item->product->decrement('stock', $item->quantity);
                         }
                     }
+
+                    $order->dispatchCompletedNotifications();
                 } elseif ($prevStatus === 'completed' && $newStatus !== 'completed') {
                     // 1. Revert laba bersih kantin
                     if ($canteen) {
@@ -1133,6 +1135,8 @@ class AdminOrderController extends Controller
                                 $item->product->decrement('stock', $item->quantity);
                             }
                         }
+
+                        $order->dispatchCompletedNotifications();
                     } elseif ($prevStatus === 'completed' && $effectiveStatus !== 'completed') {
                         if ($canteen) {
                             $canteenNet = (float) $order->canteen_income;
