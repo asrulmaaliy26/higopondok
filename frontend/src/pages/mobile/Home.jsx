@@ -366,6 +366,34 @@ export default function Home() {
           </button>
         </div>
 
+        {/* 5.1 BANNER PESANAN KHUSUS / TITIP BELI 24 JAM */}
+        <div
+          onClick={() => navigate({ to: '/kantin', search: { open_custom: 'true' } })}
+          className="flex items-center justify-between p-2.5 sm:p-3 bg-purple-700 hover:bg-purple-800 text-white border border-purple-800 shadow-2xs cursor-pointer transition-all active:scale-[0.99] group"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 bg-purple-800 border border-purple-600 flex items-center justify-center shrink-0 text-base shadow-inner">
+              <Sparkles className="w-4 h-4 text-purple-200" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="font-extrabold text-xs sm:text-sm tracking-tight text-white truncate">
+                  Pesanan Khusus / Titip Beli
+                </span>
+                <span className="px-1.5 py-0.2 bg-purple-900 border border-purple-500 text-purple-200 text-[9px] font-mono font-bold">
+                  Buka 24 Jam
+                </span>
+              </div>
+              <p className="text-[10px] sm:text-[11px] text-purple-200 leading-tight mt-0.5 truncate">
+                Titip belanja barang di luar menu, pesan kapan saja diantar jam kurir (17:00–21:00)
+              </p>
+            </div>
+          </div>
+          <span className="text-xs font-black text-purple-200 group-hover:translate-x-0.5 transition-transform shrink-0 ml-2">
+            Pesan ➔
+          </span>
+        </div>
+
         {/* 6. AI SMART ORDERING BANNER CARD */}
         <Link
           to={token ? "/dashboard/pesan-chat" : "/login"}

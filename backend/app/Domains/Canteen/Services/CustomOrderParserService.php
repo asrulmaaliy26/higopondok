@@ -15,7 +15,7 @@ class CustomOrderParserService
      * @param string|null $notes
      * @return array Array of items: [['id' => 1, 'item' => 'Tolak Angin', 'quantity' => 3, 'unit' => 'saset', 'notes' => '', 'is_checked' => false]]
      */
-    public function parseNotes(?string $notes): array
+    public function parseNotes(?string $notes, bool $preferAi = false): array
     {
         if (empty($notes) || !trim($notes)) {
             return [];
@@ -31,17 +31,24 @@ class CustomOrderParserService
             }
         }
 
-        // 1. Coba parsing dengan Google Gemini AI jika API key tersedia
-        $apiKey = $this->getApiKey();
-        if (!empty($apiKey)) {
-            $aiParsed = $this->parseWithGemini($cleanNotes, $apiKey);
-            if (!empty($aiParsed) && is_array($aiParsed)) {
-                return $this->formatStandardItems($aiParsed);
+        // 1. Prioritaskan Rule-based NLP Parser (100% instan < 1ms, akurat, tanpa lag & hemat kuota AI)
+        $fastParsed = $this->ruleBasedParse($cleanNotes);
+        if (!empty($fastParsed)) {
+            return $fastParsed;
+        }
+
+        // 2. Fallback AI jika preferAi aktif dan API key tersedia
+        if ($preferAi) {
+            $apiKey = $this->getApiKey();
+            if (!empty($apiKey)) {
+                $aiParsed = $this->parseWithGemini($cleanNotes, $apiKey);
+                if (!empty($aiParsed) && is_array($aiParsed)) {
+                    return $this->formatStandardItems($aiParsed);
+                }
             }
         }
 
-        // 2. Fallback cerdas: Rule-based heuristic NLP parser (100% offline & instan)
-        return $this->ruleBasedParse($cleanNotes);
+        return $fastParsed ?: [];
     }
 
     /**
@@ -128,8 +135,8 @@ class CustomOrderParserService
     {
         $raw = trim($notes);
 
-        // Bersihkan pembuka kalimat sopan santri
-        $clean = preg_replace('/^(?:tolong|mohon|nitip|titip|minta\s+tolong)?\s*(?:belikan|beliin|beli|pesankan|pesan)?\s*(?:dong|ya|yah|kak|bang|mas|pak|bu|om)?\s*[:,-]?\s*/i', '', $raw);
+        // Bersihkan pembuka kalimat sopan santri (gunakan \b agar tidak memotong nama barang seperti 'buku')
+        $clean = preg_replace('/^(?:tolong|mohon|nitip|titip|minta\s+tolong)?\s*(?:belikan|beliin|beli|pesankan|pesan)?\s*(?:\b(?:dong|ya|yah|kak|bang|mas|pak|bu|om)\b)?\s*[:,-]?\s*/i', '', $raw);
 
         // Ganti baris baru, penomoran (1., 2), •, *, - dengan pemisah unik
         $normalized = preg_replace('/\r\n|\r|\n/', ' ### ', $clean);

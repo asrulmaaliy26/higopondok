@@ -308,9 +308,34 @@ export default function DetailKantin() {
             <div>
               <p className="font-bold leading-tight">Toko Sedang Libur Rutin Hari Ini</p>
               <p className="text-[10px] text-red-600 dark:text-red-400 mt-0.5">
-                Toko ini memiliki jadwal libur rutin hari ini. Pemesanan tidak dapat dilakukan sampai jadwal buka berikutnya.
+                Toko ini memiliki jadwal libur rutin hari ini. Pemesanan menu reguler ditutup sementara.
               </p>
             </div>
+          </div>
+        )}
+
+        {/* Banner Titip Beli / Pesanan Khusus Saat Toko Tutup (24 Jam) */}
+        {!canteen.is_open && (
+          <div className="bg-purple-50 dark:bg-purple-950/40 border border-purple-300 dark:border-purple-800/80 p-2.5 flex items-center justify-between gap-2 shadow-2xs">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-base shrink-0">🛍️</span>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-purple-950 dark:text-purple-200 leading-tight truncate">
+                  Toko Tutup? Tetap Bisa Titip Beli!
+                </p>
+                <p className="text-[10px] text-purple-700 dark:text-purple-300 leading-tight mt-0.5">
+                  Buat pesanan khusus 24 jam. Kurir akan berbelanja & mengantar pada jadwal kurir.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate({ to: '/kantin', search: { custom_canteen: String(canteen.id) } })}
+              className="px-2.5 py-1.5 bg-purple-700 hover:bg-purple-800 text-white font-extrabold text-[11px] rounded-none shrink-0 cursor-pointer shadow-xs active:scale-95 transition-all flex items-center gap-1"
+            >
+              <span>Titip Beli</span>
+              <span>➔</span>
+            </button>
           </div>
         )}
 

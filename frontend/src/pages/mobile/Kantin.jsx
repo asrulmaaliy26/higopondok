@@ -90,12 +90,26 @@ export default function Kantin() {
     }
   }, [user]);
 
-  // Sinkronisasi saat URL berubah
+  // Sinkronisasi saat URL berubah & auto-buka modal jika ada query parameter
   useEffect(() => {
     const handlePopState = () => {
       setSelectedCategory(getCategoryFromUrl());
     };
     window.addEventListener('popstate', handlePopState);
+
+    // Cek query parameter ?open_custom=true atau ?custom_canteen=ID
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const customCanteenParam = params.get('custom_canteen');
+      const openCustomParam = params.get('open_custom');
+      if (customCanteenParam) {
+        setCustomCanteenId(customCanteenParam);
+        setShowCustomModal(true);
+      } else if (openCustomParam === 'true') {
+        setShowCustomModal(true);
+      }
+    }
+
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
@@ -627,12 +641,17 @@ export default function Kantin() {
             <form onSubmit={handleSubmitCustomOrder} className="p-4 space-y-3.5 overflow-y-auto">
               {/* Petunjuk Ringkas */}
               <div className="p-2.5 bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/60 text-purple-900 dark:text-purple-200 text-xs">
-                <p className="font-bold flex items-center gap-1.5 mb-1">
-                  <Package className="w-3.5 h-3.5 shrink-0 text-purple-600 dark:text-purple-400" />
-                  Titip Belanja Bebas / Menu Khusus
-                </p>
+                <div className="flex items-center justify-between mb-1">
+                  <p className="font-bold flex items-center gap-1.5">
+                    <Package className="w-3.5 h-3.5 shrink-0 text-purple-600 dark:text-purple-400" />
+                    Titip Belanja Bebas / Menu Khusus
+                  </p>
+                  <span className="px-1.5 py-0.2 bg-purple-200 dark:bg-purple-900/80 text-purple-900 dark:text-purple-200 text-[9px] font-mono font-bold">
+                    Bisa Dipesan 24 Jam
+                  </span>
+                </div>
                 <p className="text-[11px] leading-relaxed text-purple-800 dark:text-purple-300">
-                  Ingin titip belanja di luar daftar menu atau barang khusus? Tulis pesanan Anda. Jika tidak memilih toko, pengelola kantin yang akan memilihkannya, memverifikasi ketersediaan barang, dan menentukan total harga tagihan.
+                  Ingin titip belanja di luar daftar menu atau barang khusus? Anda dapat memesan kapan saja 24 jam. Pengantaran kurir dilakukan pada jam operasional pondok (<strong>17:00 – 21:00 WIB</strong>, pengambilan santri mulai jam 20:00 WIB).
                 </p>
               </div>
 
@@ -652,7 +671,7 @@ export default function Kantin() {
                       .filter((c) => c.id !== 173 && !(c.name || '').toLowerCase().includes('pusat'))
                       .map((c) => (
                         <option key={c.id} value={c.id}>
-                          {c.name} {c.is_open ? '🟢 (Buka)' : '⚪ (Tutup)'}
+                          {c.name} {c.is_open ? '🟢 (Buka)' : '⚪ (Tutup - Dibelanjakan Nanti)'}
                         </option>
                     ))}
                   </select>

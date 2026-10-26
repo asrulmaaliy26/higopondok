@@ -169,6 +169,11 @@ export default function Pembayaran() {
   };
 
   const isPaymentTime = (order) => {
+    // Pesanan khusus (is_custom) selalu bisa dibayar & diupload buktinya kapan saja 24/7!
+    if (order?.is_custom) {
+      return true;
+    }
+
     // Jika backend mengirimkan atribut boolean is_open, prioritaskan itu
     if (order?.canteen?.is_open !== undefined) {
       return Boolean(order.canteen.is_open);
@@ -198,7 +203,8 @@ export default function Pembayaran() {
   };
 
   const getClosedCanteensInfo = (orders) => {
-    const closed = (orders || []).filter(o => !isPaymentTime(o));
+    // Pesanan khusus (is_custom) tidak boleh diblokir oleh jam tutup toko
+    const closed = (orders || []).filter(o => !o.is_custom && !isPaymentTime(o));
     if (!closed || closed.length === 0) return [];
     return closed.map(o => {
       const c = o.canteen;
@@ -1018,6 +1024,45 @@ export default function Pembayaran() {
                           ))}
                         </div>
                       ))
+                    ) : singleOrder.is_custom ? (
+                      <div className="p-2.5 bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/60 rounded-none space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold text-purple-900 dark:text-purple-200 flex items-center gap-1">
+                            <Sparkles className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                            Pesanan Khusus / Titip Beli
+                          </span>
+                          {parseFloat(singleOrder.total_price) === 0 ? (
+                            <span className="text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200 font-bold border border-amber-300">
+                              ⏳ Menunggu Harga Toko
+                            </span>
+                          ) : (
+                            <span className="text-[10px] px-1.5 py-0.5 bg-green-100 text-green-800 dark:bg-green-900/60 dark:text-green-200 font-bold border border-green-300">
+                              ✅ Harga Ditetapkan
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-800 dark:text-gray-200 whitespace-pre-line font-medium leading-relaxed">
+                          {singleOrder.custom_notes || 'Pesanan Khusus'}
+                        </p>
+                        {Array.isArray(singleOrder.custom_items) && singleOrder.custom_items.length > 0 && (
+                          <div className="pt-1 border-t border-purple-200/60 dark:border-purple-800/40 space-y-0.5">
+                            {singleOrder.custom_items.map((ci, cIdx) => (
+                              <div key={ci.id || cIdx} className="flex items-center gap-1.5 text-[11px] text-gray-700 dark:text-gray-300">
+                                <span className={ci.is_checked ? "text-green-600 font-bold" : "text-gray-400"}>
+                                  {ci.is_checked ? "☑" : "☐"}
+                                </span>
+                                <span>{ci.quantity} {ci.unit} {ci.item}</span>
+                                {ci.notes && <span className="text-gray-400 italic">({ci.notes})</span>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {parseFloat(singleOrder.total_price) === 0 && (
+                          <p className="text-[10px] text-purple-700 dark:text-purple-300 italic">
+                            * Total tagihan akan muncul setelah toko/kurir membelanjakan dan menginput nota belanja riil.
+                          </p>
+                        )}
+                      </div>
                     ) : (
                       singleOrder.items?.map(item => (
                         <div key={item.id} className="flex justify-between items-start text-xs py-0.5 gap-2">
@@ -1240,6 +1285,21 @@ export default function Pembayaran() {
                         (() => {
                           const closedCanteens = getClosedCanteensInfo(group.orders) || [];
                           const isAllOpen = closedCanteens.length === 0;
+                          const isCustomWaitingPrice = group.orders.some(o => o.is_custom && parseFloat(o.total_price) === 0);
+
+                          if (isCustomWaitingPrice) {
+                            return (
+                              <div className="p-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800/80 rounded-none text-left space-y-1">
+                                <div className="flex items-center gap-1.5 text-amber-800 dark:text-amber-300 font-bold text-xs">
+                                  <Clock className="w-3.5 h-3.5 shrink-0 text-amber-600" />
+                                  <span>Menunggu Penentuan Harga Toko</span>
+                                </div>
+                                <p className="text-[11px] text-amber-800 dark:text-amber-300 leading-snug">
+                                  Pesanan khusus Anda telah dicatat. Tombol pembayaran transfer QRIS akan aktif secara otomatis setelah toko menentukan harga total belanja Anda.
+                                </p>
+                              </div>
+                            );
+                          }
 
                           return (
                             <div className="space-y-1.5 pt-1">

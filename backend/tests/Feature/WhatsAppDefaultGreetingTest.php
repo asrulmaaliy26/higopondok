@@ -29,54 +29,65 @@ class WhatsAppDefaultGreetingTest extends TestCase
         Role::firstOrCreate(['name' => 'kurir']);
 
         // Admin Pusat
-        $this->adminUser = User::create([
-            'name' => 'Admin HiGO Pondok',
-            'email' => 'admin@higopondok.id',
-            'phone' => '081234567890',
-            'password' => bcrypt('password123'),
-        ]);
-        $this->adminUser->assignRole('admin');
+        $this->adminUser = User::firstOrCreate(
+            ['email' => 'admin_wa_test@higopondok.id'],
+            [
+                'name' => 'Admin HiGO Pondok',
+                'phone' => '081234567890',
+                'password' => bcrypt('password123'),
+            ]
+        );
+        $this->adminUser->syncRoles(['admin']);
 
         // Pengelola Kantin
-        $canteenOwner = User::create([
-            'name' => 'Pemilik Toko Berkah',
-            'email' => 'berkah@higopondok.id',
-            'phone' => '082233445566',
-            'password' => bcrypt('password123'),
-        ]);
-        $canteenOwner->assignRole('kantin');
+        $canteenOwner = User::firstOrCreate(
+            ['email' => 'berkah_wa_test@higopondok.id'],
+            [
+                'name' => 'Pemilik Toko Berkah',
+                'phone' => '082233445566',
+                'password' => bcrypt('password123'),
+            ]
+        );
+        $canteenOwner->syncRoles(['kantin']);
 
-        $this->canteen = Canteen::create([
-            'user_id' => $canteenOwner->id,
-            'name' => 'Toko Berkah Al-Mannan',
-            'category' => 'Makanan',
-            'whatsapp_number' => '082233445566',
-            'is_approved' => true,
-            'is_open' => true,
-        ]);
+        $this->canteen = Canteen::firstOrCreate(
+            ['name' => 'Toko Berkah Al-Mannan Test'],
+            [
+                'user_id' => $canteenOwner->id,
+                'category' => 'Makanan',
+                'whatsapp_number' => '082233445566',
+                'status' => 'approved',
+                'open_time' => '00:00:00',
+                'close_time' => '23:59:59',
+            ]
+        );
 
         // User Wali Santri
-        $this->waliUser = User::create([
-            'name' => 'Bapak Suhartono',
-            'email' => 'suhartono@example.com',
-            'phone' => '081399887766',
-            'santri_name' => 'Ahmad Al-Farizi',
-            'santri_room' => 'Abu Bakar 02',
-            'santri_class' => '10 IPA',
-            'password' => bcrypt('password123'),
-        ]);
-        $this->waliUser->assignRole('user');
+        $this->waliUser = User::firstOrCreate(
+            ['email' => 'suhartono_wa_test@example.com'],
+            [
+                'name' => 'Bapak Suhartono',
+                'phone' => '081399887766',
+                'santri_name' => 'Ahmad Al-Farizi',
+                'santri_room' => 'Abu Bakar 02',
+                'santri_class' => '10 IPA',
+                'password' => bcrypt('password123'),
+            ]
+        );
+        $this->waliUser->syncRoles(['user']);
 
         // User Guru / Staff
-        $this->teacherUser = User::create([
-            'name' => 'Ustadz Abdullah S.Pd',
-            'email' => 'abdullah@example.com',
-            'phone' => '081987654321',
-            'is_teacher' => true,
-            'teacher_unit' => 'Unit Madrasah Aliyah',
-            'password' => bcrypt('password123'),
-        ]);
-        $this->teacherUser->assignRole('user');
+        $this->teacherUser = User::firstOrCreate(
+            ['email' => 'abdullah_wa_test@example.com'],
+            [
+                'name' => 'Ustadz Abdullah S.Pd',
+                'phone' => '081987654321',
+                'is_teacher' => true,
+                'teacher_unit' => 'Unit Madrasah Aliyah',
+                'password' => bcrypt('password123'),
+            ]
+        );
+        $this->teacherUser->syncRoles(['user']);
     }
 
     public function test_wali_chat_admin_dan_toko_selalu_memuat_default_salam_nama_wali_dan_nama_santri(): void
