@@ -2,7 +2,6 @@
 
 namespace App\Domains\Canteen\Jobs;
 
-use App\Domains\Canteen\Mail\CanteenOrderCompletedMail;
 use App\Domains\Canteen\Mail\CustomerOrderCompletedMail;
 use App\Domains\Canteen\Order;
 use Illuminate\Bus\Queueable;
@@ -27,7 +26,7 @@ class SendOrderCompletedNotificationJob implements ShouldQueue
     public function handle(): void
     {
         try {
-            $order = Order::with(['user', 'canteen.user', 'courier', 'items.product'])->find($this->orderId);
+            $order = Order::with(['user', 'canteen', 'courier', 'items.product'])->find($this->orderId);
 
             if (!$order) {
                 Log::warning("[SendOrderCompletedNotificationJob] Order #{$this->orderId} tidak ditemukan.");
@@ -40,7 +39,7 @@ class SendOrderCompletedNotificationJob implements ShouldQueue
                 return;
             }
 
-            // 1. Notifikasi ke Pembeli (Santri / Wali Santri)
+            // Notifikasi hanya dikirim ke Pembeli (Santri / Wali Santri)
             $customer = $order->user;
             if ($customer && !empty($customer->email) && filter_var($customer->email, FILTER_VALIDATE_EMAIL)) {
                 try {
@@ -48,21 +47,6 @@ class SendOrderCompletedNotificationJob implements ShouldQueue
                     Log::info("[SendOrderCompletedNotificationJob] Email pesanan selesai sukses dikirim ke Pembeli ({$customer->email}) untuk pesanan #{$order->id}");
                 } catch (\Throwable $e) {
                     Log::error("[SendOrderCompletedNotificationJob] Gagal mengirim email ke Pembeli ({$customer->email}) untuk pesanan #{$order->id}: " . $e->getMessage());
-                }
-            }
-
-            // 2. Notifikasi ke Mitra Kantin
-            $canteenUser = $order->canteen?->user;
-            $customerEmail = strtolower(trim($customer->email ?? ''));
-            if ($canteenUser && !empty($canteenUser->email) && filter_var($canteenUser->email, FILTER_VALIDATE_EMAIL)) {
-                // Jangan duplikasi jika pembeli dan pemilik kantin menggunakan email yang persis sama
-                if (strtolower(trim($canteenUser->email)) !== $customerEmail) {
-                    try {
-                        Mail::to($canteenUser->email)->send(new CanteenOrderCompletedMail($order));
-                        Log::info("[SendOrderCompletedNotificationJob] Email pesanan selesai sukses dikirim ke Kantin ({$canteenUser->email}) untuk pesanan #{$order->id}");
-                    } catch (\Throwable $e) {
-                        Log::error("[SendOrderCompletedNotificationJob] Gagal mengirim email ke Kantin ({$canteenUser->email}) untuk pesanan #{$order->id}: " . $e->getMessage());
-                    }
                 }
             }
         } catch (\Throwable $e) {

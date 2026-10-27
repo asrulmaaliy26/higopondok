@@ -159,4 +159,32 @@ class OrderLifecycle_Phase4_CourierDeliveryTest extends TestCase
         $this->product->refresh();
         $this->assertEquals(8, $this->product->stock);
     }
+
+    public function test_order_completed_notification_only_sent_to_customer_and_not_to_canteen()
+    {
+        \Illuminate\Support\Facades\Mail::fake();
+
+        $order = Order::create([
+            'checkout_id' => 'CHK-NOTIF-TEST',
+            'user_id' => $this->santriUser->id,
+            'canteen_id' => $this->canteen->id,
+            'courier_id' => $this->courierUser->id,
+            'status' => 'completed',
+            'payment_status' => 'paid',
+            'total_price' => 24000,
+            'delivery_fee' => 3000,
+            'admin_fee' => 1000,
+            'canteen_income' => 20000,
+            'delivery_location' => 'Kamar Usman 01',
+        ]);
+
+        (new \App\Domains\Canteen\Jobs\SendOrderCompletedNotificationJob($order->id))->handle();
+
+        \Illuminate\Support\Facades\Mail::assertSent(\App\Domains\Canteen\Mail\CustomerOrderCompletedMail::class, function ($mail) {
+            return $mail->hasTo($this->santriUser->email);
+        });
+
+        \Illuminate\Support\Facades\Mail::assertNotSent(\App\Domains\Canteen\Mail\CanteenOrderCompletedMail::class);
+    }
 }
+
