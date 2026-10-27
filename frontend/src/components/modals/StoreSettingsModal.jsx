@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import api, { getStorageUrl } from '../../lib/axios';
 import { CANTEEN_ZONES, PRICING_CONFIG } from '../../config/pricing';
+import { compressImageFile } from '../../lib/fileUtils';
 
 export default function StoreSettingsModal({ isOpen, onClose, canteen, onSuccess }) {
   const queryClient = useQueryClient();
@@ -41,15 +42,17 @@ export default function StoreSettingsModal({ isOpen, onClose, canteen, onSuccess
     }
   }, [canteen, isOpen]);
 
-  const handleImageChange = (e) => {
+  const handleImageChange = async (e) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        toast.error('Ukuran foto maksimal 2MB');
-        return;
+      try {
+        const compressed = await compressImageFile(file, { maxWidth: 1000, maxHeight: 1000, quality: 0.8 });
+        setImageFile(compressed);
+        setPreviewUrl(URL.createObjectURL(compressed));
+      } catch {
+        setImageFile(file);
+        setPreviewUrl(URL.createObjectURL(file));
       }
-      setImageFile(file);
-      setPreviewUrl(URL.createObjectURL(file));
     }
   };
 

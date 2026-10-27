@@ -114,10 +114,10 @@ export const compressImageFile = async (rawFile, options = {}) => {
     return file;
   }
 
-  const maxWidth = options.maxWidth || 1400;
-  const maxHeight = options.maxHeight || 1400;
-  const quality = options.quality !== undefined ? options.quality : 0.75;
-  const outputType = options.outputType || 'image/jpeg';
+  const maxWidth = options.maxWidth || 1280;
+  const maxHeight = options.maxHeight || 1280;
+  const quality = options.quality !== undefined ? options.quality : 0.8;
+  const preferredType = options.outputType || 'image/webp';
 
   return new Promise((resolve) => {
     try {
@@ -146,38 +146,51 @@ export const compressImageFile = async (rawFile, options = {}) => {
             canvas.width = width;
             canvas.height = height;
 
-            const ctx = canvas.getContext('2d', { alpha: false });
+            const ctx = canvas.getContext('2d', { alpha: true });
             if (ctx) {
               ctx.imageSmoothingEnabled = true;
               ctx.imageSmoothingQuality = 'high';
-              ctx.fillStyle = '#FFFFFF';
-              ctx.fillRect(0, 0, width, height);
+              if (preferredType !== 'image/png' && !options.keepTransparency) {
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(0, 0, width, height);
+              }
               ctx.drawImage(image, 0, 0, width, height);
             }
 
+            const handleBlob = (blob) => {
+              if (!blob) {
+                resolve(file);
+                return;
+              }
+
+              const isWebp = blob.type === 'image/webp';
+              const ext = isWebp ? '.webp' : (blob.type === 'image/png' ? '.png' : '.jpg');
+              const originalName = file.name || 'image';
+              const baseName = originalName.replace(/\.[^/.]+$/, "");
+              const newFileName = `${baseName}${ext}`;
+
+              const compressedFile = new File([blob], newFileName, {
+                type: blob.type,
+                lastModified: Date.now(),
+              });
+
+              compressedFile.originalSize = rawFile.size || file.size;
+              compressedFile.isCompressed = true;
+              resolve(compressedFile);
+            };
+
             canvas.toBlob(
               (blob) => {
-                if (!blob) {
-                  resolve(file);
-                  return;
+                if (blob) {
+                  handleBlob(blob);
+                } else {
+                  // Fallback to jpeg if webp unsupported
+                  canvas.toBlob((fallbackBlob) => {
+                    handleBlob(fallbackBlob || file);
+                  }, 'image/jpeg', quality);
                 }
-
-                const originalName = file.name || 'proof.jpg';
-                const baseName = originalName.replace(/\.[^/.]+$/, "");
-                const newFileName = `${baseName}.jpg`;
-
-                const compressedFile = new File([blob], newFileName, {
-                  type: outputType,
-                  lastModified: Date.now(),
-                });
-
-                // Attach size metadata
-                compressedFile.originalSize = file.size;
-                compressedFile.isCompressed = true;
-
-                resolve(compressedFile);
               },
-              outputType,
+              preferredType,
               quality
             );
           } catch (canvasErr) {

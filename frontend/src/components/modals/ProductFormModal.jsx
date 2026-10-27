@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { X, Store, Flame, Coffee, Utensils, Sparkles, Plus, Trash2, CheckSquare, Square, Info } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getStorageUrl } from '../../lib/axios';
+import { compressImageFile } from '../../lib/fileUtils';
 
 const CATEGORY_PRESETS = [
   { id: 'Makanan', label: '🍜 Makanan' },
@@ -430,16 +431,17 @@ export const ProductFormModal = ({
               <input 
                 type="file" 
                 accept="image/*"
-                onChange={(e) => {
+                onChange={async (e) => {
                   const file = e.target.files[0];
                   if (file) {
-                    if (file.size > 2 * 1024 * 1024) {
-                      toast.error('Ukuran foto produk maksimal 2 MB');
-                      e.target.value = '';
-                      return;
+                    try {
+                      const compressed = await compressImageFile(file, { maxWidth: 1000, maxHeight: 1000, quality: 0.8 });
+                      setImageFile(compressed);
+                      setImagePreview(URL.createObjectURL(compressed));
+                    } catch {
+                      setImageFile(file);
+                      setImagePreview(URL.createObjectURL(file));
                     }
-                    setImageFile(file);
-                    setImagePreview(URL.createObjectURL(file));
                   }
                 }}
                 className="block w-full text-xs text-gray-500 dark:text-gray-400 file:mr-2.5 file:py-1 file:px-2.5 file:rounded-none file:border-0 file:text-[11px] file:font-bold file:bg-green-50 file:text-green-700 hover:file:bg-green-100 dark:file:bg-green-950/60 dark:file:text-green-300 border border-gray-200 dark:border-gray-700 p-1 rounded-none" 

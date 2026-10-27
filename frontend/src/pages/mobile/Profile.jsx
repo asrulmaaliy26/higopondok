@@ -8,6 +8,7 @@ import { usePwaStore } from '../../store/pwaStore';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import api, { getStorageUrl } from '../../lib/axios';
+import { compressImageFile } from '../../lib/fileUtils';
 import santriData from '../../data/santri.json';
 import AdminAccountingModal from '../../components/modals/AdminAccountingModal';
 import ThemeToggle from '../../components/ui/ThemeToggle';
@@ -303,16 +304,17 @@ export default function Profile() {
     setShowEditStoreModal(true);
   };
 
-  const handleImageChange = (e) => {
+  const handleImageChange = async (e) => {
     const file = e.target.files[0];
     if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        toast.error('Ukuran foto toko maksimal 2 MB');
-        e.target.value = '';
-        return;
+      try {
+        const compressed = await compressImageFile(file, { maxWidth: 1000, maxHeight: 1000, quality: 0.8 });
+        setImageFile(compressed);
+        setPreviewUrl(URL.createObjectURL(compressed));
+      } catch {
+        setImageFile(file);
+        setPreviewUrl(URL.createObjectURL(file));
       }
-      setImageFile(file);
-      setPreviewUrl(URL.createObjectURL(file));
     }
   };
 
@@ -1038,16 +1040,17 @@ export default function Profile() {
                   </div>
                   <label className="absolute bottom-0 right-0 p-2 bg-green-600 text-white rounded-none cursor-pointer hover:bg-green-700 shadow-md transition-colors">
                     <Camera className="w-4 h-4" />
-                    <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                    <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
                       const file = e.target.files[0];
                       if (file) {
-                        if (file.size > 2 * 1024 * 1024) {
-                          toast.error('Ukuran foto profil maksimal 2 MB');
-                          e.target.value = '';
-                          return;
+                        try {
+                          const compressed = await compressImageFile(file, { maxWidth: 512, maxHeight: 512, quality: 0.85 });
+                          setUserAvatarFile(compressed);
+                          setUserAvatarPreview(URL.createObjectURL(compressed));
+                        } catch {
+                          setUserAvatarFile(file);
+                          setUserAvatarPreview(URL.createObjectURL(file));
                         }
-                        setUserAvatarFile(file);
-                        setUserAvatarPreview(URL.createObjectURL(file));
                       }
                     }} />
                   </label>

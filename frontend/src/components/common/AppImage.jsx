@@ -35,6 +35,7 @@ export default function AppImage({
       onError={() => setHasError(true)}
       className={className}
       loading="lazy"
+      decoding="async"
     />
   );
 }
