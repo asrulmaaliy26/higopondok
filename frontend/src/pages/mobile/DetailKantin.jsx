@@ -82,7 +82,7 @@ export default function DetailKantin() {
         <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 p-2 sm:p-2.5 flex items-center gap-2">
           <button
             type="button"
-            onClick={() => (window.history.length > 1 ? window.history.back() : navigate({ to: '/kantin' }))}
+            onClick={() => (window.history.length > 1 ? window.history.back() : navigate({ to: token ? '/dashboard/kantin' : '/kantin' }))}
             className="p-1 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-none border border-gray-200 dark:border-gray-700 cursor-pointer"
             title="Kembali"
           >
@@ -201,7 +201,7 @@ export default function DetailKantin() {
           <div className="flex items-center gap-2.5 min-w-0">
             <button
               type="button"
-              onClick={() => (window.history.length > 1 ? window.history.back() : navigate({ to: '/kantin' }))}
+              onClick={() => (window.history.length > 1 ? window.history.back() : navigate({ to: token ? '/dashboard/kantin' : '/kantin' }))}
               className="pointer-events-auto w-8 h-8 bg-black/70 hover:bg-black text-white flex items-center justify-center rounded-none border border-white/20 transition-all shadow-md active:scale-95 shrink-0 cursor-pointer"
               title="Kembali"
             >
@@ -330,7 +330,7 @@ export default function DetailKantin() {
             </div>
             <button
               type="button"
-              onClick={() => navigate({ to: '/kantin', search: { custom_canteen: String(canteen.id) } })}
+              onClick={() => navigate({ to: token ? '/dashboard/kantin' : '/kantin', search: { custom_canteen: String(canteen.id) } })}
               className="px-2.5 py-1.5 bg-purple-700 hover:bg-purple-800 text-white font-extrabold text-[11px] rounded-none shrink-0 cursor-pointer shadow-xs active:scale-95 transition-all flex items-center gap-1"
             >
               <span>Titip Beli</span>

@@ -135,13 +135,27 @@ const publicPanduanRoute = createRoute({
 const publicKantinRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/kantin',
-  component: Kantin,
+  component: function PublicKantinRedirectOrPage() {
+    const token = useAuthStore((state) => state.token);
+    if (token) {
+      const searchParams = typeof window !== 'undefined' ? Object.fromEntries(new URLSearchParams(window.location.search)) : undefined;
+      return <Navigate to="/dashboard/kantin" search={searchParams} replace />;
+    }
+    return <Kantin />;
+  },
 });
 
 const publicKantinDetailRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/kantin/$id',
-  component: DetailKantin,
+  component: function PublicKantinDetailRedirectOrPage() {
+    const token = useAuthStore((state) => state.token);
+    if (token && typeof window !== 'undefined') {
+      const dashboardPath = window.location.pathname.replace(/^\/kantin/, '/dashboard/kantin');
+      return <Navigate to={dashboardPath} replace />;
+    }
+    return <DetailKantin />;
+  },
 });
 
 const publicKeranjangRoute = createRoute({

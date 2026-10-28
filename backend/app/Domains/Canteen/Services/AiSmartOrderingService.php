@@ -113,6 +113,24 @@ class AiSmartOrderingService
     }
 
     /**
+     * Ambil entitas Kantin Barokah Pusat (Tujuan utama Pesanan Khusus & Menu di Luar Katalog)
+     */
+    public function getBarokahCanteen(): ?Canteen
+    {
+        try {
+            return Canteen::where('id', 173)
+                ->orWhere('name', 'LIKE', '%Barokah%')
+                ->orWhere('name', 'LIKE', '%Barikah%')
+                ->orWhere('name', 'LIKE', '%Pusat%')
+                ->orderByRaw("CASE WHEN id = 173 THEN 0 WHEN name LIKE '%Barokah%' THEN 1 WHEN name LIKE '%Barikah%' THEN 2 ELSE 3 END")
+                ->first() ?: Canteen::first();
+        } catch (\Throwable $e) {
+            Log::warning("AiSmartOrderingService getBarokahCanteen skipped: " . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
      * Proses pesan chat santri/wali menjadi respon percakapan ramah dan draf pesanan otomatis
      */
     public function processUserChat(string $message, ?User $user = null, array $history = []): array
@@ -149,14 +167,37 @@ class AiSmartOrderingService
             return $this->checkRecentOrderStatus($user, $normalizedMessage);
         }
 
+        // 0b. Deteksi apakah pengguna bertanya PANDUAN / TUTORIAL CARA MENGGUNAKAN APLIKASI
+        // (cara pesan, mau beli gimana, cara pesan > 1 santri, multi-toko, pesanan khusus, profil, pembayaran, jadwal kurir, voucher)
+        $guideResponse = $this->checkAppUsageGuide($message, $normalizedMessage, $user, $userLocation);
+        if ($guideResponse !== null) {
+            $guideResponse['engine_used'] = 'local_nlp_guide';
+            $guideResponse['normalized_message'] = $normalizedMessage;
+            return $guideResponse;
+        }
+
         $apiKey = $this->getApiKey();
         $result = null;
         $engineUsed = 'local_nlp';
         if (!empty($apiKey) && !\Illuminate\Support\Facades\Cache::get('gemini_api_rate_limited')) {
             $aiResult = $this->callGemini($normalizedMessage, $products, $userLocation, $history);
             if (!empty($aiResult) && is_array($aiResult)) {
-                $result = $this->formatResult($aiResult, $userLocation);
-                $engineUsed = 'gemini';
+                $formattedAi = $this->formatResult($aiResult, $userLocation, $normalizedMessage);
+                // Jika Gemini menolak karena menu tidak ada di katalog padahal user berniat memesan menu/barang spesifik,
+                // biarkan ruleBasedMatcher mengalihkannya menjadi Pesanan Khusus ke Kantin Barokah Pusat
+                if (empty($formattedAi['is_order_ready']) && !empty($formattedAi['is_unknown_query'])) {
+                    $fallbackCandidate = $this->ruleBasedMatcher($normalizedMessage, $products, $userLocation, $history, $user);
+                    if (!empty($fallbackCandidate['is_order_ready']) && !empty($fallbackCandidate['is_custom'])) {
+                        $result = $fallbackCandidate;
+                        $engineUsed = 'local_nlp_barokah_fallback';
+                    } else {
+                        $result = $formattedAi;
+                        $engineUsed = 'gemini';
+                    }
+                } else {
+                    $result = $formattedAi;
+                    $engineUsed = 'gemini';
+                }
             }
         }
 
@@ -400,6 +441,267 @@ class AiSmartOrderingService
     }
 
     /**
+     * Pusat Panduan & Tutorial Interaktif Penggunaan Aplikasi HiGO Pondok
+     * Menjawab seluruh kemungkinan pertanyaan cara pakai aplikasi:
+     * 1. Cara pesan > 1 santri (1 gedung pakai catatan vs beda gedung ganti nama santri di profil)
+     * 2. Cara pesan > 1 toko sekaligus dalam 1 keranjang (multi-toko)
+     * 3. Cara daftar akun baru, login Google & lengkapi Profil + Keluarga Santri
+     * 4. Cara Pesanan Khusus / Titip Beli / jika menu tidak ada di katalog (masuk Kantin Barokah Pusat)
+     * 5. Cara Pembayaran (QRIS / Rekening) & Upload / Ganti Bukti Transfer
+     * 6. Jadwal Operasional Toko, Jam Pengantaran Kurir & Jam Pengambilan Santri
+     * 7. Cara Klaim & Pakai Voucher Promo / Diskon
+     * 8. Panduan Umum Cara Memesan / Cara Beli / Cara Menggunakan Aplikasi
+     */
+    public function checkAppUsageGuide(string $rawMessage, string $normalizedMessage, ?User $user, string $loc): ?array
+    {
+        $lower = strtolower(trim($rawMessage . ' ' . $normalizedMessage));
+
+        // Jangan intersep jika pesan sebenarnya adalah perintah memesan produk konkret dengan angka porsi + nama menu katalog/khusus
+        // kecuali mengandung kata tanya cara/gimana/bagaimana/tutorial/panduan/aturan/jadwal/jam berapa
+        $hasHowToWord = preg_match('/\b(?:cara|caranya|gimana|bagaimana|gmn|bgmn|panduan|tutorial|petunjuk|langkah|aturan|sistem|jadwal|jam\s*berapa|kapan\s*(?:diantar|sampai|ambil|diambil|buka)|bisa\s*(?:gak|tidak|nggak)|kalau\s*mau|kalo\s*mau|bingung|belum\s*paham|gak\s*paham|tidak\s*paham|belum\s*ngerti|gak\s*ngerti|ajarin|jelaskan|info\s*cara)\b/i', $lower)
+            || preg_match('/(?:📖|👥|🏪|👤|💳|🕒|🎟️)/u', $rawMessage);
+
+        // Deteksi khusus kalimat pendek seperti "mau pesen gimana", "mau beli gimana", "pesennya gimana", "cara pesan"
+        $isDirectHowToOrder = preg_match('/(?:mau|ingin|pengen)?\s*(?:pesan|pesen|beli|order|belanja|pakai|menggunakan)(?:nya)?\s*(?:gimana|bagaimana|gmn|bgmn|lewat\s*mana|di\s*mana)/i', $lower);
+
+        if (!$hasHowToWord && !$isDirectHowToOrder) {
+            return null;
+        }
+
+        $baseResponse = [
+            'is_order_ready' => false,
+            'is_app_guide' => true,
+            'recipient_name' => null,
+            'recipient_room' => $loc,
+            'canteens' => [],
+            'summary' => [
+                'subtotal' => 0,
+                'items_subtotal' => 0,
+                'delivery_fee' => 3000,
+                'admin_fee' => 2000,
+                'grand_total' => 5000,
+            ],
+        ];
+
+        // =========================================================================
+        // KATEGORI 1: CARA PESAN UNTUK LEBIH DARI 1 SANTRI (1 GEDUNG VS BEDA GEDUNG)
+        // =========================================================================
+        if (preg_match('/(?:lebih\s*dari\s*(?:1|satu)\s*(?:santri|anak|orang)|(?:2|dua|3|tiga|banyak|beberapa)\s*(?:santri|anak)|kakak\s*adik|adik\s*kakak|beda\s*(?:gedung|asrama)|(?:1|satu|sama)\s*(?:gedung|asrama)|ganti\s*(?:nama\s*)?santri|pesan\s*(?:buat|untuk)\s*(?:2|dua|banyak)\s*(?:santri|anak))/i', $lower)) {
+            $reply = "👥 **Panduan Cara Memesan untuk Lebih dari 1 Santri (2 Anak / Kakak-Adik / Teman)**:\n\n"
+                . "Di sistem HiGO Pondok terdapat **2 cara** sesuai lokasi gedung asrama santri:\n\n"
+                . "🏢 **1. Jika Masih dalam 1 Gedung / 1 Asrama yang Sama** *(Hemat 1x Ongkir)*:\n"
+                . "• Cukup buat **1 pesanan saja** seperti biasa.\n"
+                . "• Di halaman **Keranjang**, isi kolom **Catatan Item** pada menu yang dipesan dengan rincian pembagiannya *(Contoh: \"1 porsi untuk Fauzan Kamar 02, 1 porsi untuk Zaki\")*.\n"
+                . "• Saat pesanan tiba di asrama, **nama santri utama pada akun tetap yang dipanggil oleh kurir**, lalu kurir akan **memberitahukan catatannya agar dibagikan kepada santri yang tercatat**.\n\n"
+                . "🏛️ **2. Jika Beda Gedung / Beda Asrama** *(Misal: 1 di Gedung Putra & 1 di Gedung Putri)*:\n"
+                . "• Wajib membuat **2 pesanan terpisah** dengan mengganti nama santri:\n"
+                . "  1️⃣ Selesaikan pesanan & *checkout* untuk **Santri Pertama**.\n"
+                . "  2️⃣ Buka menu **Profil** (pojok kanan atas) → klik **Kamar & Keluarga Santri**.\n"
+                . "  3️⃣ Cari & pilih **Nama Santri Kedua** (kamar & gedung otomatis berubah) → klik **Simpan**.\n"
+                . "  4️⃣ Kembali ke **Kantin** lalu buat pesanan untuk **Santri Kedua**.\n\n"
+                . "💡 **Tips Cepat via Chat AI**: Di Chat AI ini, Kakak juga bisa langsung mengetik nama santri tujuan, contoh:\n"
+                . "*\"Pesan 1 Mie Gacoan Lv 1 buat santri Siti Aisyah kamar Khadijah 02\"* 😊";
+
+            return array_merge($baseResponse, [
+                'reply_text' => $reply,
+                'quick_replies' => [
+                    "📖 Cara pesan makanan (Pemula)",
+                    "🏪 Cara pesan lebih dari 1 toko",
+                    "👤 Cara ganti / lengkapi profil santri",
+                    "✨ Cara pesanan khusus (Kantin Barokah)",
+                    "💳 Cara bayar & upload bukti transfer"
+                ],
+            ]);
+        }
+
+        // =========================================================================
+        // KATEGORI 2: CARA PESAN LEBIH DARI 1 TOKO SEKALIGUS (MULTI-TOKO 1 KERANJANG)
+        // =========================================================================
+        if (preg_match('/(?:lebih\s*dari\s*(?:1|satu)\s*(?:toko|warung|kantin|resto)|(?:2|dua|3|tiga|banyak|beberapa|beda|lain)\s*(?:toko|warung|kantin|resto)|multi\s*(?:toko|warung|kantin)|gabung\s*(?:pesanan|toko|keranjang)|keranjang\s*dulu)/i', $lower)) {
+            $reply = "🏪 **Panduan Cara Memesan Lebih dari 1 Toko Sekaligus (Multi-Toko)**:\n\n"
+                . "Kakak bisa membeli makanan & minuman dari beberapa toko berbeda dalam **1 kali proses Checkout & 1 kali Pembayaran**:\n\n"
+                . "🛒 **Cara 1: Lewat Katalog Kantin (Pilih Menu Dulu di Keranjang)**\n"
+                . "1️⃣ Buka menu **Kantin**, klik **Toko Pertama** *(misal: Mie Gacoan)*, lalu klik tombol **+ Tambah** pada menu yang diinginkan.\n"
+                . "2️⃣ Jangan checkout dulu — klik tombol **Kembali (`←`)** di kiri atas, lalu buka **Toko Kedua** *(misal: Bakso Kuy atau Momoyo)* dan klik **+ Tambah** pada menu berikutnya.\n"
+                . "3️⃣ Semua menu dari berbagai toko otomatis terkumpul di dalam **1 Keranjang**.\n"
+                . "4️⃣ Klik bilah hijau **Keranjang** di bawah → cek rincian tiap toko → klik **Lanjut ke Pembayaran**.\n"
+                . "5️⃣ Cukup lakukan **1x Transfer / Scan QRIS Gabungan** untuk seluruh toko sekaligus!\n\n"
+                . "🤖 **Cara 2: Langsung Ketik Sekaligus di Chat AI Ini**\n"
+                . "• Ketik saja menu dari beberapa toko dalam 1 pesan, contoh:\n"
+                . "  *\"Pesan 2 Mie Gacoan Lv 1 sama 1 Bakso Mercon dan 2 Es Teh antar ke kamar\"*\n"
+                . "• AI akan otomatis mengelompokkan tokonya dan menyiapkan 1 tombol **Konfirmasi Pesanan**!";
+
+            return array_merge($baseResponse, [
+                'reply_text' => $reply,
+                'quick_replies' => [
+                    "👥 Cara pesan lebih dari 1 santri",
+                    "📖 Cara pesan makanan (Pemula)",
+                    "✨ Cara pesanan khusus (Kantin Barokah)",
+                    "💳 Cara bayar & upload bukti transfer"
+                ],
+            ]);
+        }
+
+        // =========================================================================
+        // KATEGORI 3: CARA DAFTAR AKUN BARU & LENGKAPI PROFIL / KELUARGA SANTRI
+        // =========================================================================
+        if (preg_match('/(?:cara\s*(?:daftar|register|buat\s*akun|login|masuk)|pengguna\s*baru|lengkapi\s*profil|isi\s*profil|edit\s*profil|keluarga\s*santri|data\s*santri|isi\s*kamar|profil\s*belum\s*lengkap|tidak\s*bisa\s*pesan.*profil)/i', $lower)) {
+            $reply = "👤 **Panduan Pengguna Baru: Login, Daftar Akun & Lengkapi Profil Santri**:\n\n"
+                . "Agar pesanan bisa diantar tepat ke kamar santri, pengguna baru wajib melengkapi profil sekali saja di awal:\n\n"
+                . "1️⃣ **Masuk / Daftar Akun**:\n"
+                . "• **Paling Mudah**: Klik tombol **Masuk dengan Google** (otomatis terdaftar & langsung masuk).\n"
+                . "• **Manual**: Jika tanpa Google, klik **Daftar Sekarang** lalu buat Username & Password.\n\n"
+                . "2️⃣ **Isi Nomor WhatsApp Aktif**:\n"
+                . "• Klik menu **Profil** (ikon orang di pojok kanan atas).\n"
+                . "• Klik **Edit Profil & Akun** → isi **Nomor WhatsApp** aktif → klik **Simpan**.\n\n"
+                . "3️⃣ **Hubungkan Kamar & Keluarga Santri (Wajib)**:\n"
+                . "• Masih di halaman **Profil**, klik kartu **Kamar & Keluarga Santri**.\n"
+                . "• Ketik & pilih **Nama Santri** dari daftar database pondok *(Asrama/Kamar, Kelas, dan Jenjang akan terisi otomatis)*.\n"
+                . "• Klik **Simpan Data Keluarga**.\n\n"
+                . "✅ Setelah status profil berwarna **Hijau (Lengkap)**, Kakak langsung bisa memesan di **Kantin** maupun **Chat AI**!";
+
+            return array_merge($baseResponse, [
+                'reply_text' => $reply,
+                'quick_replies' => [
+                    "📖 Cara pesan makanan (Pemula)",
+                    "👥 Cara pesan lebih dari 1 santri",
+                    "🏪 Cara pesan lebih dari 1 toko",
+                    "💳 Cara bayar & upload bukti transfer"
+                ],
+            ]);
+        }
+
+        // =========================================================================
+        // KATEGORI 4: CARA PESANAN KHUSUS / TITIP BELI / MENU TIDAK ADA DI KATALOG
+        // =========================================================================
+        if (preg_match('/(?:pesanan\s*khusus|pesan\s*khusus|titip\s*beli|nitip\s*beli|menu\s*(?:tidak\s*ada|gak\s*ada|belum\s*ada|kosong)|di\s*luar\s*(?:menu|katalog)|kantin\s*barokah|kantin\s*barikah)/i', $lower)) {
+            $reply = "✨ **Panduan Pesanan Khusus (Titip Beli) & Menu di Luar Katalog (Kantin Barokah Pusat)**:\n\n"
+                . "Jika makanan/minuman yang diinginkan **tidak ada di katalog toko reguler**, atau ingin **titip beli barang kebutuhan santri** (obat apotek, sabun, alat tulis, roti, buah, dll.), pesanan otomatis masuk ke **Kantin Barokah Pusat**:\n\n"
+                . "🤖 **Cara 1: Langsung Ketik di Chat AI Ini (Otomatis)**\n"
+                . "• Ketik saja nama makanan atau barang beserta jumlahnya di chat ini, contoh:\n"
+                . "  • *\"Pesan 2 porsi Nasi Rawon dan 1 Soto Lamongan\"*\n"
+                . "  • *\"Tolong titip belikan Paracetamol 1 strip dan Sabun Lifebuoy 2 pcs\"*\n"
+                . "• Jika menu tidak ada di katalog reguler, AI **otomatis membuatkan draf Pesanan Khusus ke Kantin Barokah Pusat**!\n"
+                . "• Klik tombol **Konfirmasi Pesanan** pada kartu draf yang muncul.\n\n"
+                . "🏪 **Cara 2: Lewat Tombol di Halaman Kantin**\n"
+                . "• Buka menu **Kantin** → klik tombol ungu **✨ PESANAN KHUSUS** di bagian atas → tulis rincian barang & perkiraan budget → klik **Kirim Pesanan Khusus**.\n\n"
+                . "💡 **Ketentuan Tarif**: Ongkir Kurir **Rp 3.500** & Admin **Rp 2.500**. Harga barang/menu akan diinput oleh **Kantin Barokah Pusat** setelah dibelanjakan, lalu Kakak tinggal melakukan pembayaran.";
+
+            return array_merge($baseResponse, [
+                'reply_text' => $reply,
+                'quick_replies' => [
+                    "Pesan 2 porsi Nasi Rawon dan 1 Roti Tawar",
+                    "Tolong titip belikan Paracetamol 1 strip dan Tolak Angin 2 sachet",
+                    "📖 Cara pesan makanan (Pemula)",
+                    "💳 Cara bayar & upload bukti transfer"
+                ],
+            ]);
+        }
+
+        // =========================================================================
+        // KATEGORI 5: CARA PEMBAYARAN, QRIS, REKENING & UPLOAD BUKTI TRANSFER
+        // =========================================================================
+        if (preg_match('/(?:cara\s*bayar|pembayaran|transfer\s*kemana|bayar\s*pakai\s*apa|qris|rekening|upload\s*bukti|unggah\s*bukti|bukti\s*bayar|bukti\s*transfer|konfirmasi\s*pembayaran)/i', $lower)) {
+            $reply = "💳 **Panduan Cara Pembayaran & Upload Bukti Transfer**:\n\n"
+                . "1️⃣ **Buka Halaman Pembayaran / Riwayat**:\n"
+                . "• Setelah klik *Checkout* (dari Keranjang) atau *Konfirmasi Pesanan* (dari Chat AI), Kakak otomatis diarahkan ke halaman **Riwayat / Pembayaran**.\n\n"
+                . "2️⃣ **Pilih Metode Bayar (QRIS / Transfer Rekening)**:\n"
+                . "• **QRIS Resmi Pondok**: Scan barcode QRIS menggunakan aplikasi m-Banking (BCA, BRI, Mandiri, BSI) atau e-Wallet (Dana, GoPay, OVO, ShopeePay).\n"
+                . "• **Transfer Bank**: Transfer sesuai **Total Tagihan** ke nomor rekening resmi yang tampil di layar.\n\n"
+                . "3️⃣ **Unggah Foto Bukti Pembayaran (Wajib)**:\n"
+                . "• Klik tombol **Unggah Bukti Pembayaran** pada kartu pesanan.\n"
+                . "• Pilih foto / *screenshot* bukti transfer dari HP Kakak lalu simpan.\n"
+                . "• Status otomatis berubah dan pesanan segera disiapkan oleh toko!\n\n"
+                . "⚠️ **Salah Upload Bukti Bayar?** Kakak bisa unggah ulang di halaman **Riwayat** atau klik tombol **Chat WhatsApp Admin** agar segera dibantu.";
+
+            return array_merge($baseResponse, [
+                'reply_text' => $reply,
+                'quick_replies' => [
+                    "📦 Cek status pesanan saya",
+                    "🕒 Jadwal pengantaran kurir & ambil pesanan",
+                    "📖 Cara pesan makanan (Pemula)",
+                    "Chat WhatsApp Admin"
+                ],
+            ]);
+        }
+
+        // =========================================================================
+        // KATEGORI 6: JADWAL OPERASIONAL, JAM ANTAR KURIR & PENGAMBILAN SANTRI
+        // =========================================================================
+        if (preg_match('/(?:jadwal\s*(?:antar|kurir|pengantaran|buka|kantin)|jam\s*berapa.*?(?:antar|mengantar|diantar|kurir|sampai|ambil|diambil|buka|tutup)|kapan.*?(?:diantar|mengantar|sampai|ambil|diambil)|waktu\s*(?:antar|pengantaran|pengambilan))/i', $lower)) {
+            $reply = "🕒 **Jadwal Operasional Kantin, Pengantaran Kurir & Pengambilan Santri**:\n\n"
+                . "• 🏪 **Jam Buka Toko Reguler**: Pukul **07:00 – 17:00 WIB** *(Khusus fitur **Pesanan Khusus / Titip Beli** dapat diajukan 24 jam)*.\n"
+                . "• 🛵 **Jadwal Pengantaran Kurir**: Kurir mengantarkan pesanan ke gedung asrama mulai pukul **17:00 s/d 21:00 WIB** (5 sore – 9 malam).\n"
+                . "• 📦 **Waktu Pengambilan Santri**: Santri dapat mengambil pesanannya mulai **pukul 20:00 WIB (jam 8 malam)** di titik pengantaran gedung asrama.\n"
+                . "• 📸 **Bukti Serah Terima & Email**: Begitu pesanan selesai diantar kurir, foto bukti pengantaran langsung tampil di menu **Riwayat** dan terkirim otomatis ke **Email** akun Kakak.";
+
+            return array_merge($baseResponse, [
+                'reply_text' => $reply,
+                'quick_replies' => [
+                    "📦 Cek status pesanan saya",
+                    "📖 Cara pesan makanan (Pemula)",
+                    "👥 Cara pesan lebih dari 1 santri",
+                    "🏪 Cara pesan lebih dari 1 toko"
+                ],
+            ]);
+        }
+
+        // =========================================================================
+        // KATEGORI 7: CARA KLAIM & PAKAI VOUCHER DISKON / GRATIS ONGKIR
+        // =========================================================================
+        if (preg_match('/(?:cara\s*(?:pakai|klaim|gunakan|dapat)\s*voucher|voucher\s*(?:diskon|gratis\s*ongkir|promo)|pakai\s*promo)/i', $lower)) {
+            $reply = "🎟️ **Panduan Cara Klaim & Menggunakan Voucher Promo**:\n\n"
+                . "1️⃣ Buka menu **Voucher** (ikon tiket di navigasi bawah).\n"
+                . "2️⃣ Pilih voucher yang tersedia lalu klik tombol **Klaim**.\n"
+                . "3️⃣ Saat memesan menu di **Keranjang**, pilih voucher yang sudah diklaim sebelum menekan *Checkout* agar potongan diskon/ongkir langsung memotong total tagihan.";
+
+            return array_merge($baseResponse, [
+                'reply_text' => $reply,
+                'quick_replies' => [
+                    "📖 Cara pesan makanan (Pemula)",
+                    "🏪 Cara pesan lebih dari 1 toko",
+                    "👥 Cara pesan lebih dari 1 santri"
+                ],
+            ]);
+        }
+
+        // =========================================================================
+        // KATEGORI 8: PANDUAN LENGKAP UMUM ("MAU PESAN GIMANA / CARA PAKAI APLIKASI")
+        // =========================================================================
+        if ($isDirectHowToOrder || preg_match('/(?:cara\s*(?:pesan|pesen|beli|order|belanja|pakai|menggunakan|gunain)|panduan\s*(?:aplikasi|lengkap|pesan)|tutorial\s*(?:aplikasi|pesan)|langkah\s*pesan|bingung\s*(?:cara|mau)\s*(?:pesan|beli|pakai)|gimana\s*cara\s*(?:pesan|pesen|beli|order|pakai)|bagaimana\s*cara\s*(?:pesan|pesen|beli|order|pakai|menggunakan))/i', $lower)) {
+            $reply = "📖 **Panduan Lengkap Cara Menggunakan & Memesan di HiGO Pondok**:\n\n"
+                . "Berikut langkah mudah memesan makanan, minuman, dan kebutuhan santri:\n\n"
+                . "1️⃣ **Pastikan Profil & Kamar Santri Lengkap** *(Khusus Pengguna Baru)*\n"
+                . "• Buka menu **Profil** (pojok kanan atas) → isi **No. WhatsApp** di *Edit Profil* & pilih **Nama Santri** di *Kamar & Keluarga Santri*.\n\n"
+                . "2️⃣ **Pilih Salah Satu dari 3 Cara Memesan**:\n"
+                . "• 🤖 **Lewat Chat AI Ini (Paling Praktis)**: Cukup ketik menu & jumlahnya *(Contoh: \"Pesan 2 Mie Gacoan Lv 1 sama 1 Es Teh\")*, lalu klik tombol hijau **Konfirmasi Pesanan**.\n"
+                . "• 🛒 **Lewat Katalog Kantin (Bisa Multi-Toko)**: Buka menu **Kantin** → pilih menu dari 1 atau beberapa toko (**+ Tambah**) → buka **Keranjang** → klik **Lanjut ke Pembayaran**.\n"
+                . "• ✨ **Pesanan Khusus / Menu Tidak Ada di Katalog**: Ketik saja menunya di Chat AI ini atau klik tombol ungu **PESANAN KHUSUS** di menu Kantin — otomatis masuk ke **Kantin Barokah Pusat**.\n\n"
+                . "3️⃣ **Ingin Memesan untuk Lebih dari 1 Santri?**\n"
+                . "• **Satu Gedung Asrama**: Cukup 1 pesanan, tulis pembagian nama santri di **Catatan Item** keranjang *(nama santri utama dipanggil kurir & diberitahu catatannya untuk dibagikan)*.\n"
+                . "• **Beda Gedung (Putra & Putri)**: Buat 2 pesanan terpisah dengan mengganti nama santri di **Profil → Kamar & Keluarga Santri**.\n\n"
+                . "4️⃣ **Pembayaran & Pengantaran Kurir**:\n"
+                . "• Scan **QRIS / Transfer Rekening** lalu **Unggah Bukti Pembayaran** di menu **Riwayat**.\n"
+                . "• Kurir mengantar pukul **17:00 – 21:00 WIB** *(santri mengambil mulai pukul **20:00 WIB**)*.\n\n"
+                . "👇 **Pilih topik panduan di bawah jika ingin penjelasan lebih detail:**";
+
+            return array_merge($baseResponse, [
+                'reply_text' => $reply,
+                'quick_replies' => [
+                    "👥 Cara pesan lebih dari 1 santri",
+                    "🏪 Cara pesan lebih dari 1 toko",
+                    "✨ Cara pesanan khusus (Kantin Barokah)",
+                    "👤 Cara lengkapi profil & kamar santri",
+                    "💳 Cara bayar & upload bukti transfer",
+                    "🕒 Jadwal pengantaran kurir & ambil pesanan"
+                ],
+            ]);
+        }
+
+        return null;
+    }
+
+    /**
      * Format nomor HP ke standar WhatsApp internasional (contoh: 0812 -> 62812)
      */
     public static function formatWaNumber(?string $phone): ?string
@@ -630,22 +932,26 @@ class AiSmartOrderingService
             . "   - Jika santri berkata 'hapus udang keju': KELUARKAN produk tersebut dari draf pesanan.\n\n"
             . "6. KETIKA PESANAN SUDAH JELAS & PASTI (Item, Qty, Varian/Level, Lokasi Antar sudah jelas):\n"
             . "   - Set is_order_ready: true.\n"
-            . "   - Hitung ongkir standar katalog: Rp 3.000, Admin: Rp 2.000 (atau Ongkir Rp 3.500 & Admin Rp 2.500 jika titip beli luar).\n"
+            . "   - Hitung ongkir standar katalog: Rp 3.000, Admin: Rp 2.000 (atau Ongkir Rp 3.500 & Admin Rp 2.500 jika pesanan khusus / titip beli).\n"
             . "   - Buatkan draf ringkasan pesanan di canteens, summary, dan reply_text.\n"
-            . "   - Berikan teks penutup: 'Silakan klik tombol [ ✅ Konfirmasi & Buatkan Pesanan ] di bawah untuk langsung memproses pesananmu!'.\n\n"
+            . "   - Berikan teks penutup: 'Silakan klik tombol [ ✅ Konfirmasi Pesanan ] di bawah untuk langsung memproses pesananmu!'.\n\n"
+            . "6A. PESANAN KHUSUS (TITIP BELI) & MENU YANG TIDAK ADA DI KATALOG (OTOMATIS MASUK KANTIN BAROKAH PUSAT):\n"
+            . "   - Jika santri/wali ingin memesan Pesanan Khusus / Titip Beli (misal: obat di apotek, sabun, shampo, alat tulis, roti tawar, buah, barang luar) ATAU memesan makanan/minuman spesifik yang TIDAK ADA di daftar katalog toko reguler (misal: 'pesan nasi rawon 2 porsi', 'pesan soto lamongan 1', 'beli pecel lele 2', 'pesan burger 1', dsb.):\n"
+            . "   - JANGAN DITOLAK! Otomatis jadikan sebagai draf Pesanan Khusus yang masuk ke **Kantin Barokah Pusat** (canteen_id: 173, canteen_name: 'Kantin Barokah Pusat')!\n"
+            . "   - Wajib set: \"is_order_ready\": true, \"is_custom\": true, \"is_unknown_query\": false.\n"
+            . "   - Isi \"custom_notes\" dengan rincian barang/menu yang dipesan (contoh: \"2 porsi Nasi Rawon\").\n"
+            . "   - Isi \"canteens\": [{\"canteen_id\": 173, \"canteen_name\": \"Kantin Barokah Pusat\", \"items\": []}].\n"
+            . "   - Isi \"summary\": {\"subtotal\": 0, \"items_subtotal\": 0, \"delivery_fee\": 3500, \"admin_fee\": 2500, \"grand_total\": 6000}.\n"
+            . "   - Pada \"reply_text\", jelaskan dengan ramah bahwa pesanan disiapkan sebagai **Pesanan Khusus melalui Kantin Barokah Pusat** (Ongkir Rp 3.500 & Admin Rp 2.500, harga barang/menu akan diinput oleh Kantin Barokah Pusat setelah dibelanjakan).\n\n"
             . "7. BANTUAN, CS & HUBUNGI PENGELOLA (ADMIN / TOKO):\n"
             . "   - Jika santri meminta bantuan, kendala, komplain, atau ingin chat/tanya admin atau toko langsung:\n"
             . "   - Berikan tanggapan ramah bahwa tim pengelola dan toko siap membantu via WhatsApp langsung.\n"
             . "   - Wajib set is_order_ready: false.\n"
             . "   - Sertakan quick_replies: ['Chat WhatsApp Admin', 'Chat WhatsApp Toko', 'Mau pesan makanan'].\n\n"
-            . "8. JIKA ADA YANG TIDAK KAMU KETAHUI / MENU ATAU PERTANYAAN DI LUAR KATALOG PONDOK:\n"
-            . "   - Jika santri/pengguna bertanya sesuatu yang tidak ada di katalog, pertanyaan di luar sistem pemesanan kantin, atau hal apa pun yang tidak kamu ketahui:\n"
-            . "   - JANGAN mengarang jawaban atau menu yang tidak ada!\n"
-            . "   - Berikan jawaban yang santun dan ramah bahwa kamu belum mengetahui informasi tersebut / menu belum tersedia di sistem kantin saat ini.\n"
-            . "   - Arahkan pengguna untuk langsung menghubungi Chat WhatsApp Admin HiGO Pondok melalui tombol di bawah.\n"
-            . "   - Wajib set is_order_ready: false.\n"
-            . "   - Wajib set is_unknown_query: true.\n"
-            . "   - Wajib sertakan quick_replies: ['Chat WhatsApp Admin', 'Mau pesan makanan', 'Ada menu apa aja?'].\n\n"
+            . "8. JIKA PENGGUNA BERTANYA INFORMASI UMUM DI LUAR PEMESANAN MAKANAN/BARANG:\n"
+            . "   - HANYA jika pengguna bertanya informasi umum yang bukan memesan makanan/minuman/barang (misal: jadwal ujian pondok, biaya SPP, dsb.):\n"
+            . "   - Sampaikan dengan santun bahwa kamu adalah Asisten Belanja Kantin dan arahkan untuk menghubungi Chat WhatsApp Admin HiGO Pondok.\n"
+            . "   - Wajib set is_order_ready: false dan is_unknown_query: true.\n\n"
             . "Format output JSON wajib:\n"
             . "{\n"
             . "  \"reply_text\": \"Teks balasan ramah & interaktif untuk santri...\",\n"
@@ -753,11 +1059,11 @@ class AiSmartOrderingService
             }
         }
 
-        // Deteksi lokasi pengantaran di dalam kalimat
+        // Deteksi lokasi pengantaran di dalam kalimat (prioritaskan frasa antar ke / kamar / asrama / gedung)
         $loc = $userLocation;
-        if (preg_match('/(?:ke|di|kamar|asrama|kantor|ruang)\s+([A-Za-z0-9\s\-_]{3,25})/i', $message, $mLoc)) {
+        if (preg_match('/(?:antar(?:kan)?\s+ke|kirim(?:kan)?\s+ke|ke\s+kamar|ke\s+asrama|ke\s+gedung|kamar|asrama|gedung|kantor|ruang)\s+([A-Za-z0-9\s\-_]{2,30})/i', $message, $mLoc)) {
             $loc = trim($mLoc[0]);
-            $loc = preg_replace('/^(?:ke|di)\s+/i', '', $loc);
+            $loc = preg_replace('/^(?:antar(?:kan)?\s+ke|kirim(?:kan)?\s+ke|ke|di)\s+/i', '', $loc);
             $loc = ucwords(strtolower($loc));
         }
 
@@ -887,8 +1193,8 @@ class AiSmartOrderingService
             ];
         }
 
-        // 2. Cek apakah ini instruksi Titip Beli Luar (obat di apotek, sabun di swalayan, pulpen, buku, dll)
-        $isTitipBeliIntent = preg_match('/(?:titip\s*beli|pesanan\s*khusus|apotek|swalayan|indomaret|alfamart|warung\s*madura|toko\s*kelontong|obat|paracetamol|panadol|tolak\s*angin|sabun|shampo|odol|sikat\s*gigi|buku\s*sidu|pulpen)/i', $lower);
+        // 2. Cek apakah ini instruksi Pesanan Khusus / Titip Beli (obat di apotek, sabun, pulpen, buku, kantin barokah, dll)
+        $isTitipBeliIntent = preg_match('/(?:titip\s*beli|nitip\s*beli|titip|pesanan\s*khusus|pesan\s*khusus|request\s*khusus|kantin\s*barokah|kantin\s*barikah|barokah|barikah|apotek|swalayan|indomaret|alfamart|warung\s*madura|toko\s*kelontong|obat|paracetamol|panadol|tolak\s*angin|sabun|shampo|odol|pasta\s*gigi|sikat\s*gigi|deterjen|rinso|buku\s*sidu|pulpen|pensil|atk|fotocopy|print|roti\s*tawar|susu\s*kotak|buah)/i', $lower);
 
         // Urutkan produk berdasarkan panjang nama terpanjang lebih dulu agar nama lebih spesifik dicocokkan duluan
         $sortedProducts = $products->sortByDesc(fn($p) => strlen($p->name));
@@ -1200,6 +1506,97 @@ class AiSmartOrderingService
             ];
         }
 
+        // B0. DETEKSI PESANAN KHUSUS (TITIP BELI) ATAU PEMESANAN MENU SPESIFIK YANG TIDAK ADA DI KATALOG -> MASUK KANTIN BAROKAH PUSAT
+        if (empty($matchedCanteens)) {
+            $isQuestionOrExploreOnly = preg_match('/(?:apa\s*(?:ada|aja)|ada\s*apa|menu\s*apa|jual\s*apa|pilihan|list|daftar|rekomendasi|saran|bingung|berapa|harga|toko\s*apa|kantin\s*apa|buka\s*jam|\?)/i', $lower);
+            $hasOrderTrigger = preg_match('/\b(?:pesan|pesen|pesankan|beli|belikan|beliin|order|mau|ingin|pengen|minta|tolong|titip|nitip|khusus)\b/i', $lower)
+                || preg_match('/\b\d+\s*(?:porsi|bungkus|pcs|buah|cup|gelas|mangkok|mangkuk|botol|saset|sachet|strip|kotak|pack)\b/i', $lower);
+
+            // Ekstrak inti nama barang/menu yang diminta setelah membuang kata perintah, lokasi, penerima, dan angka satuan
+            $corePhrase = $lower;
+            $corePhrase = preg_replace('/[,;\s]+(?:tolong\s+)?(?:di)?(?:antar(?:kan)?|kirim(?:kan)?)\s+(?:ke\s+)?.*$/i', '', $corePhrase);
+            $corePhrase = preg_replace('/[,;\s]+(?:ke|di)\s+(?:kamar|asrama|gedung|ruang|kantin\s+barokah|kantin\s+barikah)\b.*$/i', '', $corePhrase);
+            $corePhrase = preg_replace('/[,;\s]+(?:buat|untuk|atas\s+nama)\s+(?:santri|adik|anak)\b.*$/i', '', $corePhrase);
+            $corePhrase = preg_replace('/\b(?:halo|hai|assalamualaikum|permisi|kak|mas|mbak|bang|pak|bu|saya|aku|kami|mau|ingin|pengen|tolong|mohon|minta|nitip|titip|pesanan|pesan|pesen|pesankan|khusus|request|beli|belikan|beliin|order|buatkan|dong|ya|yah|nih|sekarang|hari|ini|antar|kirim|di|ke|kantin|barokah|barikah|pusat)\b/i', ' ', $corePhrase);
+            $corePhrase = preg_replace('/\b(?:\d+|satu|dua|tiga|empat|lima|porsi|bungkus|bks|pcs|buah|biji|cup|gelas|mangkok|mangkuk|botol|btl|saset|sachet|strip|kotak|pack|pak)\b/i', ' ', $corePhrase);
+            $corePhrase = trim(preg_replace('/[^a-z0-9\s]/i', ' ', $corePhrase));
+            $corePhrase = preg_replace('/\s+/', ' ', $corePhrase);
+
+            $genericCatalogCategories = [
+                'makanan', 'makan', 'minuman', 'minum', 'snack', 'camilan', 'cemilan',
+                'jajan', 'jajanan', 'menu', 'bakso', 'mie', 'nasi', 'ayam', 'bebek',
+                'sate', 'kopi', 'jus', 'es', 'dimsum', 'seblak', 'martabak',
+                'terang bulan', 'gorengan', 'roti'
+            ];
+
+            $isUnmatchedMenuOrder = !$isQuestionOrExploreOnly
+                && $hasOrderTrigger
+                && strlen($corePhrase) >= 3
+                && !in_array($corePhrase, $genericCatalogCategories, true);
+
+            if ($isTitipBeliIntent || $isUnmatchedMenuOrder) {
+                $barokahCanteen = $this->getBarokahCanteen();
+                $cId = $barokahCanteen ? $barokahCanteen->id : 173;
+                $cName = $barokahCanteen ? $barokahCanteen->name : 'Kantin Barokah Pusat';
+
+                $parser = new CustomOrderParserService();
+                $customItems = $parser->parseNotes($message);
+
+                $cleanNoteLines = [];
+                foreach ($customItems as $ci) {
+                    $noteSuffix = !empty($ci['notes']) ? " ({$ci['notes']})" : "";
+                    $cleanNoteLines[] = "{$ci['quantity']} {$ci['unit']} {$ci['item']}{$noteSuffix}";
+                }
+                $cleanNotesStr = !empty($cleanNoteLines) ? implode(', ', $cleanNoteLines) : $message;
+
+                if ($isTitipBeliIntent) {
+                    $replyLines = ["Siap kak! Berikut draf **Pesanan Khusus (Titip Beli)** yang otomatis dimasukkan ke **{$cName}**:"];
+                } else {
+                    $replyLines = ["Menu yang Kakak pesan belum terdaftar di katalog toko reguler, sehingga otomatis saya siapkan sebagai **Pesanan Khusus** melalui **{$cName}**:"];
+                }
+
+                foreach ($customItems as $ci) {
+                    $noteSuffix = !empty($ci['notes']) ? " *({$ci['notes']})*" : "";
+                    $replyLines[] = "• **{$ci['quantity']} {$ci['unit']} {$ci['item']}**{$noteSuffix}";
+                }
+                $replyLines[] = "• **Toko Tujuan**: {$cName}";
+                if ($recipientName) {
+                    $replyLines[] = "• **Penerima**: {$recipientName}";
+                }
+                $replyLines[] = "• **Tujuan Antar**: {$loc}";
+                $replyLines[] = "• **Tarif Pesanan Khusus**: Ongkir Rp 3.500 | Admin Rp 2.500";
+                $replyLines[] = "• *(Harga menu/barang akan diinput oleh {$cName} setelah dibelanjakan)*";
+                $replyLines[] = "\nSilakan klik tombol **Konfirmasi Pesanan** di bawah untuk langsung memproses pesanan khususmu!";
+
+                return [
+                    'reply_text' => implode("\n", $replyLines),
+                    'is_order_ready' => true,
+                    'is_custom' => true,
+                    'canteen_id' => $cId,
+                    'delivery_location' => $loc,
+                    'recipient_name' => $recipientName,
+                    'recipient_room' => $loc,
+                    'quick_replies' => [],
+                    'custom_notes' => $cleanNotesStr,
+                    'custom_items' => $customItems,
+                    'canteens' => [
+                        [
+                            'canteen_id' => $cId,
+                            'canteen_name' => $cName,
+                            'items' => [],
+                        ]
+                    ],
+                    'summary' => [
+                        'subtotal' => 0,
+                        'items_subtotal' => 0,
+                        'delivery_fee' => 3500,
+                        'admin_fee' => 2500,
+                        'grand_total' => 6000,
+                    ],
+                ];
+            }
+        }
+
         // B. DETEKSI PERTANYAAN / EKSPLORASI MENU & KATEGORI UMUM (Misal: "saya mau beli bakso", "ada bakso apa aja", "mau pesen mie apa ada", "jual apa")
         if (empty($matchedCanteens)) {
             $foodKeywords = [
@@ -1419,59 +1816,6 @@ class AiSmartOrderingService
             }
         }
 
-        // C. Cek apakah ini instruksi Titip Beli Luar (obat di apotek, sabun di swalayan, pulpen, buku, dll)
-        if (empty($matchedCanteens) && $isTitipBeliIntent) {
-            $defaultCanteen = null;
-            try {
-                $defaultCanteen = Canteen::first();
-            } catch (\Throwable $e) {
-                Log::warning("AiSmartOrderingService titip beli DB skipped: " . $e->getMessage());
-            }
-            $cId = $defaultCanteen ? $defaultCanteen->id : 4;
-            $cName = $defaultCanteen ? $defaultCanteen->name : 'Kantin / Toko Titip Beli';
-
-            $parser = new CustomOrderParserService();
-            $customItems = $parser->parseNotes($message);
-
-            $replyLines = ["Siap kak! Saya siapkan draf **Pesanan Khusus (Titip Beli)** untuk barang yang dipesan:"];
-            foreach ($customItems as $ci) {
-                $replyLines[] = "• {$ci['quantity']} {$ci['unit']} **{$ci['item']}**";
-            }
-            if ($recipientName) {
-                $replyLines[] = "• **Penerima**: {$recipientName}";
-            }
-            $replyLines[] = "• **Tujuan Antar**: {$loc}";
-            $replyLines[] = "• **Tarif Titip Beli**: Ongkir Rp 3.500 | Admin Rp 2.500";
-            $replyLines[] = "• *(Harga barang akan ditentukan oleh toko/kurir setelah dibeli)*";
-            $replyLines[] = "\nSilakan klik tombol [ ✅ Konfirmasi & Buatkan Pesanan ] di bawah untuk langsung memproses pesananmu!";
-
-            return [
-                'reply_text' => implode("\n", $replyLines),
-                'is_order_ready' => true,
-                'is_custom' => true,
-                'delivery_location' => $loc,
-                'recipient_name' => $recipientName,
-                'recipient_room' => $loc,
-                'quick_replies' => [],
-                'custom_notes' => $message,
-                'custom_items' => $customItems,
-                'canteens' => [
-                    [
-                        'canteen_id' => $cId,
-                        'canteen_name' => $cName,
-                        'items' => [],
-                    ]
-                ],
-                'summary' => [
-                    'subtotal' => 0,
-                    'items_subtotal' => 0,
-                    'delivery_fee' => 3500,
-                    'admin_fee' => 2500,
-                    'grand_total' => 6000,
-                ],
-            ];
-        }
-
         // D. Jika produk katalog ditemukan dan sudah siap
         if (!empty($matchedCanteens)) {
             $deliveryFee = 3000;
@@ -1615,6 +1959,51 @@ class AiSmartOrderingService
     }
 
     /**
+     * Cek apakah kata tunggal di dalam teks pengguna sebenarnya bagian dari nama menu majemuk lain
+     * (Contoh: kata "nasi" di dalam "nasi rawon", atau "lele" di dalam "pecel lele")
+     */
+    protected function isSingleWordPartOfUnmatchedCompound(string $userText, string $singleWord): bool
+    {
+        $nonModifierAfter = [
+            'putih', 'biasa', 'standar', 'original', 'ori', 'hangat', 'panas', 'dingin', 'es',
+            'pedas', 'sedang', 'manis', 'level', 'lv', 'lvl', 'porsi', 'bungkus', 'bks', 'pcs',
+            'buah', 'biji', 'cup', 'gelas', 'mangkok', 'mangkuk', 'botol', 'saset', 'sachet',
+            'strip', 'kotak', 'pack', 'pak', 'sama', 'dan', 'atau', 'serta', 'lalu', 'tambah',
+            'antar', 'antarkan', 'kirim', 'ke', 'di', 'kamar', 'asrama', 'gedung', 'ruang',
+            'buat', 'untuk', 'atas', 'aja', 'saja', 'cuma', 'dong', 'ya', 'kak', 'mas', 'mbak',
+            'satu', 'dua', 'tiga', 'empat', 'lima', '___consumed___'
+        ];
+        $nonModifierBefore = [
+            'pesan', 'pesen', 'pesankan', 'beli', 'belikan', 'beliin', 'order', 'mau', 'ingin',
+            'pengen', 'minta', 'tolong', 'tambah', 'sama', 'dan', 'atau', 'serta', 'lalu',
+            'porsi', 'bungkus', 'bks', 'pcs', 'buah', 'biji', 'cup', 'gelas', 'mangkok',
+            'mangkuk', 'satu', 'dua', 'tiga', 'empat', 'lima', '___consumed___'
+        ];
+
+        $q = preg_quote($singleWord, '/');
+
+        // Cek kata tepat setelah $singleWord
+        if (preg_match('/\b' . $q . '\s+([a-z0-9_]{3,})\b/i', $userText, $mAfter)) {
+            $nextWord = strtolower($mAfter[1]);
+            if (!is_numeric($nextWord) && !in_array($nextWord, $nonModifierAfter, true) && !in_array($nextWord, $this->chatStopwords, true)) {
+                return true;
+            }
+        }
+
+        // Cek kata tepat sebelum $singleWord (khusus kata generik seperti "lele" pada "pecel lele", "kacang" pada "bubur kacang")
+        if (in_array($singleWord, ['nasi', 'lele', 'jeruk', 'teh', 'kacang'], true)) {
+            if (preg_match('/\b([a-z0-9_]{3,})\s+' . $q . '\b/i', $userText, $mBefore)) {
+                $prevWord = strtolower($mBefore[1]);
+                if (!is_numeric($prevWord) && !in_array($prevWord, $nonModifierBefore, true) && !in_array($prevWord, $this->chatStopwords, true)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Pencocokan cerdas teks santri dengan nama produk katalog (Toleran Typo, Voice Slips, Alias & Spasi)
      */
     protected function isProductMatch(string $userText, string $productName, ?string &$matchedPhrase = null, bool $allowSingleWordAlias = true): bool
@@ -1635,6 +2024,9 @@ class AiSmartOrderingService
 
             if (strlen($aliasLower) >= 4) {
                 if (preg_match('/\b' . preg_quote($aliasLower, '/') . '\b/i', $userText, $m)) {
+                    if ($isSingleWord && $this->isSingleWordPartOfUnmatchedCompound($userText, $aliasLower)) {
+                        continue;
+                    }
                     $matchedPhrase = $m[0];
                     return true;
                 }
@@ -1648,10 +2040,13 @@ class AiSmartOrderingService
         $normalizedP = preg_replace('/baksosapi/i', 'bakso sapi', $pLower);
         $cleanP = trim(preg_replace('/\b(?:sapi|ai)\b/i', ' ', $normalizedP));
         $cleanP = preg_replace('/\s+/', ' ', $cleanP);
+        $isCleanPSingleWord = !str_contains($cleanP, ' ') && $cleanP !== 'esteh';
 
-        if (strlen($cleanP) >= 4 && preg_match('/\b' . preg_quote($cleanP, '/') . '\b/i', $userText, $m)) {
-            $matchedPhrase = $m[0];
-            return true;
+        if (($allowSingleWordAlias || !$isCleanPSingleWord) && strlen($cleanP) >= 4 && preg_match('/\b' . preg_quote($cleanP, '/') . '\b/i', $userText, $m)) {
+            if (!$isCleanPSingleWord || !$this->isSingleWordPartOfUnmatchedCompound($userText, $cleanP)) {
+                $matchedPhrase = $m[0];
+                return true;
+            }
         }
 
         // 3. Kecocokan Token Kunci yang ketat (Bebas Stopword & Typo Terkendali)
@@ -1705,13 +2100,14 @@ class AiSmartOrderingService
         return false;
     }
 
-    protected function formatResult(array $aiData, string $defaultLoc): array
+    protected function formatResult(array $aiData, string $defaultLoc, string $rawMessage = ''): array
     {
         $isReady = !empty($aiData['is_order_ready']);
+        $isCustom = !empty($aiData['is_custom']);
         $rawSummary = $aiData['summary'] ?? [];
         $subtotal = $rawSummary['subtotal'] ?? $rawSummary['items_subtotal'] ?? 0;
-        $deliveryFee = $rawSummary['delivery_fee'] ?? (!empty($aiData['is_custom']) ? 3500 : 3000);
-        $adminFee = $rawSummary['admin_fee'] ?? (!empty($aiData['is_custom']) ? 2500 : 2000);
+        $deliveryFee = $rawSummary['delivery_fee'] ?? ($isCustom ? 3500 : 3000);
+        $adminFee = $rawSummary['admin_fee'] ?? ($isCustom ? 2500 : 2000);
         $grandTotal = $rawSummary['grand_total'] ?? ($subtotal + $deliveryFee + $adminFee);
 
         $recipientName = $aiData['recipient_name'] ?? null;
@@ -1755,7 +2151,27 @@ class AiSmartOrderingService
         }
 
         $canteens = $aiData['canteens'] ?? [];
-        if (!empty($canteens) && is_array($canteens)) {
+        $customNotes = $aiData['custom_notes'] ?? ($isCustom ? $rawMessage : null);
+        $customItems = $aiData['custom_items'] ?? [];
+
+        if ($isCustom) {
+            $barokah = $this->getBarokahCanteen();
+            $barokahId = $barokah ? $barokah->id : 173;
+            $barokahName = $barokah ? $barokah->name : 'Kantin Barokah Pusat';
+
+            if (empty($customItems) && !empty($customNotes)) {
+                $parser = new CustomOrderParserService();
+                $customItems = $parser->parseNotes($customNotes);
+            }
+
+            $canteens = [
+                [
+                    'canteen_id' => $barokahId,
+                    'canteen_name' => $barokahName,
+                    'items' => [],
+                ]
+            ];
+        } elseif (!empty($canteens) && is_array($canteens)) {
             foreach ($canteens as &$canteen) {
                 if (!empty($canteen['items']) && is_array($canteen['items'])) {
                     foreach ($canteen['items'] as &$item) {
@@ -1791,12 +2207,14 @@ class AiSmartOrderingService
             'reply_text' => $aiData['reply_text'] ?? 'Pesanan berhasil disiapkan!',
             'is_order_ready' => $isReady,
             'is_unknown_query' => !empty($aiData['is_unknown_query']) || !empty($aiData['need_admin_support']),
-            'is_custom' => !empty($aiData['is_custom']),
+            'is_custom' => $isCustom,
+            'canteen_id' => $isCustom ? ($canteens[0]['canteen_id'] ?? 173) : ($aiData['canteen_id'] ?? null),
             'delivery_location' => $deliveryLocation,
             'recipient_name' => $recipientName,
             'recipient_room' => $recipientRoom,
             'quick_replies' => $aiData['quick_replies'] ?? [],
-            'custom_notes' => $aiData['custom_notes'] ?? null,
+            'custom_notes' => $customNotes,
+            'custom_items' => $customItems,
             'canteens' => $canteens,
             'summary' => [
                 'subtotal' => $subtotal,

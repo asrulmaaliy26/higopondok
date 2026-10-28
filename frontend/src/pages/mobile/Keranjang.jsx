@@ -804,7 +804,7 @@ export default function Keranjang() {
             <div className="flex justify-end">
               <button
                 type="button"
-                onClick={() => navigate({ to: '/kantin' })}
+                onClick={() => navigate({ to: token ? '/dashboard/kantin' : '/kantin' })}
                 className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-black text-[10.5px] uppercase tracking-wider rounded-none cursor-pointer"
               >
                 + Tambah Menu Santri

@@ -657,7 +657,7 @@ export default function Profile() {
             />
             <MenuItem 
               icon={BookOpen} 
-              title="Buku Panduan & SOP Pondok" 
+              title="Buku Panduan, Video Tutorial & SOP" badge="3 Video 🎬" badgeColor="bg-green-600"
               onClick={() => navigate({ to: '/dashboard/panduan' })} 
             />
           </div>

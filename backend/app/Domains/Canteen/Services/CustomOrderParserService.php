@@ -136,7 +136,12 @@ class CustomOrderParserService
         $raw = trim($notes);
 
         // Bersihkan pembuka kalimat sopan santri (gunakan \b agar tidak memotong nama barang seperti 'buku')
-        $clean = preg_replace('/^(?:tolong|mohon|nitip|titip|minta\s+tolong)?\s*(?:belikan|beliin|beli|pesankan|pesan)?\s*(?:\b(?:dong|ya|yah|kak|bang|mas|pak|bu|om)\b)?\s*[:,-]?\s*/i', '', $raw);
+        $clean = preg_replace('/^(?:halo|hai|assalamualaikum|permisi)?\s*(?:kak|mas|mbak|bang|pak|bu)?\s*[,.!]?\s*(?:saya|aku|kami)?\s*(?:mau|ingin|pengen|minta\s+tolong|tolong|mohon)?\s*(?:nitip|titip)?\s*(?:pesanan\s+khusus|pesan\s+khusus|request\s+khusus)?\s*(?:belikan|beliin|beli|pesankan|pesan|order)?\s*(?:pesanan\s+khusus|pesan\s+khusus)?\s*(?:\b(?:dong|ya|yah|kak|bang|mas|pak|bu|om)\b)?\s*[:,-]?\s*/i', '', $raw);
+
+        // Bersihkan klausa lokasi pengantaran / penerima di akhir kalimat (contoh: "antar ke Kamar Al-Farabi 03", "buat santri Zaky")
+        $clean = preg_replace('/[,;\s]+(?:tolong\s+)?(?:di)?(?:antar(?:kan)?|kirim(?:kan)?)\s+(?:ke\s+)?(?:kamar|asrama|gedung|ruang|pondok|santri)\b.*$/i', '', $clean);
+        $clean = preg_replace('/[,;\s]+(?:buat|untuk|atas\s+nama)\s+(?:santri|adik|anak)\b.*$/i', '', $clean);
+        $clean = preg_replace('/\s+di\s+(?:kantin\s+barokah(?:\s+pusat)?|kantin\s+barikah)\b.*$/i', '', $clean);
 
         // Ganti baris baru, penomoran (1., 2), •, *, - dengan pemisah unik
         $normalized = preg_replace('/\r\n|\r|\n/', ' ### ', $clean);
@@ -161,10 +166,11 @@ class CustomOrderParserService
             }
 
             // Bersihkan sisa kata sambung atau pembuka di awal chunk
-            $chunk = preg_replace('/^(?:dan|sama|serta|lalu|juga|beli|belikan|nitip)\s+/i', '', $chunk);
+            $chunk = preg_replace('/^(?:dan|sama|serta|lalu|juga|beli|belikan|nitip|pesan|pesankan)\s+/i', '', $chunk);
+            $chunk = preg_replace('/\s+(?:tolong\s+)?(?:di)?(?:antar(?:kan)?|kirim(?:kan)?)\s+ke\s+.*$/i', '', $chunk);
             $chunk = trim($chunk, " \t\n\r\0\x0B.,;:-");
 
-            if (strlen($chunk) < 2) {
+            if (strlen($chunk) < 2 || preg_match('/^(?:antar|kirim|ke\s+kamar|ke\s+asrama|ke\s+gedung)\b/i', $chunk)) {
                 continue;
             }
 

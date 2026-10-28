@@ -349,7 +349,7 @@ export default function Kantin() {
             cardPaddingClass="p-2.5 sm:p-3.5"
             onBannerClick={(banner) => {
               if (banner?.canteen_id) {
-                navigate({ to: '/kantin/$canteenId', params: { canteenId: String(banner.canteen_id) } });
+                navigate({ to: (isInsideDashboard || token) ? '/dashboard/kantin/$id' : '/kantin/$id', params: { id: String(banner.canteen_id) } });
               }
             }}
           />
@@ -502,7 +502,7 @@ export default function Kantin() {
                   >
                     {/* Header Kantin */}
                     <Link
-                      to={`/kantin/${canteen.id}`}
+                      to={(isInsideDashboard || token) ? `/dashboard/kantin/${canteen.id}` : `/kantin/${canteen.id}`}
                       className="flex items-start gap-2.5 pb-2.5 border-b border-gray-100 dark:border-gray-800 group cursor-pointer"
                     >
                       {/* Logo Toko */}
@@ -566,7 +566,7 @@ export default function Kantin() {
                           {previewProducts.map((prod) => (
                             <Link
                               key={prod.id}
-                              to={`/kantin/${canteen.id}`}
+                              to={(isInsideDashboard || token) ? `/dashboard/kantin/${canteen.id}` : `/kantin/${canteen.id}`}
                               className="flex flex-col group cursor-pointer"
                             >
                               {/* Foto Menu Kotak (Rounded None) */}
@@ -596,7 +596,7 @@ export default function Kantin() {
                         {/* Link Buka Menu Lengkap */}
                         <div className="mt-2.5 pt-2 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between text-xs">
                           <Link
-                            to={`/kantin/${canteen.id}`}
+                            to={(isInsideDashboard || token) ? `/dashboard/kantin/${canteen.id}` : `/kantin/${canteen.id}`}
                             className="text-green-700 dark:text-green-400 font-bold hover:underline flex items-center gap-0.5"
                           >
                             <span>Lihat menu lainnya ({canteen.products?.length || 0})</span>

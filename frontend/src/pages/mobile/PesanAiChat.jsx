@@ -416,14 +416,15 @@ export default function PesanAiChat() {
     {
       id: 1,
       sender: 'assistant',
-      text: `Assalamu'alaikum Kak ${user?.name ? user.name.split(' ')[0] : 'Santri'}! 🌟 Mau makan, minum, titip beli, atau cek status pesanan hari ini?\n\nKetik saja santai layaknya chat biasa, saya siapkan draf pesanan atau cek pesananmu langsung.`,
+      text: `Assalamu'alaikum Kak ${user?.name ? user.name.split(' ')[0] : 'Santri'}! 🌟 Mau makan, minum, titip beli, cek status pesanan, atau tanya **cara menggunakan aplikasi** hari ini?\n\nKetik saja santai layaknya chat biasa atau tap pilihan cepat di bawah:`,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       quick_replies: [
+        "📖 Bagaimana cara pesan / pakai aplikasi ini?",
+        "👥 Cara pesan lebih dari 1 santri",
+        "🏪 Cara pesan lebih dari 1 toko",
         "📦 Cek status pesanan saya",
-        "🍲 1 Bakso Mercon antar ke kamar",
         "🍜 2 Mie Gacoan Lv 1 + 1 Udang Keju",
-        "🥤 2 Es Teh Manis dingin",
-        "🛒 Titip Beli Obat di Apotek"
+        "✨ Pesan 2 porsi Nasi Rawon (Kantin Barokah)"
       ],
       draft: null,
       orderConfirmed: false,
@@ -448,6 +449,18 @@ export default function PesanAiChat() {
   // Quick Prompt Recommendations
   const quickPrompts = [
     {
+      label: '📖 Cara Pakai & Pesan',
+      text: 'Bagaimana cara memesan makanan dan menggunakan aplikasi ini?'
+    },
+    {
+      label: '👥 Cara Pesan > 1 Santri',
+      text: 'Bagaimana cara memesan untuk lebih dari 1 santri (1 gedung atau beda gedung)?'
+    },
+    {
+      label: '🏪 Cara Pesan > 1 Toko',
+      text: 'Bagaimana cara pesan lebih dari 1 toko sekaligus di keranjang?'
+    },
+    {
       label: '📦 Cek Status Pesanan',
       text: 'Bagaimana status pesanan saya saat ini, apakah sudah diterima santri?'
     },
@@ -470,6 +483,10 @@ export default function PesanAiChat() {
     {
       label: '🍗 1 Nasi Ayam Geprek Lv 3',
       text: `Pesan Nasi Ayam Geprek level 3 satu porsi tolong antar ke ${defaultRoom}`
+    },
+    {
+      label: '✨ Pesanan Khusus / Menu Luar (Kantin Barokah)',
+      text: `Pesan 2 porsi Nasi Rawon dan 1 Roti Tawar antar ke ${defaultRoom}`
     },
     {
       label: '🛒 Titip Beli Obat di Apotek',
@@ -530,11 +547,13 @@ export default function PesanAiChat() {
   const confirmMutation = useMutation({
     mutationFn: async ({ messageId, draftData }) => {
       const res = await api.post('/ai/confirm-order', {
-        canteen_id: draftData.canteen_id,
+        canteen_id: draftData.canteen_id || draftData.canteens?.[0]?.canteen_id,
         delivery_location: draftData.delivery_location,
         recipient_name: draftData.recipient_name,
         recipient_room: draftData.recipient_room,
         is_custom: draftData.is_custom,
+        custom_notes: draftData.custom_notes,
+        custom_items: draftData.custom_items,
         canteens: draftData.canteens,
         summary: draftData.summary,
       });
@@ -794,8 +813,15 @@ export default function PesanAiChat() {
       {
         id: Date.now(),
         sender: 'assistant',
-        text: `Percakapan telah direset. Ada yang ingin Kakak pesan lagi? Tuliskan saja menunya langsung di bawah ya! 😊`,
+        text: `Percakapan telah direset. Ada yang ingin Kakak pesan atau tanyakan tentang cara pakai aplikasi? Tuliskan saja di bawah atau tap pilihan cepat ya! 😊`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        quick_replies: [
+          "📖 Bagaimana cara pesan / pakai aplikasi ini?",
+          "👥 Cara pesan lebih dari 1 santri",
+          "🏪 Cara pesan lebih dari 1 toko",
+          "📦 Cek status pesanan saya",
+          "🍜 2 Mie Gacoan Lv 1 + 1 Udang Keju"
+        ],
         draft: null,
         orderConfirmed: false,
       }
@@ -809,7 +835,7 @@ export default function PesanAiChat() {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => window.history.length > 1 ? window.history.back() : navigate({ to: '/kantin' })}
+            onClick={() => window.history.length > 1 ? window.history.back() : navigate({ to: '/dashboard/kantin' })}
             className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 transition-colors rounded-none"
             title="Kembali"
           >
@@ -1097,6 +1123,54 @@ export default function PesanAiChat() {
                     <div className="mt-2.5 pt-2 border-t border-gray-200 dark:border-gray-700 space-y-2">
                       {/* List Items Kompak */}
                       <div className="space-y-1.5">
+                        {msg.draft.is_custom && (
+                          <div className="bg-purple-50/70 dark:bg-purple-950/30 border border-purple-300 dark:border-purple-800 p-2 text-xs space-y-1.5 rounded-none">
+                            <div className="flex items-center justify-between gap-2 pb-1 border-b border-purple-200 dark:border-purple-800/70">
+                              <span className="text-[10px] font-black uppercase tracking-wider text-purple-800 dark:text-purple-300 flex items-center gap-1">
+                                <Sparkles className="w-3 h-3 text-purple-600 dark:text-purple-400" />
+                                <span>Pesanan Khusus • {msg.draft.canteens?.[0]?.canteen_name || 'Kantin Barokah Pusat'}</span>
+                              </span>
+                              <span className="text-[9.5px] font-mono font-bold px-1.5 py-0.5 bg-purple-700 text-white rounded-none">
+                                TITIP BELI
+                              </span>
+                            </div>
+
+                            {Array.isArray(msg.draft.custom_items) && msg.draft.custom_items.length > 0 ? (
+                              <div className="space-y-1">
+                                {msg.draft.custom_items.map((ci, ciIdx) => (
+                                  <div
+                                    key={ciIdx}
+                                    className="flex items-center justify-between gap-2 bg-white dark:bg-gray-900 border border-purple-200/80 dark:border-purple-900/60 px-2 py-1 rounded-none"
+                                  >
+                                    <div className="min-w-0">
+                                      <span className="font-bold text-gray-900 dark:text-white block truncate">
+                                        {ci.item}
+                                      </span>
+                                      {ci.notes && (
+                                        <span className="text-[10px] text-gray-500 dark:text-gray-400 block truncate">
+                                          Catatan: {ci.notes}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <span className="font-mono font-bold text-[11px] text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-950 px-1.5 py-0.5 border border-purple-300 dark:border-purple-800 shrink-0 rounded-none">
+                                      {ci.quantity} {ci.unit || 'pcs'}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="bg-white dark:bg-gray-900 border border-purple-200 dark:border-purple-800 p-2 text-xs text-gray-800 dark:text-gray-200 rounded-none">
+                                {msg.draft.custom_notes}
+                              </div>
+                            )}
+
+                            <div className="flex items-center justify-between text-[10px] text-purple-800 dark:text-purple-300 pt-0.5 font-mono">
+                              <span>Ongkir: Rp 3.500 • Admin: Rp 2.500</span>
+                              <span className="font-bold">Harga diinput Kantin Barokah</span>
+                            </div>
+                          </div>
+                        )}
+
                         {msg.draft.canteens?.map((canteen, cIdx) => (
                           <div key={cIdx} className="space-y-1">
                             {canteen.items?.map((it, itIdx) => {

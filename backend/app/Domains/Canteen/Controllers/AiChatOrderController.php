@@ -101,6 +101,8 @@ class AiChatOrderController extends Controller
             $intent = 'conversation';
             if (!empty($result['is_order_ready'])) {
                 $intent = !empty($result['is_custom']) ? 'titip_beli' : 'order';
+            } elseif (!empty($result['is_app_guide'])) {
+                $intent = 'app_guide';
             } elseif (!empty($result['is_help_intent'])) {
                 $intent = 'help_admin';
             } elseif (!empty($result['is_check_order'])) {
@@ -226,12 +228,23 @@ class AiChatOrderController extends Controller
             $createdOrderIds = [];
 
             if ($isCustom) {
-                // PESANAN KHUSUS / TITIP BELI
-                $canteenId = $request->input('canteens.0.canteen_id') ?: Canteen::first()->id;
-                $customNotes = $request->input('custom_notes') ?: $request->input('message');
+                // PESANAN KHUSUS / TITIP BELI -> Masuk ke Kantin Barokah Pusat
+                $barokahCanteen = $this->aiService->getBarokahCanteen();
+                $canteenId = $request->input('canteen_id')
+                    ?: $request->input('canteens.0.canteen_id')
+                    ?: ($barokahCanteen ? $barokahCanteen->id : Canteen::first()->id);
 
+                $customNotes = $request->input('custom_notes') ?: $request->input('message');
                 $parser = app(CustomOrderParserService::class);
                 $customItems = $request->input('custom_items') ?: $parser->parseNotes($customNotes);
+
+                if (empty($customNotes) && !empty($customItems) && is_array($customItems)) {
+                    $lines = [];
+                    foreach ($customItems as $ci) {
+                        $lines[] = ($ci['quantity'] ?? 1) . ' ' . ($ci['unit'] ?? 'pcs') . ' ' . ($ci['item'] ?? 'Barang');
+                    }
+                    $customNotes = implode(', ', $lines);
+                }
 
                 $order = Order::create([
                     'checkout_id' => $checkoutId,

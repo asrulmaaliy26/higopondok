@@ -201,7 +201,7 @@ export default function VoucherThresholdPopup() {
       navigate({ to: token ? '/dashboard/keranjang' : '/keranjang' });
     } else {
       // Arahkan ke daftar menu / kantin untuk tambah belanjaan
-      navigate({ to: '/kantin' });
+      navigate({ to: token ? '/dashboard/kantin' : '/kantin' });
     }
   };
 

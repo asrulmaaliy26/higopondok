@@ -274,7 +274,7 @@ export default function UserDashboard({ user }) {
           desktopRatio={0.82}
           onBannerClick={(banner) => {
             if (banner?.canteen_id) {
-              navigate({ to: '/kantin/$canteenId', params: { canteenId: String(banner.canteen_id) } });
+              navigate({ to: '/dashboard/kantin/$id', params: { id: String(banner.canteen_id) } });
             }
           }}
         />
@@ -283,7 +283,7 @@ export default function UserDashboard({ user }) {
         <div className="grid grid-cols-4 gap-2 pt-0.5">
           <button
             type="button"
-            onClick={() => navigate({ to: '/kantin', search: { category: 'makanan' } })}
+            onClick={() => navigate({ to: '/dashboard/kantin', search: { category: 'makanan' } })}
             className="flex flex-col items-center justify-center p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 hover:border-green-500 transition-all cursor-pointer group"
           >
             <div className="w-10 h-10 bg-red-50 dark:bg-red-950/50 text-red-600 flex items-center justify-center mb-1 text-lg group-hover:scale-105 transition-transform">
@@ -295,7 +295,7 @@ export default function UserDashboard({ user }) {
 
           <button
             type="button"
-            onClick={() => navigate({ to: '/kantin', search: { category: 'minuman' } })}
+            onClick={() => navigate({ to: '/dashboard/kantin', search: { category: 'minuman' } })}
             className="flex flex-col items-center justify-center p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 hover:border-green-500 transition-all cursor-pointer group"
           >
             <div className="w-10 h-10 bg-blue-50 dark:bg-blue-950/50 text-blue-600 flex items-center justify-center mb-1 text-lg group-hover:scale-105 transition-transform">
@@ -307,7 +307,7 @@ export default function UserDashboard({ user }) {
 
           <button
             type="button"
-            onClick={() => navigate({ to: '/kantin', search: { category: 'snack' } })}
+            onClick={() => navigate({ to: '/dashboard/kantin', search: { category: 'snack' } })}
             className="flex flex-col items-center justify-center p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 hover:border-green-500 transition-all cursor-pointer group"
           >
             <div className="w-10 h-10 bg-amber-50 dark:bg-amber-950/50 text-amber-600 flex items-center justify-center mb-1 text-lg group-hover:scale-105 transition-transform">
@@ -319,7 +319,7 @@ export default function UserDashboard({ user }) {
 
           <button
             type="button"
-            onClick={() => navigate({ to: '/kantin', search: { category: 'semua' } })}
+            onClick={() => navigate({ to: '/dashboard/kantin', search: { category: 'semua' } })}
             className="flex flex-col items-center justify-center p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 hover:border-green-500 transition-all cursor-pointer group"
           >
             <div className="w-10 h-10 bg-green-50 dark:bg-green-950/50 text-green-600 flex items-center justify-center mb-1 text-lg group-hover:scale-105 transition-transform">
@@ -422,7 +422,7 @@ export default function UserDashboard({ user }) {
                 {filteredCanteens.slice(0, 5).map((canteen) => (
                   <Link
                     key={canteen.id}
-                    to={`/kantin/${canteen.id}`}
+                    to={`/dashboard/kantin/${canteen.id}`}
                     className="flex bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 hover:border-green-500 dark:hover:border-green-600 transition-colors p-2.5 group relative"
                   >
                     <div className="w-20 h-20 bg-gray-100 dark:bg-gray-800 overflow-hidden shrink-0 border border-gray-200 dark:border-gray-700 flex items-center justify-center">

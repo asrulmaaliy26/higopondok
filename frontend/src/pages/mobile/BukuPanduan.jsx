@@ -1,25 +1,81 @@
 import React, { useState } from 'react';
-import { BookOpen, ChevronDown, ChevronUp } from 'lucide-react';
+import { BookOpen, ChevronDown, ChevronUp, PlayCircle, Volume2, UserPlus, ShoppingCart, Users, Sparkles, CheckCircle2 } from 'lucide-react';
+import { useNavigate } from '@tanstack/react-router';
 import { useAuthStore } from '../../store/authStore';
 import { ROLES } from '../../config/roles';
 
+const TUTORIAL_VIDEOS = [
+  {
+    id: 'pengguna_baru',
+    badge: 'Panduan 1 • Pemula',
+    title: 'Cara Login Google / Daftar Akun & Lengkapi Profil Santri',
+    subtitle: 'Wajib dilakukan pengguna baru agar menu kantin terbuka & pesanan bisa diantar ke kamar santri.',
+    videoUrl: '/tutorials/tutorial_pengguna_baru_profil.mp4',
+    icon: UserPlus,
+    steps: [
+      'Pilih "Masuk dengan Akun Google" (1x klik otomatis jadi) atau klik "Daftar di sini" untuk buat akun Username & Password.',
+      'Buka menu "Profil" di pojok kanan bawah, lalu klik kartu "Data Pengiriman Santri" untuk memilih Gedung Asrama, Kamar, & No. WA.',
+      'Klik kartu "Keluarga / Data Santri" untuk memilih nama putra/putri santri dari daftar resmi pondok lalu tekan Simpan.',
+      'Setelah indikator berubah menjadi Hijau (Profil Lengkap), Anda siap memesan makanan, minuman, atau obat-obatan!'
+    ]
+  },
+  {
+    id: 'multi_toko',
+    badge: 'Panduan 2 • Multi-Toko',
+    title: 'Cara Memesan Lebih dari 1 Toko Sekaligus (Kumpulkan di Keranjang)',
+    subtitle: 'Pilih menu dari beberapa toko/kantin berbeda dulu ke keranjang, baru checkout & bayar sekaligus.',
+    videoUrl: '/tutorials/tutorial_pesan_multi_toko.mp4',
+    icon: ShoppingCart,
+    steps: [
+      'Buka menu "Kantin", pilih Toko Pertama (misal: Warung Prasmanan), lalu tekan tombol (+ Tambah) pada menu yang diinginkan.',
+      'JANGAN langsung bayar — tutup/kembali ke daftar toko, lalu buka Toko Kedua (misal: Geprek) dan tekan (+ Tambah) lagi.',
+      'Semua pesanan dari berbagai toko otomatis terkumpul di thanh "Keranjang Belanja" di bagian bawah layar.',
+      'Klik "Keranjang", periksa rincian semua toko & ongkir masing-masing, lalu tekan "Pesan Sekarang" untuk membayar sekaligus.'
+    ]
+  },
+  {
+    id: 'lebih_dari_1_santri',
+    badge: 'Panduan 3 • > 1 Santri',
+    title: 'Cara Memesan untuk Lebih dari 1 Santri (1 Gedung vs Beda Gedung)',
+    subtitle: 'Solusi bagi Wali Santri yang memiliki lebih dari 1 anak/saudara di pondok maupun pesanan bareng teman sekamar.',
+    videoUrl: '/tutorials/tutorial_pesan_lebih_dari_1_santri.mp4',
+    icon: Users,
+    steps: [
+      'JIKA MASIH 1 GEDUNG ASRAMA: Cukup buat 1 pesanan saja. Tulis pembagian nama santri & kamar di kolom "Catatan Tambahan" saat di Keranjang (Nanti yang dipanggil kurir tetap nama santri utama di akun, lalu diberikan sesuai catatan).',
+      'JIKA BEDA GEDUNG (Misal Kakak di Gedung Putra & Adik di Gedung Putri): Wajib membuat 2 pesanan terpisah karena kurir & titik pos pengantarannya berbeda.',
+      'Caranya: Selesaikan dulu pesanan Santri Pertama sampai Checkout. Kemudian buka menu "Profil" → klik "Keluarga / Data Santri" → ganti ke Nama Santri Kedua & Gedung Asramanya → Simpan, lalu pesan untuk Santri Kedua.'
+    ]
+  }
+];
+
 export default function BukuPanduan() {
-  const [openSection, setOpenSection] = useState('umum');
+  const [openSection, setOpenSection] = useState('video_tutorial');
+  const [activeVideoId, setActiveVideoId] = useState('pengguna_baru');
   const { user } = useAuthStore();
+  const navigate = useNavigate();
   const userRole = user?.role;
+
+  const activeVideo = TUTORIAL_VIDEOS.find((v) => v.id === activeVideoId) || TUTORIAL_VIDEOS[0];
 
   const toggleSection = (section) => {
     setOpenSection(openSection === section ? null : section);
   };
 
-  const SectionHeader = ({ id, title }) => (
+  const SectionHeader = ({ id, title, badge }) => (
     <button 
       type="button"
       onClick={() => toggleSection(id)}
       className="w-full flex items-center justify-between p-2.5 sm:p-3 bg-white dark:bg-gray-900 rounded-none shadow-xs border border-gray-200 dark:border-gray-800 font-bold text-xs sm:text-sm text-gray-900 dark:text-white text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
     >
-      <span>{title}</span>
-      {openSection === id ? <ChevronUp className="w-4 h-4 text-green-600 dark:text-green-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="truncate">{title}</span>
+        {badge && (
+          <span className="px-1.5 py-0.5 text-[10px] font-extrabold uppercase bg-green-600 text-white rounded-none shrink-0">
+            {badge}
+          </span>
+        )}
+      </div>
+      {openSection === id ? <ChevronUp className="w-4 h-4 text-green-600 dark:text-green-400 shrink-0" /> : <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />}
     </button>
   );
 
@@ -44,12 +100,145 @@ export default function BukuPanduan() {
         </div>
         <div className="min-w-0">
           <h2 className="text-sm sm:text-base font-black text-gray-900 dark:text-white leading-tight">
-            Buku Panduan & SOP Hidayah Go
+            Buku Panduan, Video Tutorial & SOP Hidayah Go
           </h2>
           <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-tight truncate">
-            Manual Operasional Unit Jastip Makanan, Minuman, dan Obat-obatan BUMP Al Hidayah - PPTQ Al Mannan.
+            Video Panduan Bersuara & Manual Operasional BUMP Al Hidayah - PPTQ Al Mannan.
           </p>
         </div>
+      </div>
+
+      {/* VIDEO TUTORIAL INTERAKTIF (DENGAN NARASI SUARA) */}
+      <div className="space-y-0">
+        <SectionHeader
+          id="video_tutorial"
+          title="🎬 Video Tutorial Penggunaan Aplikasi (Lengkap dengan Suara)"
+          badge="3 Video Panduan"
+        />
+        {openSection === 'video_tutorial' && (
+          <div className="p-2.5 sm:p-3.5 bg-white dark:bg-gray-900 rounded-none border-x border-b border-gray-200 dark:border-gray-800 space-y-3 shadow-xs">
+            {/* PILIHAN TAB VIDEO */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+              {TUTORIAL_VIDEOS.map((vid) => {
+                const IconComp = vid.icon;
+                const isSelected = vid.id === activeVideoId;
+                return (
+                  <button
+                    key={vid.id}
+                    type="button"
+                    onClick={() => setActiveVideoId(vid.id)}
+                    className={`p-2 text-left rounded-none border transition-all cursor-pointer flex items-start gap-2 ${
+                      isSelected
+                        ? 'bg-green-50 dark:bg-green-950/50 border-green-600 dark:border-green-500 text-green-900 dark:text-green-200 shadow-2xs'
+                        : 'bg-gray-50 dark:bg-gray-800/60 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+                    }`}
+                  >
+                    <div className={`p-1.5 rounded-none shrink-0 mt-0.5 ${
+                      isSelected ? 'bg-green-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
+                    }`}>
+                      <IconComp className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-[10px] font-extrabold uppercase tracking-wider text-green-700 dark:text-green-400">
+                        {vid.badge}
+                      </div>
+                      <div className="text-xs font-bold leading-snug line-clamp-2 mt-0.5">
+                        {vid.title}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* PEMUTAR VIDEO + LANGKAH RINGKAS */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start bg-gray-50 dark:bg-gray-800/40 p-2.5 border border-gray-200 dark:border-gray-800 rounded-none">
+              {/* Kolom Video Player (Layar HP Portrait) */}
+              <div className="md:col-span-5 flex flex-col items-center">
+                <div className="w-full max-w-[260px] bg-black border-2 border-gray-900 dark:border-gray-700 rounded-none overflow-hidden shadow-sm">
+                  <video
+                    key={activeVideo.videoUrl}
+                    src={activeVideo.videoUrl}
+                    controls
+                    playsInline
+                    preload="metadata"
+                    className="w-full h-auto max-h-[440px] object-contain bg-black"
+                  >
+                    Browser Anda tidak mendukung pemutar video HTML5.
+                  </video>
+                </div>
+                <div className="mt-1.5 flex items-center gap-1.5 text-[11px] font-semibold text-green-700 dark:text-green-400">
+                  <Volume2 className="w-3.5 h-3.5 shrink-0" />
+                  <span>Nyalakan volume HP untuk mendengarkan narasi suara panduan</span>
+                </div>
+              </div>
+
+              {/* Kolom Penjelasan Langkah demi Langkah */}
+              <div className="md:col-span-7 space-y-2.5">
+                <div className="border-b border-gray-200 dark:border-gray-700 pb-2">
+                  <span className="inline-block px-1.5 py-0.5 text-[10px] font-black uppercase bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-300 border border-green-300 dark:border-green-700 rounded-none mb-1">
+                    {activeVideo.badge}
+                  </span>
+                  <h3 className="text-xs sm:text-sm font-black text-gray-900 dark:text-white leading-snug">
+                    {activeVideo.title}
+                  </h3>
+                  <p className="text-[11px] text-gray-600 dark:text-gray-400 mt-0.5 leading-relaxed">
+                    {activeVideo.subtitle}
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                    Ringkasan Langkah di Video:
+                  </div>
+                  <ol className="space-y-1.5">
+                    {activeVideo.steps.map((step, idx) => (
+                      <li
+                        key={idx}
+                        className="flex items-start gap-2 bg-white dark:bg-gray-900 p-2 border border-gray-200 dark:border-gray-800 rounded-none text-xs text-gray-700 dark:text-gray-300 leading-relaxed"
+                      >
+                        <span className="w-4 h-4 bg-green-600 text-white font-mono font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5 rounded-none">
+                          {idx + 1}
+                        </span>
+                        <span>{step}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+
+                {/* Tombol Pintasan Praktek Langsung */}
+                {!isPublicRoute && (
+                  <div className="pt-1 flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => navigate({ to: '/dashboard/profile' })}
+                      className="px-2.5 py-1.5 bg-green-600 hover:bg-green-700 text-white font-bold text-xs rounded-none flex items-center gap-1.5 cursor-pointer transition-colors"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      Buka Profil Saya
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => navigate({ to: '/dashboard/kantin' })}
+                      className="px-2.5 py-1.5 bg-white dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-800 dark:text-gray-200 border border-gray-300 dark:border-gray-700 font-bold text-xs rounded-none flex items-center gap-1.5 cursor-pointer transition-colors"
+                    >
+                      <ShoppingCart className="w-3.5 h-3.5 text-green-600" />
+                      Mulai Belanja di Kantin
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => navigate({ to: '/dashboard/pesan-chat' })}
+                      className="px-2.5 py-1.5 bg-white dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-800 dark:text-gray-200 border border-gray-300 dark:border-gray-700 font-bold text-xs rounded-none flex items-center gap-1.5 cursor-pointer transition-colors"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-green-600" />
+                      Tanya Asisten AI
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* INFORMASI UMUM (Tampil untuk semua role) */}
