@@ -258,14 +258,18 @@ class AdminOrderController extends Controller
         $fullPath = "04_laporan_keuangan/{$monthFolder}/{$filename}";
 
         $disk = config('filesystems.default', 'public');
-        // Prepend UTF-8 BOM so Microsoft Excel renders Indonesian accents and currency correctly
-        Storage::disk($disk)->put($fullPath, "\xEF\xBB\xBF" . $csvContent);
-
         $driveUrl = null;
         try {
+            // Prepend UTF-8 BOM so Microsoft Excel renders Indonesian accents and currency correctly
+            $putOk = Storage::disk($disk)->put($fullPath, "\xEF\xBB\xBF" . $csvContent);
+            if (!$putOk && $disk !== 'public') {
+                throw new \RuntimeException("Storage::disk({$disk})->put returned false");
+            }
             $driveUrl = Storage::disk($disk)->url($fullPath);
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::warning("Drive URL generation error: " . $e->getMessage());
+            \Illuminate\Support\Facades\Log::warning("Drive export fallback to public disk: " . $e->getMessage());
+            Storage::disk('public')->put($fullPath, "\xEF\xBB\xBF" . $csvContent);
+            $driveUrl = Storage::disk('public')->url($fullPath);
         }
 
         // Log admin activity

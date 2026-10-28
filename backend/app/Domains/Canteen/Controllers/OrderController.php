@@ -1765,19 +1765,20 @@ class OrderController extends Controller
         ]);
     }
 
-    // For Canteen: Upload payment proof on behalf of santri
+    // For Canteen / Admin Biasa: Upload payment proof on behalf of santri
     public function uploadPaymentProofByCanteen(Request $request, $id)
     {
         $request->validate([
             'proof_of_payment' => 'required',
             'proof_of_payment.*' => 'file|max:15360',
             'payment_status' => 'nullable|in:unpaid,waiting_confirmation,paid',
+            'admin_notes' => 'nullable|string|max:2000',
         ]);
 
-        $order = DB::transaction(function () use ($request, $id) {
+        $uploadResult = DB::transaction(function () use ($request, $id) {
             $order = $this->findCanteenOrder($request, $id, true);
 
-            if ($order->status === 'cancelled') {
+            if ($order->status === 'cancelled' && !$request->user()->hasRole('admin') && !$request->user()->hasRole('super_admin')) {
                 abort(422, 'Pesanan yang telah dibatalkan tidak dapat diunggah bukti pembayarannya.');
             }
 
@@ -1786,26 +1787,29 @@ class OrderController extends Controller
                 $files = [$files];
             }
 
-            $targetUser = $order->user ?: $request->user();
-
+            // Simpan berkas di disk lokal 'public' terlebih dahulu agar respons upload instan (<0.3s) dan bebas error OAuth Google Drive
             $paths = [];
             foreach ($files as $file) {
                 if ($file) {
-                    $paths[] = $this->storeOptimizedImage($file, $targetUser, 'proofs');
+                    $paths[] = $this->storeOrderProofImage($file, $order, 'proof', 'public');
                 }
             }
 
             $existingProofs = is_array($order->proof_of_payment) ? $order->proof_of_payment : ($order->proof_of_payment ? [$order->proof_of_payment] : []);
             $mergedPaths = array_values(array_unique(array_merge($existingProofs, $paths)));
 
-            // Default to 'paid' when canteen uploads payment proof, or accept choice
+            // Default to 'paid' when canteen/admin uploads payment proof, or accept choice
             $newPaymentStatus = $request->input('payment_status', 'paid');
             $now = now('Asia/Jakarta');
+
+            if ($request->filled('admin_notes')) {
+                $order->admin_notes = $request->input('admin_notes');
+            }
 
             if (!empty($order->checkout_id)) {
                 $linkedOrders = Order::where('checkout_id', $order->checkout_id)->lockForUpdate()->get();
                 foreach ($linkedOrders as $linked) {
-                    $linkedExisting = is_array($linked->proof_of_payment) ? $linked->proof_of_payment : [];
+                    $linkedExisting = is_array($linked->proof_of_payment) ? $linked->proof_of_payment : ($linked->proof_of_payment ? [$linked->proof_of_payment] : []);
                     $linkedMerged = array_values(array_unique(array_merge($linkedExisting, $paths)));
                     $linked->created_at = $now;
                     $linked->proof_of_payment = $linkedMerged;
@@ -1824,6 +1828,10 @@ class OrderController extends Controller
                                 $linked->courier_id = $assignedCourierId;
                             }
                         }
+                    }
+
+                    if ($request->filled('admin_notes')) {
+                        $linked->admin_notes = $request->input('admin_notes');
                     }
 
                     $linked->save();
@@ -1853,8 +1861,53 @@ class OrderController extends Controller
                 $order->items()->update(['created_at' => $now]);
             }
 
-            return !empty($order->checkout_id) ? $order->fresh() : $order;
+            return [
+                'order' => !empty($order->checkout_id) ? $order->fresh() : $order,
+                'paths' => $paths,
+            ];
         });
+
+        $order = $uploadResult['order'];
+        $paths = $uploadResult['paths'] ?? [];
+
+        // Sinkronisasi ke Google Drive & Scanner AI di latar belakang (Non-Blocking Fast Response)
+        if (!empty($paths)) {
+            $orderId = $order->id;
+            $firstLocalPath = $paths[0];
+            dispatch(function () use ($orderId, $firstLocalPath) {
+                try {
+                    $targetOrder = Order::find($orderId);
+                    if (!$targetOrder) return;
+
+                    try {
+                        $scanner = app(\App\Domains\Canteen\Services\ReceiptScannerService::class);
+                        $firstScan = $scanner->scanReceipt($firstLocalPath);
+                        if (!empty($firstScan['is_transfer_receipt'])) {
+                            $targetOrder->payment_ocr_data = $firstScan;
+                            if (!empty($firstScan['ref_number'])) {
+                                $targetOrder->payment_ref_number = $firstScan['ref_number'];
+                            }
+                            $targetOrder->save();
+                            if ($targetOrder->checkout_id) {
+                                Order::where('checkout_id', $targetOrder->checkout_id)
+                                    ->where('id', '!=', $targetOrder->id)
+                                    ->update([
+                                        'payment_ocr_data' => json_encode($firstScan),
+                                        'payment_ref_number' => $targetOrder->payment_ref_number
+                                    ]);
+                            }
+                        }
+                    } catch (\Throwable $scanErr) {
+                        \Illuminate\Support\Facades\Log::warning("[uploadPaymentProofByCanteen] OCR background failed: " . $scanErr->getMessage());
+                    }
+
+                    $controller = app(\App\Http\Controllers\Controller::class);
+                    $controller->syncProofToGoogleDrive($targetOrder, 'proof_of_payment');
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::warning("[uploadPaymentProofByCanteen] Background sync to Google Drive failed: " . $e->getMessage());
+                }
+            })->afterResponse();
+        }
 
         return response()->json([
             'message' => 'Bukti transfer berhasil diunggah dan status pembayaran diperbarui!',

@@ -71,8 +71,8 @@ abstract class Controller
         $mime = $file->getMimeType() ?: '';
         $isImage = str_starts_with($mime, 'image/');
 
-        $resolveReturn = function ($storedPath) use ($disk) {
-            if ($disk === 'google') {
+        $resolveReturn = function ($storedPath, $usedDisk) {
+            if ($usedDisk === 'google') {
                 try {
                     $url = \Illuminate\Support\Facades\Storage::disk('google')->url($storedPath);
                     if ($url) {
@@ -84,11 +84,49 @@ abstract class Controller
             }
             return $storedPath;
         };
+
+        $safeStoreFile = function ($filename = null, $rawContent = null) use ($file, $dir, $disk, $resolveReturn) {
+            try {
+                if ($rawContent !== null && $filename !== null) {
+                    $fullPath = $dir . '/' . $filename;
+                    $ok = \Illuminate\Support\Facades\Storage::disk($disk)->put($fullPath, $rawContent);
+                    if ($ok) {
+                        return $resolveReturn($fullPath, $disk);
+                    }
+                    throw new \RuntimeException("Storage::disk({$disk})->put returned false");
+                } elseif ($filename !== null) {
+                    $stored = $file->storeAs($dir, $filename, $disk);
+                    if ($stored) {
+                        return $resolveReturn($stored, $disk);
+                    }
+                    throw new \RuntimeException("storeAs on disk {$disk} returned false");
+                } else {
+                    $stored = $file->store($dir, $disk);
+                    if ($stored) {
+                        return $resolveReturn($stored, $disk);
+                    }
+                    throw new \RuntimeException("store on disk {$disk} returned false");
+                }
+            } catch (\Throwable $e) {
+                if ($disk !== 'public') {
+                    \Illuminate\Support\Facades\Log::warning("Storage disk '{$disk}' failed, falling back to 'public': " . $e->getMessage());
+                    if ($rawContent !== null && $filename !== null) {
+                        $fullPath = $dir . '/' . $filename;
+                        \Illuminate\Support\Facades\Storage::disk('public')->put($fullPath, $rawContent);
+                        return $fullPath;
+                    } elseif ($filename !== null) {
+                        return $file->storeAs($dir, $filename, 'public');
+                    } else {
+                        return $file->store($dir, 'public');
+                    }
+                }
+                throw $e;
+            }
+        };
         
         // If not an image or GD is not available, store directly
         if (!extension_loaded('gd') || !$isImage) {
-            $stored = $file->store($dir, $disk);
-            return $resolveReturn($stored);
+            return $safeStoreFile();
         }
 
         // High-Concurrency Fast-Path:
@@ -100,8 +138,7 @@ abstract class Controller
                 $ext = 'jpg';
             }
             $filename = \Illuminate\Support\Str::random(40) . '.' . $ext;
-            $stored = $file->storeAs($dir, $filename, $disk);
-            return $resolveReturn($stored);
+            return $safeStoreFile($filename);
         }
 
         try {
@@ -110,8 +147,7 @@ abstract class Controller
             $srcImg = @imagecreatefromstring($imageContent);
 
             if (!$srcImg) {
-                $stored = $file->store($dir, $disk);
-                return $resolveReturn($stored);
+                return $safeStoreFile();
             }
 
             $origWidth = imagesx($srcImg);
@@ -159,15 +195,11 @@ abstract class Controller
             imagedestroy($targetImg);
 
             $filename = \Illuminate\Support\Str::random(40) . '.' . $ext;
-            $fullPath = $dir . '/' . $filename;
 
-            \Illuminate\Support\Facades\Storage::disk($disk)->put($fullPath, $compressedData);
-
-            return $resolveReturn($fullPath);
+            return $safeStoreFile($filename, $compressedData);
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::warning("Image optimization fallback: " . $e->getMessage());
-            $stored = $file->store($dir, $disk);
-            return $resolveReturn($stored);
+            return $safeStoreFile();
         }
     }
 
@@ -282,15 +314,17 @@ abstract class Controller
                     $content = \Illuminate\Support\Facades\Storage::disk('public')->get($cleanPath);
                     
                     // Upload ke Google Drive
-                    \Illuminate\Support\Facades\Storage::disk('google')->put($cleanPath, $content);
-                    $driveUrl = \Illuminate\Support\Facades\Storage::disk('google')->url($cleanPath);
+                    $putOk = \Illuminate\Support\Facades\Storage::disk('google')->put($cleanPath, $content);
+                    if ($putOk) {
+                        $driveUrl = \Illuminate\Support\Facades\Storage::disk('google')->url($cleanPath);
 
-                    if ($driveUrl) {
-                        $updatedProofs[] = $driveUrl;
-                        $changed = true;
-                        // Hapus file fisik lokal agar server bersih dan tidak ada file lokal tersisa
-                        \Illuminate\Support\Facades\Storage::disk('public')->delete($cleanPath);
-                        continue;
+                        if ($driveUrl && (str_contains($driveUrl, 'drive.google.com') || str_contains($driveUrl, 'googleusercontent.com'))) {
+                            $updatedProofs[] = $driveUrl;
+                            $changed = true;
+                            // Hapus file fisik lokal agar server bersih dan tidak ada file lokal tersisa
+                            \Illuminate\Support\Facades\Storage::disk('public')->delete($cleanPath);
+                            continue;
+                        }
                     }
                 }
             } catch (\Throwable $e) {

@@ -48,7 +48,15 @@ Route::get('/buat-symlink-storage', function () {
     }
 });
 
-Route::get('/gdrive/test', function () {
+Route::get('/gdrive/test', function (Request $request) {
+    if ($request->boolean('clear_cache')) {
+        try {
+            Artisan::call('config:clear');
+        } catch (\Throwable $e) {
+            // ignore
+        }
+    }
+
     $results = [
         'default_disk' => config('filesystems.default'),
         'has_client_id' => !empty(config('filesystems.disks.google.clientId')),
@@ -126,11 +134,19 @@ Route::get('/gdrive/callback', function (Request $request) {
     $envPath = base_path('.env');
     $envContent = file_get_contents($envPath);
     if (str_contains($envContent, 'GOOGLE_DRIVE_REFRESH_TOKEN=')) {
-        $envContent = preg_replace('/GOOGLE_DRIVE_REFRESH_TOKEN=.*/', 'GOOGLE_DRIVE_REFRESH_TOKEN=' . $refreshToken, $envContent);
+        $envContent = preg_replace('/^GOOGLE_DRIVE_REFRESH_TOKEN=.*$/m', 'GOOGLE_DRIVE_REFRESH_TOKEN=' . $refreshToken, $envContent);
     } else {
         $envContent .= "\nGOOGLE_DRIVE_REFRESH_TOKEN=" . $refreshToken . "\n";
     }
     file_put_contents($envPath, $envContent);
+
+    // Clear and rebuild config cache so the new token takes effect immediately on VPS
+    try {
+        Artisan::call('config:clear');
+        Artisan::call('config:cache');
+    } catch (\Throwable $e) {
+        \Illuminate\Support\Facades\Log::warning('gdrive/callback config:cache warning: ' . $e->getMessage());
+    }
 
     return response('<!DOCTYPE html><html><body style="font-family:sans-serif;text-align:center;padding:50px;">' .
         '<h2 style="color:green;">&#10004; Google Drive Berhasil Terhubung!</h2>' .

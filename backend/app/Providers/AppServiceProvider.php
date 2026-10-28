@@ -39,7 +39,10 @@ class AppServiceProvider extends ServiceProvider
                 } elseif (!empty($config['clientId']) && !empty($config['clientSecret']) && !empty($config['refreshToken'])) {
                     $client->setClientId($config['clientId']);
                     $client->setClientSecret($config['clientSecret']);
-                    $client->refreshToken($config['refreshToken']);
+                    $token = $client->refreshToken($config['refreshToken']);
+                    if (is_array($token) && isset($token['error'])) {
+                        throw new \RuntimeException('Google Drive OAuth token error: ' . ($token['error_description'] ?? $token['error']));
+                    }
                 }
 
                 $client->addScope(\Google\Service\Drive::DRIVE);
