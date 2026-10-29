@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   ShoppingBag, ChevronLeft, CheckCircle, Clock, Store, MessageCircle, 
   Image as ImageIcon, X, XCircle, FileText, Download, ExternalLink, 
-  Trash2, Camera, Receipt, Eye, Sparkles, Filter, Calendar, ChevronDown, RefreshCw, Lock 
+  Trash2, Camera, Receipt, Eye, Sparkles, Filter, Calendar, ChevronDown, RefreshCw, Lock, Copy, QrCode 
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api, { getStorageUrl, getPublicUrl } from '../../lib/axios';
@@ -60,6 +60,7 @@ export default function Pembayaran() {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [selectedProofs, setSelectedProofs] = useState([]);
   const [fullscreenImage, setFullscreenImage] = useState(null);
+  const [showQrisPreviewModal, setShowQrisPreviewModal] = useState(false);
   const [expandedOrders, setExpandedOrders] = useState({});
   const [activeFilter, setActiveFilter] = useState('all');
 
@@ -68,13 +69,14 @@ export default function Pembayaran() {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
         if (fullscreenImage) setFullscreenImage(null);
+        else if (showQrisPreviewModal) setShowQrisPreviewModal(false);
         else if (selectedProofs.length > 0) setSelectedProofs([]);
         else if (selectedProduct) setSelectedProduct(null);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [fullscreenImage, selectedProofs.length, selectedProduct]);
+  }, [fullscreenImage, selectedProofs.length, selectedProduct, showQrisPreviewModal]);
 
   // Unified Period Filter States (Default: Bulanan / month)
   const today = new Date();
@@ -1894,6 +1896,104 @@ export default function Pembayaran() {
         document.body
       )}
 
+      {/* MODAL PRATINJAU QRIS RESMI (DEDICATED MODAL) */}
+      {showQrisPreviewModal && typeof document !== 'undefined' && createPortal(
+        <div 
+          className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-xs flex items-center justify-center p-3 animate-in fade-in duration-200"
+          onClick={() => setShowQrisPreviewModal(false)}
+        >
+          <div 
+            className="w-full max-w-sm bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 shadow-2xl rounded-none flex flex-col overflow-hidden animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="px-3.5 py-2.5 bg-green-700 text-white flex items-center justify-between border-b border-green-800">
+              <div className="flex items-center gap-2">
+                <QrCode className="w-4 h-4 text-green-200" />
+                <h3 className="text-xs font-black uppercase tracking-wider">
+                  QRIS Kantin Al Hidayah
+                </h3>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setShowQrisPreviewModal(false)}
+                className="w-7 h-7 flex items-center justify-center text-white/80 hover:text-white hover:bg-green-800 rounded-none transition-colors cursor-pointer"
+                title="Tutup (Esc)"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-4 flex flex-col items-center text-center space-y-3 bg-white dark:bg-gray-900">
+              <div>
+                <p className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-tight">
+                  KANTIN AL HIDAYAH, EDUKASI
+                </p>
+                <p className="text-[10.5px] text-gray-500 dark:text-gray-400">
+                  NMID: ID1024343163456 • PPTQ Al-Mannan
+                </p>
+              </div>
+
+              {activeOrderForPaymentProof && (
+                <div className="w-full py-2 px-3 bg-green-50 dark:bg-green-950/50 border border-green-200 dark:border-green-800/60 flex items-center justify-between rounded-none">
+                  <div className="text-left">
+                    <span className="text-[10px] text-green-800 dark:text-green-400 font-semibold uppercase block">
+                      Total Tagihan
+                    </span>
+                    <span className="text-base font-black text-green-700 dark:text-green-300 font-mono">
+                      Rp {parseFloat(activeOrderForPaymentProof.total_price).toLocaleString('id-ID')}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(String(activeOrderForPaymentProof.total_price));
+                      toast.success('Nominal Rp ' + parseFloat(activeOrderForPaymentProof.total_price).toLocaleString('id-ID') + ' disalin!');
+                    }}
+                    className="px-2.5 py-1 bg-green-600 hover:bg-green-700 text-white text-[11px] font-bold rounded-none flex items-center gap-1 shadow-xs cursor-pointer active:scale-95 transition-all"
+                  >
+                    <Copy className="w-3 h-3" />
+                    <span>Salin</span>
+                  </button>
+                </div>
+              )}
+
+              <div className="p-2 bg-white border-2 border-gray-300 dark:border-gray-600 shadow-inner rounded-none inline-block">
+                <img 
+                  src="/QRISkantinalhidayah.jpeg" 
+                  alt="QRIS Kantin Al Hidayah" 
+                  className="w-64 h-64 sm:w-72 sm:h-72 object-contain rounded-none select-none"
+                />
+              </div>
+
+              <p className="text-[11px] text-gray-600 dark:text-gray-400 leading-snug">
+                Bisa di-scan dari <b>BCA, Mandiri, BRImo, BNI, DANA, GoPay, OVO, ShopeePay</b>, dan seluruh aplikasi m-banking/e-wallet lainnya.
+              </p>
+
+              <div className="w-full grid grid-cols-2 gap-2 pt-1">
+                <a
+                  href="/QRISkantinalhidayah.jpeg"
+                  download="QRIS_Kantin_Al_Hidayah.jpeg"
+                  className="py-2 px-3 bg-green-600 hover:bg-green-700 active:bg-green-800 text-white font-bold text-xs flex items-center justify-center gap-1.5 rounded-none shadow-xs transition-colors cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Simpan QRIS</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setShowQrisPreviewModal(false)}
+                  className="py-2 px-3 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-bold text-xs rounded-none border border-gray-300 dark:border-gray-700 transition-colors cursor-pointer"
+                >
+                  Tutup
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
       {/* UPLOAD PAYMENT PROOF MODAL */}
       {showPaymentProofModal && activeOrderForPaymentProof && createPortal(
         <div className="fixed inset-0 z-[100] bg-black/60 flex flex-col justify-end animate-in fade-in duration-200">
@@ -1935,16 +2035,30 @@ export default function Pembayaran() {
                     (1 kali transfer untuk seluruh {activeOrderForPaymentProof.canteenCount} toko)
                   </p>
                 )}
-                <p className="text-2xl font-black text-green-600 dark:text-green-400 mb-3">
-                  Rp {parseFloat(activeOrderForPaymentProof.total_price).toLocaleString('id-ID')}
-                </p>
+                <div className="flex items-center justify-center gap-2 mb-3">
+                  <p className="text-2xl font-black text-green-600 dark:text-green-400 font-mono">
+                    Rp {parseFloat(activeOrderForPaymentProof.total_price).toLocaleString('id-ID')}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(String(activeOrderForPaymentProof.total_price));
+                      toast.success('Nominal Rp ' + parseFloat(activeOrderForPaymentProof.total_price).toLocaleString('id-ID') + ' disalin!');
+                    }}
+                    className="p-1.5 text-xs bg-green-50 hover:bg-green-100 text-green-700 dark:bg-green-950/80 dark:text-green-300 border border-green-300 dark:border-green-800 rounded-none cursor-pointer flex items-center gap-1 transition-colors active:scale-95"
+                    title="Salin Nominal Tagihan"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span className="text-[10px] font-bold">Salin</span>
+                  </button>
+                </div>
                 <div 
-                  onClick={() => setSelectedProofs([getPublicUrl('QRISkantinalhidayah.jpeg')])}
-                  className="border-2 border-dashed border-green-400 dark:border-green-600 p-3 rounded-none inline-block bg-white shadow-md hover:shadow-lg cursor-pointer group transition-all"
+                  onClick={() => setShowQrisPreviewModal(true)}
+                  className="border-2 border-dashed border-green-500 dark:border-green-600 p-3 rounded-none inline-block bg-white shadow-sm hover:shadow-md cursor-pointer group transition-all"
                   title="Klik untuk memperbesar QRIS"
                 >
-                  <img src={getPublicUrl('QRISkantinalhidayah.jpeg')} alt="QRIS Pembayaran" className="w-52 h-52 object-contain group-hover:scale-105 transition-transform rounded-none" />
-                  <p className="text-xs font-bold text-green-600 dark:text-green-500 mt-2 flex items-center justify-center gap-1">
+                  <img src="/QRISkantinalhidayah.jpeg" alt="QRIS Pembayaran" className="w-52 h-52 object-contain group-hover:scale-105 transition-transform rounded-none" />
+                  <p className="text-xs font-bold text-green-700 dark:text-green-500 mt-2 flex items-center justify-center gap-1">
                     🔍 Klik QRIS untuk Memperbesar
                   </p>
                 </div>

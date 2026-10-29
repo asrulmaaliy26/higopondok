@@ -24,6 +24,7 @@ export const getStorageUrl = (path) => {
   }
 
   if (path.startsWith('http')) return path;
+  if (path.includes('QRISkantinalhidayah')) return `${baseApiUrl}/QRISkantinalhidayah.jpeg`;
   const cleanPath = path.startsWith('/storage/')
     ? path.substring(9)
     : path.startsWith('storage/')
