@@ -66,9 +66,12 @@ class AdminOrderController extends Controller
         // Search by ID, User name, Santri name, Canteen name, Delivery location
         $search = $request->query('search');
         if ($search) {
-            $query->where(function ($q) use ($search) {
-                $q->where('id', 'like', "%{$search}%")
-                  ->orWhere('recipient_santri_name', 'like', "%{$search}%")
+            $cleanSearch = ltrim(trim($search), '#');
+            $query->where(function ($q) use ($search, $cleanSearch) {
+                if ($cleanSearch !== '') {
+                    $q->where('id', 'like', "%{$cleanSearch}%");
+                }
+                $q->orWhere('recipient_santri_name', 'like', "%{$search}%")
                   ->orWhere('recipient_santri_room', 'like', "%{$search}%")
                   ->orWhere('recipient_phone', 'like', "%{$search}%")
                   ->orWhere('custom_notes', 'like', "%{$search}%")

@@ -556,32 +556,34 @@ export default function TugasKurir() {
     }
   });
 
-  // Upload Proof (Receipt / Delivery) Mutation (Support Single or Batch Array)
+  // Upload Proof (Receipt / Delivery) Mutation (Single-Request Batch Sync)
   const uploadProofMutation = useMutation({
     mutationFn: async ({ id, orderIds, files, type }) => {
-      const ids = orderIds && orderIds.length > 0 ? orderIds : [id];
       const fieldName = type === 'delivery' ? 'proof_of_delivery[]' : 'proof_of_purchase[]';
+      const formData = new FormData();
       
-      // Kirim secara paralel instan ke server
-      const uploadPromises = ids.map(async (targetId) => {
-        const formData = new FormData();
-        files.forEach(file => {
-          formData.append(fieldName, file);
-        });
-        const endpoint = type === 'delivery' 
-          ? `/courier/orders/${targetId}/upload-delivery` 
-          : `/courier/orders/${targetId}/upload-receipt`;
-        const res = await api.post(endpoint, formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data'
-          },
-          timeout: 25000
-        });
-        return res.data;
+      files.forEach(file => {
+        formData.append(fieldName, file);
       });
 
-      const results = await Promise.all(uploadPromises);
-      return results[results.length - 1];
+      // Kirim order_ids tambahan agar server menyinkronkan seluruh pesanan dalam 1 kali request
+      if (orderIds && orderIds.length > 0) {
+        orderIds.forEach(orderId => {
+          formData.append('order_ids[]', orderId);
+        });
+      }
+
+      const endpoint = type === 'delivery' 
+        ? `/courier/orders/${id}/upload-delivery` 
+        : `/courier/orders/${id}/upload-receipt`;
+      
+      const res = await api.post(endpoint, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        },
+        timeout: 30000
+      });
+      return res.data;
     },
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['courier_orders'] });
@@ -733,7 +735,7 @@ export default function TugasKurir() {
       setIsCompressing(true);
       const toastId = toast.loading('Mengompresi foto...');
       try {
-        const compressed = await compressImageFiles(files);
+        const compressed = await compressImageFiles(files, { maxWidth: 1080, maxHeight: 1080, quality: 0.75, outputType: 'image/jpeg' });
         setPhotoFiles(prev => [...prev, ...compressed]);
         setPhotoPreviews(prev => [...prev, ...compressed.map(file => URL.createObjectURL(file))]);
         toast.success('Foto berhasil disiapkan & dikompresi', { id: toastId });
@@ -856,7 +858,8 @@ export default function TugasKurir() {
       // 4. Search Query Filter
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
-        const matchesId = order.id?.toString().includes(q);
+        const cleanQ = q.replace(/^#/, '').trim();
+        const matchesId = (cleanQ && order.id?.toString().includes(cleanQ)) || (order.checkout_id && order.checkout_id.toLowerCase().includes(q));
         const matchesSantri = (order.recipient_santri_name || order.user?.santri_name)?.toLowerCase().includes(q);
         const matchesWali = order.user?.name?.toLowerCase().includes(q);
         const matchesRoom = (order.recipient_santri_room || order.user?.santri_room)?.toLowerCase().includes(q);
@@ -3439,8 +3442,13 @@ export default function TugasKurir() {
                               <p className="text-xs font-semibold text-gray-800 dark:text-gray-200 truncate" title={file.name}>
                                 {file.name}
                               </p>
-                              <p className="text-[10px] text-gray-400 font-mono">
-                                {formatFileSize(file.size)}
+                              <p className="text-[10px] text-gray-400 font-mono flex items-center gap-1">
+                                <span>{formatFileSize(file.size)}</span>
+                                {file.originalSize && file.originalSize > file.size && (
+                                  <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                                    (Hemat {Math.round((1 - file.size / file.originalSize) * 100)}%)
+                                  </span>
+                                )}
                               </p>
                             </div>
 

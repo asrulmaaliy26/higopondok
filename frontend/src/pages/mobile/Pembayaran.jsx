@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   ShoppingBag, ChevronLeft, CheckCircle, Clock, Store, MessageCircle, 
   Image as ImageIcon, X, XCircle, FileText, Download, ExternalLink, 
-  Trash2, Camera, Receipt, Eye, Sparkles, Filter, Calendar, ChevronDown, RefreshCw, Lock, Copy, QrCode 
+  Trash2, Camera, Receipt, Eye, Sparkles, Filter, Calendar, ChevronDown, RefreshCw, Lock, Copy, QrCode, Search 
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api, { getStorageUrl, getPublicUrl } from '../../lib/axios';
@@ -63,6 +63,7 @@ export default function Pembayaran() {
   const [showQrisPreviewModal, setShowQrisPreviewModal] = useState(false);
   const [expandedOrders, setExpandedOrders] = useState({});
   const [activeFilter, setActiveFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Handle ESC key to dismiss modal previews
   useEffect(() => {
@@ -391,9 +392,24 @@ export default function Pembayaran() {
   }, [periodFilteredOrders]);
 
   const filteredOrders = useMemo(() => {
-    if (activeFilter === 'all') return periodFilteredOrders;
-    return periodFilteredOrders.filter(o => o.status === activeFilter);
-  }, [periodFilteredOrders, activeFilter]);
+    let result = periodFilteredOrders;
+    if (activeFilter !== 'all') {
+      result = result.filter(o => o.status === activeFilter);
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      const cleanQ = q.replace(/^#/, '').trim();
+      result = result.filter(o => {
+        const matchesId = (cleanQ && o.id?.toString().includes(cleanQ)) || (o.checkout_id && o.checkout_id.toLowerCase().includes(q));
+        const matchesCanteen = o.canteen?.name?.toLowerCase().includes(q);
+        const matchesSantri = (o.recipient_santri_name || o.user?.santri_name)?.toLowerCase().includes(q);
+        const matchesItem = o.items?.some(i => i.product?.name?.toLowerCase().includes(q));
+        const matchesCustom = o.custom_notes?.toLowerCase().includes(q);
+        return Boolean(matchesId || matchesCanteen || matchesSantri || matchesItem || matchesCustom);
+      });
+    }
+    return result;
+  }, [periodFilteredOrders, activeFilter, searchQuery]);
 
   const checkoutGroups = useMemo(() => {
     const groups = [];
@@ -553,6 +569,8 @@ export default function Pembayaran() {
       }
     }
 
+    const orderIds = group.orders?.map(o => o.id) || [];
+
     return buildDefaultGreetingWaText({
       user,
       recipientTitle: 'Kurir HiGO Pondok',
@@ -562,12 +580,13 @@ export default function Pembayaran() {
         santriClass,
         santriLevel,
         santriRoom,
-        userName: user?.name
+        userName: user?.name,
+        orderIds
       }
     });
   };
 
-  const buildGroupCanteenWAText = (ordersList, canteenTitle) => {
+  const buildGroupCanteenWAText = (ordersList, canteenTitle, allGroupOrders = []) => {
     if (!ordersList || ordersList.length === 0) return '';
     const firstOrder = ordersList[0];
     const isTeacher = ordersList.some(o => o.order_for === 'guru') || user?.is_teacher;
@@ -596,6 +615,9 @@ export default function Pembayaran() {
       }
     }
 
+    const effectiveOrders = (allGroupOrders && allGroupOrders.length > 0) ? allGroupOrders : ordersList;
+    const orderIds = effectiveOrders.map(o => o.id);
+
     return buildDefaultGreetingWaText({
       user,
       recipientTitle: canteenTitle || 'Toko',
@@ -605,7 +627,8 @@ export default function Pembayaran() {
         santriClass,
         santriLevel,
         santriRoom,
-        userName: user?.name
+        userName: user?.name,
+        orderIds
       }
     });
   };
@@ -813,6 +836,28 @@ export default function Pembayaran() {
                 </button>
               );
             })}
+          </div>
+
+          {/* Baris 3: Search Input Box */}
+          <div className="relative pt-0.5">
+            <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Cari kode pesanan #..., nama toko, santri, menu..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full h-8 pl-8 pr-7 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-700 rounded-none text-xs placeholder:text-gray-400 focus:border-green-600 focus:ring-1 focus:ring-green-600 outline-none transition-colors font-medium"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 cursor-pointer p-0.5"
+                title="Hapus pencarian"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -1488,7 +1533,7 @@ export default function Pembayaran() {
                           const label = isMulti ? 'Chat Kantin' : 'Chat Toko';
                           return (
                             <a 
-                              href={formatPhoneWA(chatGroup.phone) + `?text=${encodeURIComponent(buildGroupCanteenWAText(chatGroup.orders, chatGroup.canteenName))}`}
+                              href={formatPhoneWA(chatGroup.phone) + `?text=${encodeURIComponent(buildGroupCanteenWAText(chatGroup.orders, chatGroup.canteenName, group.orders))}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="flex-1 min-w-[85px] flex items-center justify-center gap-1 py-1.5 px-2 bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-950/40 dark:text-green-300 dark:hover:bg-green-900/50 border border-green-200 dark:border-green-800 rounded-none text-xs font-bold transition-all active:scale-[0.98]"
@@ -1508,7 +1553,7 @@ export default function Pembayaran() {
                           return (
                             <a 
                               key={`chat-canteen-group-${idx}`}
-                              href={formatPhoneWA(chatGroup.phone) + `?text=${encodeURIComponent(buildGroupCanteenWAText(chatGroup.orders, cName))}`}
+                              href={formatPhoneWA(chatGroup.phone) + `?text=${encodeURIComponent(buildGroupCanteenWAText(chatGroup.orders, cName, group.orders))}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="flex-1 min-w-[95px] flex items-center justify-center gap-1 py-1.5 px-2 bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-950/40 dark:text-green-300 dark:hover:bg-green-900/50 border border-green-200 dark:border-green-800 rounded-none text-[11px] font-bold transition-all active:scale-[0.98] truncate"

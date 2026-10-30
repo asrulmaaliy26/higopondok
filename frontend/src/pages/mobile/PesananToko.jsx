@@ -533,8 +533,9 @@ export default function PesananToko({ allStores = false, isAdminView = false }) 
 
       // 2. Search Query Filter
       if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const idMatch = order.id?.toString().includes(q);
+        const q = searchQuery.toLowerCase().trim();
+        const cleanQ = q.replace(/^#/, '').trim();
+        const idMatch = (cleanQ && order.id?.toString().includes(cleanQ)) || (order.checkout_id && order.checkout_id.toLowerCase().includes(q));
         const userMatch = order.user?.name?.toLowerCase().includes(q);
         const santriMatch = (order.recipient_santri_name || order.user?.santri_name)?.toLowerCase().includes(q) || (order.recipient_santri_room || order.user?.santri_room)?.toLowerCase().includes(q);
         const canteenMatch = order.canteen?.name?.toLowerCase().includes(q);

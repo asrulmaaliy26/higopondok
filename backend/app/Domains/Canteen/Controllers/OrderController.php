@@ -1128,9 +1128,12 @@ class OrderController extends Controller
         }
 
         if ($search) {
-            $query->where(function ($q) use ($search) {
-                $q->where('id', 'like', "%{$search}%")
-                  ->orWhere('recipient_santri_name', 'like', "%{$search}%")
+            $cleanSearch = ltrim(trim($search), '#');
+            $query->where(function ($q) use ($search, $cleanSearch) {
+                if ($cleanSearch !== '') {
+                    $q->where('id', 'like', "%{$cleanSearch}%");
+                }
+                $q->orWhere('recipient_santri_name', 'like', "%{$search}%")
                   ->orWhere('recipient_santri_room', 'like', "%{$search}%")
                   ->orWhere('custom_notes', 'like', "%{$search}%")
                   ->orWhere('delivery_location', 'like', "%{$search}%")
@@ -1204,6 +1207,8 @@ class OrderController extends Controller
         $request->validate([
             'proof_of_purchase' => 'required|array|min:1',
             'proof_of_purchase.*' => 'file',
+            'order_ids' => 'nullable|array',
+            'order_ids.*' => 'integer',
         ]);
 
         $newPaths = [];
@@ -1219,6 +1224,14 @@ class OrderController extends Controller
         // Jika pesanan memiliki checkout_id, sinkronkan ke seluruh pesanan terkait dalam checkout bundle yang sama
         if (!empty($order->checkout_id)) {
             Order::where('checkout_id', $order->checkout_id)
+                ->where('id', '!=', $order->id)
+                ->update(['proof_of_purchase' => json_encode($merged)]);
+        }
+
+        // Sinkronkan ke daftar order_ids tambahan jika dikirimkan oleh kurir
+        $extraOrderIds = $request->input('order_ids', []);
+        if (!empty($extraOrderIds) && is_array($extraOrderIds)) {
+            Order::whereIn('id', $extraOrderIds)
                 ->where('id', '!=', $order->id)
                 ->update(['proof_of_purchase' => json_encode($merged)]);
         }
@@ -1249,6 +1262,8 @@ class OrderController extends Controller
         $request->validate([
             'proof_of_delivery' => 'required|array|min:1',
             'proof_of_delivery.*' => 'file',
+            'order_ids' => 'nullable|array',
+            'order_ids.*' => 'integer',
         ]);
 
         $newPaths = [];
@@ -1264,6 +1279,14 @@ class OrderController extends Controller
         // Jika pesanan memiliki checkout_id, sinkronkan ke seluruh pesanan terkait dalam checkout bundle yang sama
         if (!empty($order->checkout_id)) {
             Order::where('checkout_id', $order->checkout_id)
+                ->where('id', '!=', $order->id)
+                ->update(['proof_of_delivery' => json_encode($merged)]);
+        }
+
+        // Sinkronkan ke daftar order_ids tambahan jika dikirimkan oleh kurir
+        $extraOrderIds = $request->input('order_ids', []);
+        if (!empty($extraOrderIds) && is_array($extraOrderIds)) {
+            Order::whereIn('id', $extraOrderIds)
                 ->where('id', '!=', $order->id)
                 ->update(['proof_of_delivery' => json_encode($merged)]);
         }
