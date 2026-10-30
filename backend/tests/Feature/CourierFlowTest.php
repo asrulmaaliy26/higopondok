@@ -162,15 +162,31 @@ class CourierFlowTest extends TestCase
         ]);
 
         $fakeDelivery = UploadedFile::fake()->image('serah_terima.jpg', 400, 600);
+        
+        $siblingOrder = Order::create([
+            'user_id' => $this->santriUser->id,
+            'canteen_id' => $this->canteen->id,
+            'courier_id' => $this->kurirUser->id,
+            'status' => 'processing',
+            'payment_status' => 'paid',
+            'total_price' => 15000,
+            'delivery_fee' => 3000,
+            'delivery_location' => 'Kamar Asrama 05',
+        ]);
+
         $response = $this->actingAs($this->kurirUser)->postJson("/api/courier/orders/{$order->id}/upload-delivery", [
-            'proof_of_delivery' => [$fakeDelivery]
+            'proof_of_delivery' => [$fakeDelivery],
+            'order_ids' => [$siblingOrder->id]
         ]);
 
         $response->assertStatus(200);
         $order->refresh();
+        $siblingOrder->refresh();
 
         $this->assertNotEmpty($order->proof_of_delivery);
         $this->assertIsArray($order->proof_of_delivery);
+        $this->assertNotEmpty($siblingOrder->proof_of_delivery);
+        $this->assertEquals($order->proof_of_delivery, $siblingOrder->proof_of_delivery);
     }
 
     /**
@@ -293,5 +309,29 @@ class CourierFlowTest extends TestCase
     {
         $response = $this->actingAs($this->santriUser)->getJson('/api/courier/orders');
         $response->assertStatus(403);
+    }
+
+    /**
+     * 9. Kurir Mencari Pesanan dengan Simbol Hash (#id)
+     */
+    public function test_courier_can_search_order_with_hash_symbol(): void
+    {
+        $order = Order::create([
+            'user_id' => $this->santriUser->id,
+            'canteen_id' => $this->canteen->id,
+            'courier_id' => $this->kurirUser->id,
+            'status' => 'processing',
+            'payment_status' => 'paid',
+            'total_price' => 10000,
+            'delivery_fee' => 3000,
+            'delivery_location' => 'Kamar Asrama 05',
+        ]);
+
+        $response = $this->actingAs($this->kurirUser)->getJson("/api/courier/orders?search=#{$order->id}");
+        $response->assertStatus(200);
+        $data = $response->json('data') ?? $response->json();
+        
+        $ids = collect($data)->pluck('id')->toArray();
+        $this->assertContains($order->id, $ids);
     }
 }

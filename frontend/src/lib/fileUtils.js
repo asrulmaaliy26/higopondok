@@ -128,10 +128,29 @@ export const compressImageFile = async (rawFile, options = {}) => {
       objectUrl = null;
     }
 
+    const cleanup = () => {
+      if (objectUrl) {
+        try {
+          URL.revokeObjectURL(objectUrl);
+        } catch {}
+        objectUrl = null;
+      }
+    };
+
+    const finishWithFallback = () => {
+      cleanup();
+      resolve(file);
+    };
+
     const processImage = (img) => {
       try {
         let width = img.naturalWidth || img.width;
         let height = img.naturalHeight || img.height;
+
+        if (!width || !height || width < 10 || height < 10) {
+          finishWithFallback();
+          return;
+        }
 
         // Calculate proportional dimensions
         if (width > height) {
@@ -159,11 +178,23 @@ export const compressImageFile = async (rawFile, options = {}) => {
             ctx.fillRect(0, 0, width, height);
           }
           ctx.drawImage(img, 0, 0, width, height);
+        } else {
+          finishWithFallback();
+          return;
         }
 
         const handleBlob = (blob) => {
           if (!blob) {
-            resolve(file);
+            finishWithFallback();
+            return;
+          }
+
+          // Safety check: Jika blob hasil kompresi berukuran mencurigakan sangat kecil (< 3 KB) 
+          // padahal resolusi gambar besar (> 400px), ini indikasi kuat canvas putih kosong/gagal render.
+          // Kembalikan file asli agar bukti bayar santri tidak rusak/putih polos.
+          if (blob.size < 3000 && (width > 400 || height > 400) && rawFile.size > 8000) {
+            console.warn('Canvas compression resulted in suspiciously tiny / blank image, falling back to original file.');
+            finishWithFallback();
             return;
           }
 
@@ -180,6 +211,7 @@ export const compressImageFile = async (rawFile, options = {}) => {
 
           compressedFile.originalSize = rawFile.size || file.size;
           compressedFile.isCompressed = true;
+          cleanup();
           resolve(compressedFile);
         };
 
@@ -190,7 +222,11 @@ export const compressImageFile = async (rawFile, options = {}) => {
             } else {
               // Fallback to jpeg if other format unsupported
               canvas.toBlob((fallbackBlob) => {
-                handleBlob(fallbackBlob || file);
+                if (fallbackBlob) {
+                  handleBlob(fallbackBlob);
+                } else {
+                  finishWithFallback();
+                }
               }, 'image/jpeg', quality);
             }
           },
@@ -199,19 +235,24 @@ export const compressImageFile = async (rawFile, options = {}) => {
         );
       } catch (canvasErr) {
         console.warn('Canvas compression error:', canvasErr);
-        resolve(file);
+        finishWithFallback();
       }
     };
 
     if (objectUrl) {
       const image = new Image();
-      image.onload = () => {
-        URL.revokeObjectURL(objectUrl);
+      image.onload = async () => {
+        try {
+          if ('decode' in image) {
+            await image.decode();
+          }
+        } catch {
+          // Abaikan decode error dan lanjutkan render
+        }
         processImage(image);
       };
       image.onerror = () => {
-        URL.revokeObjectURL(objectUrl);
-        resolve(file);
+        finishWithFallback();
       };
       image.src = objectUrl;
     } else {
@@ -220,15 +261,22 @@ export const compressImageFile = async (rawFile, options = {}) => {
         const reader = new FileReader();
         reader.onload = (readerEvent) => {
           const image = new Image();
-          image.onload = () => processImage(image);
-          image.onerror = () => resolve(file);
+          image.onload = async () => {
+            try {
+              if ('decode' in image) {
+                await image.decode();
+              }
+            } catch {}
+            processImage(image);
+          };
+          image.onerror = () => finishWithFallback();
           image.src = readerEvent.target.result;
         };
-        reader.onerror = () => resolve(file);
+        reader.onerror = () => finishWithFallback();
         reader.readAsDataURL(file);
       } catch (err) {
         console.warn('FileReader error in compressImageFile:', err);
-        resolve(file);
+        finishWithFallback();
       }
     }
   });
