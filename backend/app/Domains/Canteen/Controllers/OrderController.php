@@ -542,7 +542,11 @@ class OrderController extends Controller
         if ($startDate && $endDate) {
             $start = \Illuminate\Support\Carbon::parse($startDate, 'Asia/Jakarta')->startOfDay();
             $end = \Illuminate\Support\Carbon::parse($endDate, 'Asia/Jakarta')->endOfDay();
-            $query->whereBetween('created_at', [$start, $end]);
+            // Pesanan aktif yang belum selesai (pending & processing) selalu disertakan agar tidak hilang saat berganti hari
+            $query->where(function ($dateQ) use ($start, $end) {
+                $dateQ->whereBetween('created_at', [$start, $end])
+                      ->orWhereIn('status', ['pending', 'processing']);
+            });
         } elseif ($period && $period !== 'all') {
             $query->filterPeriod($period);
         }
@@ -1124,7 +1128,11 @@ class OrderController extends Controller
         if ($startDate && $endDate) {
             $start = \Illuminate\Support\Carbon::parse($startDate, 'Asia/Jakarta')->startOfDay();
             $end = \Illuminate\Support\Carbon::parse($endDate, 'Asia/Jakarta')->endOfDay();
-            $query->whereBetween('created_at', [$start, $end]);
+            // Pesanan aktif yang belum selesai (pending & processing) selalu disertakan agar tidak hilang saat berganti hari
+            $query->where(function ($dateQ) use ($start, $end) {
+                $dateQ->whereBetween('created_at', [$start, $end])
+                      ->orWhereIn('status', ['pending', 'processing']);
+            });
         }
 
         if ($search) {
