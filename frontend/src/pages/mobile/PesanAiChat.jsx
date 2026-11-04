@@ -28,7 +28,14 @@ import {
   Package,
   Mic,
   MicOff,
-  Volume2
+  Volume2,
+  PlayCircle,
+  Video,
+  BookOpen,
+  Maximize2,
+  Users,
+  ShoppingCart,
+  UserPlus
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../lib/axios';
@@ -132,6 +139,193 @@ function renderFormattedChatMessage(text, isUser = false) {
   return parts;
 }
 
+/**
+ * Daftar video tutorial resmi aplikasi HiGO Pondok
+ */
+const TUTORIAL_VIDEOS = [
+  {
+    id: 'pengguna_baru',
+    badge: 'Panduan 1 • Pemula',
+    title: 'Cara Login Google / Buat Akun & Lengkapi Profil Santri',
+    subtitle: 'Wajib bagi pengguna baru agar menu terbuka & pesanan kurir sampai tepat ke kamar santri.',
+    videoUrl: '/tutorials/tutorial_pengguna_baru_profil.mp4',
+    icon: UserPlus,
+    steps: [
+      'Pilih "Masuk dengan Google" (1x klik akun otomatis jadi).',
+      'Buka Profil, isi No. WhatsApp di Edit Profil.',
+      'Klik Kamar & Keluarga Santri, pilih nama santri resmi dari daftar lalu tekan Simpan.'
+    ]
+  },
+  {
+    id: 'multi_toko',
+    badge: 'Panduan 2 • Multi-Toko',
+    title: 'Cara Memesan Lebih dari 1 Toko Sekaligus (1 Keranjang)',
+    subtitle: 'Pilih menu dari beberapa toko/kantin berbeda dulu ke keranjang, baru checkout & bayar 1x.',
+    videoUrl: '/tutorials/tutorial_pesan_multi_toko.mp4',
+    icon: ShoppingCart,
+    steps: [
+      'Buka Toko 1, tekan (+ Tambah) menu yang diinginkan.',
+      'Kembali ke katalog toko, buka Toko 2 dan tekan (+ Tambah) lagi tanpa langsung bayar.',
+      'Buka Keranjang Belanja di bawah lalu tekan Pesan Sekarang untuk bayar sekaligus.'
+    ]
+  },
+  {
+    id: 'lebih_dari_1_santri',
+    badge: 'Panduan 3 • > 1 Santri',
+    title: 'Cara Memesan untuk Lebih dari 1 Santri (1 Gedung vs Beda Gedung)',
+    subtitle: 'Solusi bagi Wali Santri yang memiliki lebih dari 1 anak di pondok atau pesan bareng teman kamar.',
+    videoUrl: '/tutorials/tutorial_pesan_lebih_dari_1_santri.mp4',
+    icon: Users,
+    steps: [
+      '1 Gedung Asrama: Cukup 1 pesanan, tulis nama anak & kamar di Catatan Item.',
+      'Beda Gedung: Selesaikan anak pertama, ganti nama anak di Profil, lalu buat pesanan untuk anak kedua.'
+    ]
+  }
+];
+
+/**
+ * Helper pencocok topik pertanyaan dengan video tutorial
+ */
+function matchTutorialVideo(text = '', query = '') {
+  const combined = ((text || '') + ' ' + (query || '')).toLowerCase();
+  if (
+    combined.includes('lebih dari 1 santri') || 
+    combined.includes('2 santri') || 
+    combined.includes('banyak santri') ||
+    combined.includes('beda gedung') ||
+    combined.includes('kakak adik')
+  ) {
+    return TUTORIAL_VIDEOS.find((v) => v.id === 'lebih_dari_1_santri');
+  }
+  if (
+    combined.includes('lebih dari 1 toko') || 
+    combined.includes('multi toko') || 
+    combined.includes('multi-toko') || 
+    combined.includes('gabung pesanan') ||
+    combined.includes('beda toko')
+  ) {
+    return TUTORIAL_VIDEOS.find((v) => v.id === 'multi_toko');
+  }
+  if (
+    combined.includes('bagaimana cara pesan') || 
+    combined.includes('cara pesan / pakai') ||
+    combined.includes('cara pesan makanan') ||
+    combined.includes('cara pakai') || 
+    combined.includes('cara memesan') || 
+    combined.includes('pengguna baru') || 
+    combined.includes('lengkapi profil') || 
+    combined.includes('kamar & keluarga') ||
+    combined.includes('panduan 1')
+  ) {
+    return TUTORIAL_VIDEOS.find((v) => v.id === 'pengguna_baru');
+  }
+  return null;
+}
+
+/**
+ * Komponen Kartu Pemutar Video Tutorial Interaktif di Dalam Chat Bubble
+ */
+function AiChatTutorialVideoCard({ videoData, allVideos = TUTORIAL_VIDEOS, onOpenModal, onNavigatePanduan }) {
+  const [selectedVidId, setSelectedVidId] = useState(videoData?.id || 'pengguna_baru');
+
+  useEffect(() => {
+    if (videoData?.id) {
+      setSelectedVidId(videoData.id);
+    }
+  }, [videoData?.id]);
+
+  const list = (allVideos && allVideos.length > 0) ? allVideos : TUTORIAL_VIDEOS;
+  const activeVid = list.find((v) => v.id === selectedVidId) || list[0] || videoData;
+  const videoUrl = activeVid?.video_url || activeVid?.videoUrl;
+
+  return (
+    <div className="mt-2.5 pt-2 border-t border-gray-200 dark:border-gray-700/80 space-y-2">
+      {/* HEADER CARD */}
+      <div className="flex items-center justify-between">
+        <div className="text-[10px] font-black uppercase tracking-wider text-green-800 dark:text-green-300 flex items-center gap-1.5">
+          <div className="p-0.5 bg-green-600 text-white rounded-none">
+            <PlayCircle className="w-3.5 h-3.5" />
+          </div>
+          <span>Video Tutorial Praktis (Bersuara):</span>
+        </div>
+        <span className="text-[9px] bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-300 font-bold px-1.5 py-0.5 border border-green-200 dark:border-green-800 rounded-none font-mono">
+          {activeVid?.badge || 'Video Panduan'}
+        </span>
+      </div>
+
+      {/* TAB SELECTOR 3 VIDEO RESMI */}
+      <div className="grid grid-cols-3 gap-1 bg-gray-100 dark:bg-gray-800/60 p-0.5 border border-gray-200 dark:border-gray-700 rounded-none text-[10px] font-bold">
+        {list.map((v) => {
+          const isAct = v.id === selectedVidId;
+          const shortLabel = v.id === 'pengguna_baru' ? '1. Cara Pesan' : v.id === 'multi_toko' ? '2. Multi-Toko' : '3. >1 Santri';
+          return (
+            <button
+              key={v.id}
+              type="button"
+              onClick={() => setSelectedVidId(v.id)}
+              className={`py-1 px-1 text-center transition-colors truncate rounded-none cursor-pointer ${
+                isAct
+                  ? 'bg-green-600 text-white shadow-2xs'
+                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+              }`}
+              title={v.title}
+            >
+              {shortLabel}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* PEMUTAR VIDEO EMBED */}
+      <div className="bg-black border border-gray-900 dark:border-gray-700 rounded-none overflow-hidden relative">
+        <video
+          key={videoUrl}
+          controls
+          playsInline
+          preload="metadata"
+          className="w-full h-auto max-h-[320px] sm:max-h-[360px] object-contain bg-black mx-auto block"
+        >
+          <source src={videoUrl} type="video/mp4" />
+          Browser Anda tidak mendukung tag video HTML5.
+        </video>
+      </div>
+
+      {/* DETAIL JUDUL & SUBTITLE */}
+      <div className="bg-gray-50 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-800 p-2 rounded-none">
+        <div className="text-xs font-bold text-gray-900 dark:text-white leading-snug">
+          {activeVid?.title}
+        </div>
+        {activeVid?.subtitle && (
+          <p className="text-[10.5px] text-gray-600 dark:text-gray-300 leading-tight mt-0.5">
+            {activeVid.subtitle}
+          </p>
+        )}
+      </div>
+
+      {/* ACTION BUTTONS (MODAL FULLSCREEN & BUKU PANDUAN) */}
+      <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+        <button
+          type="button"
+          onClick={() => onOpenModal && onOpenModal(activeVid)}
+          className="w-full bg-green-700 hover:bg-green-800 text-white font-bold py-1.5 px-2 text-[10.5px] text-center flex items-center justify-center gap-1 rounded-none transition-colors shadow-2xs cursor-pointer active:scale-[0.99]"
+        >
+          <Maximize2 className="w-3 h-3" />
+          <span>Putar Layar Penuh</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onNavigatePanduan && onNavigatePanduan()}
+          className="w-full bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 border border-gray-300 dark:border-gray-700 font-bold py-1.5 px-2 text-[10.5px] text-center flex items-center justify-center gap-1 rounded-none transition-colors shadow-2xs cursor-pointer active:scale-[0.99]"
+        >
+          <BookOpen className="w-3 h-3 text-green-600" />
+          <span>Buku Panduan SOP</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function PesanAiChat() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -170,6 +364,7 @@ export default function PesanAiChat() {
   const [customVariantInput, setCustomVariantInput] = useState('');
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [selectedCanteenId, setSelectedCanteenId] = useState(null);
+  const [activeVideoModal, setActiveVideoModal] = useState(null);
   const [isListening, setIsListening] = useState(false);
   const [voiceInterimText, setVoiceInterimText] = useState('');
   const searchTimeoutRef = useRef(null);
@@ -501,14 +696,16 @@ export default function PesanAiChat() {
         message: messageText,
         history: history || []
       });
-      return res.data;
+      return { data: res.data, userMessageText: messageText };
     },
-    onSuccess: (data) => {
+    onSuccess: ({ data, userMessageText }) => {
       setMessages((prev) => {
         // Jika ada draf baru yang siap, tandai draf lama yang belum dikonfirmasi sebagai kedaluwarsa/terganti
         const updatedPrev = data.is_order_ready
           ? prev.map((m) => (m.draft && !m.orderConfirmed ? { ...m, draftExpired: true } : m))
           : prev;
+
+        const matchedVideo = data.tutorial_video || matchTutorialVideo(data.reply_text, userMessageText);
 
         const aiReply = {
           id: Date.now() + 1,
@@ -522,6 +719,8 @@ export default function PesanAiChat() {
           is_check_order: Boolean(data.is_check_order),
           draft: data.is_order_ready ? data : null,
           orderConfirmed: false,
+          tutorial_video: matchedVideo || null,
+          all_tutorial_videos: data.all_tutorial_videos || TUTORIAL_VIDEOS,
         };
 
         return [...updatedPrev, aiReply];
@@ -894,17 +1093,31 @@ export default function PesanAiChat() {
           <Sparkles className="w-3 h-3 text-green-600 animate-pulse" />
           <span>Contoh:</span>
         </span>
-        {quickPrompts.map((q, idx) => (
-          <button
-            key={idx}
-            type="button"
-            onClick={() => handleSendMessage(q.text)}
-            disabled={chatMutation.isPending}
-            className="shrink-0 text-[10.5px] font-medium px-2 py-0.5 bg-white dark:bg-gray-800 hover:bg-green-50 dark:hover:bg-green-950 text-gray-700 dark:text-gray-300 hover:text-green-700 dark:hover:text-green-300 border border-gray-200 dark:border-gray-700 hover:border-green-500 rounded-none transition-colors cursor-pointer"
-          >
-            {q.label}
-          </button>
-        ))}
+        {quickPrompts.map((q, idx) => {
+          const matchedVid = matchTutorialVideo('', q.text);
+          return (
+            <div key={idx} className="shrink-0 inline-flex items-stretch border border-gray-200 dark:border-gray-700 hover:border-green-500 rounded-none overflow-hidden">
+              <button
+                type="button"
+                onClick={() => handleSendMessage(q.text)}
+                disabled={chatMutation.isPending}
+                className="text-[10.5px] font-medium px-2 py-0.5 bg-white dark:bg-gray-800 hover:bg-green-50 dark:hover:bg-green-950 text-gray-700 dark:text-gray-300 hover:text-green-700 dark:hover:text-green-300 transition-colors cursor-pointer rounded-none"
+              >
+                {q.label}
+              </button>
+              {matchedVid && (
+                <button
+                  type="button"
+                  onClick={() => setActiveVideoModal(matchedVid)}
+                  className="px-1.5 py-0.5 bg-green-50 hover:bg-green-600 text-green-700 hover:text-white dark:bg-green-950/80 dark:text-green-300 border-l border-gray-200 dark:border-gray-700 transition-colors cursor-pointer rounded-none flex items-center justify-center"
+                  title="Putar Video Tutorial Sekarang"
+                >
+                  <PlayCircle className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* 2. CHAT MESSAGES SCROLL AREA (HANYA INI YANG MENGALAMI SCROLL) */}
@@ -942,6 +1155,16 @@ export default function PesanAiChat() {
                   <div className="whitespace-pre-line font-normal break-words">
                     {renderFormattedChatMessage(msg.text, false)}
                   </div>
+
+                  {/* KARTU VIDEO TUTORIAL INTERAKTIF (PANDUAN VISUAL BERSUARA) */}
+                  {(msg.tutorial_video || matchTutorialVideo(msg.text)) && (
+                    <AiChatTutorialVideoCard
+                      videoData={msg.tutorial_video || matchTutorialVideo(msg.text)}
+                      allVideos={msg.all_tutorial_videos || TUTORIAL_VIDEOS}
+                      onOpenModal={(vid) => setActiveVideoModal(vid)}
+                      onNavigatePanduan={() => navigate({ to: '/buku-panduan' })}
+                    />
+                  )}
 
                   {/* ACTION CARDS KONTAK LANGSUNG WHATSAPP (HANYA ADMIN) */}
                   {msg.support_contact?.admin && (
@@ -1103,17 +1326,35 @@ export default function PesanAiChat() {
                         <span>Pilihan Cepat (Tinggal Tap):</span>
                       </div>
                       <div className="flex flex-wrap gap-1">
-                        {msg.quick_replies.map((reply, rIdx) => (
-                          <button
-                            key={rIdx}
-                            type="button"
-                            disabled={chatMutation.isPending}
-                            onClick={() => handleSendMessage(reply)}
-                            className="text-left text-[10.5px] font-semibold px-2 py-1 bg-green-50 dark:bg-green-950/70 hover:bg-green-600 hover:text-white text-green-800 dark:text-green-300 border border-green-200 dark:border-green-800/80 transition-colors cursor-pointer rounded-none active:scale-[0.98]"
-                          >
-                            {reply}
-                          </button>
-                        ))}
+                        {msg.quick_replies.map((reply, rIdx) => {
+                          const isTutorialQuick = matchTutorialVideo('', reply);
+                          return (
+                            <div key={rIdx} className="inline-flex items-stretch border border-green-200 dark:border-green-800/80 rounded-none overflow-hidden">
+                              <button
+                                type="button"
+                                disabled={chatMutation.isPending}
+                                onClick={() => handleSendMessage(reply)}
+                                className="text-left text-[10.5px] font-semibold px-2 py-1 bg-green-50 dark:bg-green-950/70 hover:bg-green-600 hover:text-white text-green-800 dark:text-green-300 transition-colors cursor-pointer rounded-none active:scale-[0.98]"
+                              >
+                                {reply}
+                              </button>
+                              {isTutorialQuick && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActiveVideoModal(isTutorialQuick);
+                                  }}
+                                  className="px-1.5 bg-green-600 hover:bg-green-700 text-white flex items-center justify-center gap-0.5 text-[9.5px] font-bold transition-colors cursor-pointer rounded-none"
+                                  title="Putar Video Tutorial Sekarang"
+                                >
+                                  <PlayCircle className="w-3 h-3" />
+                                  <span className="hidden xxs:inline">Video</span>
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -1773,6 +2014,66 @@ export default function PesanAiChat() {
                 type="button"
                 onClick={() => setIsHelpModalOpen(false)}
                 className="px-4 py-1.5 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-bold text-xs rounded-none transition-colors cursor-pointer"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 5. VIDEO TUTORIAL POPUP MODAL (PLAY / FULLSCREEN) */}
+      {activeVideoModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-2 sm:p-4">
+          <div className="w-full max-w-md bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-none shadow-2xl flex flex-col max-h-[92vh] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/80 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+              <div className="flex items-center gap-1.5 min-w-0 pr-2">
+                <div className="p-1 bg-green-600 text-white rounded-none shrink-0">
+                  <PlayCircle className="w-3.5 h-3.5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[10px] font-mono font-bold text-green-700 dark:text-green-400 uppercase tracking-wider">
+                    {activeVideoModal.badge || 'Video Tutorial'}
+                  </div>
+                  <div className="text-xs font-bold text-gray-900 dark:text-white truncate">
+                    {activeVideoModal.title}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveVideoModal(null)}
+                className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-300 rounded-none transition-colors cursor-pointer"
+                title="Tutup Video"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Video Player */}
+            <div className="p-2 sm:p-3 bg-black flex items-center justify-center overflow-hidden">
+              <video
+                key={activeVideoModal.video_url || activeVideoModal.videoUrl}
+                controls
+                autoPlay
+                playsInline
+                className="w-full max-h-[60vh] object-contain bg-black"
+              >
+                <source src={activeVideoModal.video_url || activeVideoModal.videoUrl} type="video/mp4" />
+                Browser Anda tidak mendukung tag video HTML5.
+              </video>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-2.5 bg-gray-50 dark:bg-gray-800/80 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between gap-2">
+              <p className="text-[10.5px] text-gray-500 dark:text-gray-400 line-clamp-1">
+                {activeVideoModal.subtitle || 'Pastikan volume HP menyala untuk mendengar penjelasan narasi suara.'}
+              </p>
+              <button
+                type="button"
+                onClick={() => setActiveVideoModal(null)}
+                className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 text-xs font-bold rounded-none transition-colors cursor-pointer shrink-0"
               >
                 Tutup
               </button>

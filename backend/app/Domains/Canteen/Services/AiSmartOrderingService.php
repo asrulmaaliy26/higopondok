@@ -173,6 +173,7 @@ class AiSmartOrderingService
         if ($guideResponse !== null) {
             $guideResponse['engine_used'] = 'local_nlp_guide';
             $guideResponse['normalized_message'] = $normalizedMessage;
+            $guideResponse['all_tutorial_videos'] = self::getTutorialVideos();
             return $guideResponse;
         }
 
@@ -504,6 +505,17 @@ class AiSmartOrderingService
 
             return array_merge($baseResponse, [
                 'reply_text' => $reply,
+                'tutorial_video' => [
+                    'id' => 'lebih_dari_1_santri',
+                    'badge' => 'Panduan 3 • > 1 Santri',
+                    'title' => 'Cara Memesan untuk Lebih dari 1 Santri (1 Gedung vs Beda Gedung)',
+                    'subtitle' => 'Solusi praktis bagi Wali Santri yang memiliki lebih dari 1 anak atau pesan bareng teman kamar.',
+                    'video_url' => '/tutorials/tutorial_pesan_lebih_dari_1_santri.mp4',
+                    'steps' => [
+                        '1 Gedung: Buat 1 pesanan, tulis nama anak & kamar di Catatan Item.',
+                        'Beda Gedung: Selesaikan anak pertama, ganti nama anak di Profil, lalu pesan untuk anak kedua.'
+                    ]
+                ],
                 'quick_replies' => [
                     "📖 Cara pesan makanan (Pemula)",
                     "🏪 Cara pesan lebih dari 1 toko",
@@ -533,6 +545,18 @@ class AiSmartOrderingService
 
             return array_merge($baseResponse, [
                 'reply_text' => $reply,
+                'tutorial_video' => [
+                    'id' => 'multi_toko',
+                    'badge' => 'Panduan 2 • Multi-Toko',
+                    'title' => 'Cara Memesan Lebih dari 1 Toko Sekaligus (Kumpulkan di Keranjang)',
+                    'subtitle' => 'Pilih menu dari beberapa toko/kantin berbeda dulu ke keranjang, baru checkout & bayar 1x.',
+                    'video_url' => '/tutorials/tutorial_pesan_multi_toko.mp4',
+                    'steps' => [
+                        'Buka Toko 1, tekan (+ Tambah) menu yang diinginkan.',
+                        'Kembali ke katalog, buka Toko 2 dan tekan (+ Tambah) lagi.',
+                        'Buka Keranjang Belanja di bawah lalu tekan Pesan Sekarang untuk bayar sekaligus.'
+                    ]
+                ],
                 'quick_replies' => [
                     "👥 Cara pesan lebih dari 1 santri",
                     "📖 Cara pesan makanan (Pemula)",
@@ -562,6 +586,18 @@ class AiSmartOrderingService
 
             return array_merge($baseResponse, [
                 'reply_text' => $reply,
+                'tutorial_video' => [
+                    'id' => 'pengguna_baru',
+                    'badge' => 'Panduan 1 • Pemula',
+                    'title' => 'Cara Login Google / Buat Akun & Lengkapi Profil Santri',
+                    'subtitle' => 'Wajib dilakukan pengguna baru agar menu terbuka & kurir mengantar tepat ke kamar santri.',
+                    'video_url' => '/tutorials/tutorial_pengguna_baru_profil.mp4',
+                    'steps' => [
+                        'Pilih "Masuk dengan Google" (otomatis langsung jadi akun).',
+                        'Buka Profil, isi No. WhatsApp aktif di Edit Profil.',
+                        'Buka Kamar & Keluarga Santri, pilih nama santri resmi dari daftar lalu tekan Simpan.'
+                    ]
+                ],
                 'quick_replies' => [
                     "📖 Cara pesan makanan (Pemula)",
                     "👥 Cara pesan lebih dari 1 santri",
@@ -687,6 +723,18 @@ class AiSmartOrderingService
 
             return array_merge($baseResponse, [
                 'reply_text' => $reply,
+                'tutorial_video' => [
+                    'id' => 'pengguna_baru',
+                    'badge' => 'Panduan 1 • Pemula',
+                    'title' => 'Cara Login & Menggunakan Aplikasi HiGO Pondok',
+                    'subtitle' => 'Panduan video lengkap mulai dari pendaftaran akun, isi kamar santri, hingga memesan makanan.',
+                    'video_url' => '/tutorials/tutorial_pengguna_baru_profil.mp4',
+                    'steps' => [
+                        'Lengkapi profil dan kamar santri di menu Profil.',
+                        'Pesan menu langsung via Chat AI ini atau buka menu Kantin.',
+                        'Unggah foto bukti transfer/QRIS di halaman Riwayat Pesanan.'
+                    ]
+                ],
                 'quick_replies' => [
                     "👥 Cara pesan lebih dari 1 santri",
                     "🏪 Cara pesan lebih dari 1 toko",
@@ -699,6 +747,36 @@ class AiSmartOrderingService
         }
 
         return null;
+    }
+
+    /**
+     * Daftar video tutorial resmi untuk panduan visual pengguna
+     */
+    public static function getTutorialVideos(): array
+    {
+        return [
+            [
+                'id' => 'pengguna_baru',
+                'badge' => 'Panduan 1 • Pemula',
+                'title' => 'Cara Login & Lengkapi Profil Santri',
+                'subtitle' => 'Wajib bagi pengguna baru agar menu terbuka & pesanan sampai tepat di kamar santri.',
+                'video_url' => '/tutorials/tutorial_pengguna_baru_profil.mp4',
+            ],
+            [
+                'id' => 'multi_toko',
+                'badge' => 'Panduan 2 • Multi-Toko',
+                'title' => 'Cara Pesan Lebih dari 1 Toko Sekaligus',
+                'subtitle' => 'Pilih menu dari beberapa toko ke keranjang dulu, baru checkout & bayar 1x.',
+                'video_url' => '/tutorials/tutorial_pesan_multi_toko.mp4',
+            ],
+            [
+                'id' => 'lebih_dari_1_santri',
+                'badge' => 'Panduan 3 • > 1 Santri',
+                'title' => 'Cara Pesan Lebih dari 1 Santri',
+                'subtitle' => 'Solusi wali santri dengan > 1 anak di pondok (1 gedung vs beda gedung).',
+                'video_url' => '/tutorials/tutorial_pesan_lebih_dari_1_santri.mp4',
+            ],
+        ];
     }
 
     /**
