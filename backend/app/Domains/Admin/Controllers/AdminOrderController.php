@@ -5,8 +5,10 @@ namespace App\Domains\Admin\Controllers;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Domains\Canteen\Order;
+use App\Domains\Canteen\OrderItem;
 use App\Domains\Admin\ActivityLog;
 use App\Domains\Admin\Requests\AdminUploadPaymentProofRequest;
+use App\Domains\Admin\Requests\AdminUpdateOrderNotesRequest;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Carbon\Carbon;
@@ -1235,27 +1237,71 @@ class AdminOrderController extends Controller
     }
 
     /**
-     * Update catatan khusus Superadmin (Admin Notes) pada pesanan
+     * Update catatan khusus Superadmin, catatan kurir dari user, dan catatan per produk pada pesanan
      */
-    public function updateAdminNotes(Request $request, $id)
+    public function updateAdminNotes(AdminUpdateOrderNotesRequest $request, $id)
     {
-        $request->validate([
-            'admin_notes' => 'nullable|string|max:2000',
-            'sync_checkout' => 'nullable|boolean',
-        ]);
-
         return DB::transaction(function () use ($request, $id) {
             $order = Order::with(['user', 'canteen', 'courier', 'items.product'])->lockForUpdate()->findOrFail($id);
-            $newNotes = $request->input('admin_notes');
-            $order->admin_notes = $newNotes;
+
+            $itemNotesUpdated = [];
+
+            // 1. Update Catatan Item / Produk jika dikirim
+            if ($request->has('items') && is_array($request->input('items'))) {
+                $validOrderIds = ($request->boolean('sync_checkout') && !empty($order->checkout_id))
+                    ? Order::where('checkout_id', $order->checkout_id)->pluck('id')->toArray()
+                    : [$order->id];
+
+                foreach ($request->input('items') as $itData) {
+                    if (!isset($itData['id'])) continue;
+                    $itemModel = OrderItem::whereIn('order_id', $validOrderIds)->where('id', $itData['id'])->first();
+                    if ($itemModel) {
+                        $newNote = !empty($itData['notes']) ? trim($itData['notes']) : null;
+                        $itemModel->notes = $newNote;
+                        $itemModel->save();
+                        $itemNotesUpdated[] = ($itemModel->product->name ?? 'Item #' . $itemModel->id) . ': ' . ($newNote ?: '-');
+                    }
+                }
+            }
+
+            // 2. Update Catatan Kurir / Custom Notes jika dikirim
+            if ($request->has('custom_notes')) {
+                $order->custom_notes = !empty($request->input('custom_notes')) ? trim($request->input('custom_notes')) : null;
+            }
+
+            // 3. Update Catatan Khusus Admin jika dikirim
+            if ($request->has('admin_notes')) {
+                $order->admin_notes = !empty($request->input('admin_notes')) ? trim($request->input('admin_notes')) : null;
+            }
+
             $order->save();
 
-            // Jika diperintahkan sync ke seluruh wadah/checkout gabungan
+            // 4. Sinkronisasi wadah gabungan (checkout_id) jika dipilih
             if ($request->boolean('sync_checkout') && !empty($order->checkout_id)) {
-                Order::where('checkout_id', $order->checkout_id)
-                    ->where('id', '!=', $order->id)
-                    ->lockForUpdate()
-                    ->update(['admin_notes' => $newNotes]);
+                $syncData = [];
+                if ($request->has('admin_notes')) {
+                    $syncData['admin_notes'] = $order->admin_notes;
+                }
+                if ($request->has('custom_notes')) {
+                    $syncData['custom_notes'] = $order->custom_notes;
+                }
+                if (!empty($syncData)) {
+                    Order::where('checkout_id', $order->checkout_id)
+                        ->where('id', '!=', $order->id)
+                        ->lockForUpdate()
+                        ->update($syncData);
+                }
+            }
+
+            $descParts = [];
+            if (!empty($itemNotesUpdated)) {
+                $descParts[] = 'Produk: ' . implode(', ', $itemNotesUpdated);
+            }
+            if ($request->has('custom_notes')) {
+                $descParts[] = 'Catatan Kurir: ' . ($order->custom_notes ?: '(dikosongkan)');
+            }
+            if ($request->has('admin_notes')) {
+                $descParts[] = 'Catatan Admin: ' . ($order->admin_notes ?: '(dikosongkan)');
             }
 
             ActivityLog::create([
@@ -1263,11 +1309,11 @@ class AdminOrderController extends Controller
                 'action' => 'update_order_notes',
                 'model_type' => Order::class,
                 'model_id' => $order->id,
-                'description' => "Admin {$request->user()->name} memperbarui catatan pesanan #{$order->id}: " . ($newNotes ?: '(Catatan dikosongkan)'),
+                'description' => "Superadmin {$request->user()->name} memperbarui catatan pesanan #{$order->id} (" . implode(' | ', $descParts) . ")",
             ]);
 
             return response()->json([
-                'message' => 'Catatan pesanan berhasil diperbarui!',
+                'message' => 'Catatan produk & pesanan kurir berhasil diperbarui!',
                 'order' => $order->fresh()->load(['user', 'canteen', 'courier', 'items.product']),
             ]);
         });

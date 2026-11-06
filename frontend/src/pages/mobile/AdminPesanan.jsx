@@ -255,11 +255,27 @@ export default function AdminPesanan() {
   // Admin Notes Modal States
   const [orderToEditNotes, setOrderToEditNotes] = useState(null);
   const [adminNotesText, setAdminNotesText] = useState('');
+  const [customNotesText, setCustomNotesText] = useState('');
+  const [orderItemNotes, setOrderItemNotes] = useState({});
   const [syncCheckoutNotes, setSyncCheckoutNotes] = useState(true);
 
-  const handleOpenEditNotesModal = (order) => {
-    setOrderToEditNotes(order);
-    setAdminNotesText(order.admin_notes || '');
+  const handleOpenEditNotesModal = (order, groupOrders = null) => {
+    const ordersList = groupOrders && groupOrders.length > 0 ? groupOrders : [order];
+    setOrderToEditNotes({
+      ...order,
+      _groupOrders: ordersList,
+    });
+    setAdminNotesText(order.admin_notes || ordersList.find(o => o.admin_notes)?.admin_notes || '');
+    setCustomNotesText(order.custom_notes || ordersList.find(o => o.custom_notes)?.custom_notes || '');
+    const itemsMap = {};
+    ordersList.forEach(ord => {
+      if (ord.items && ord.items.length > 0) {
+        ord.items.forEach(it => {
+          itemsMap[it.id] = it.notes || '';
+        });
+      }
+    });
+    setOrderItemNotes(itemsMap);
     setSyncCheckoutNotes(Boolean(order.checkout_id));
   };
 
@@ -956,17 +972,22 @@ export default function AdminPesanan() {
     }
   });
 
-  // Mutation Update Admin Notes
+  // Mutation Update Admin & Product & Courier Notes
   const updateAdminNotesMutation = useMutation({
-    mutationFn: async ({ id, admin_notes, sync_checkout }) => {
-      const res = await api.put(`/admin/orders/${id}/notes`, { admin_notes, sync_checkout });
+    mutationFn: async ({ id, admin_notes, custom_notes, items, sync_checkout }) => {
+      const res = await api.put(`/admin/orders/${id}/notes`, {
+        admin_notes,
+        custom_notes,
+        items,
+        sync_checkout
+      });
       return res.data;
     },
     onError: (err) => {
       toast.error(err.response?.data?.message || 'Gagal menyimpan catatan pesanan');
     },
     onSuccess: (data) => {
-      toast.success(data.message || 'Catatan pesanan berhasil diperbarui');
+      toast.success(data.message || 'Catatan produk & kurir berhasil diperbarui');
       setOrderToEditNotes(null);
     },
     onSettled: () => {
@@ -1726,6 +1747,26 @@ export default function AdminPesanan() {
                               >
                                 <Printer className="w-3 h-3 text-amber-600 dark:text-amber-400" /> {isMultiStore ? 'Struk Wadah' : 'Struk'}
                               </button>
+
+                              {/* Tombol Catatan Kurir Utama di Card Header */}
+                              {(() => {
+                                const hasAnyCourierNote = group.orders.some(o => o.custom_notes || o.admin_notes || (o.items && o.items.some(it => it.notes)));
+                                return (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenEditNotesModal(firstOrder, group.orders)}
+                                    className={`px-2 py-0.5 rounded-none text-[10px] font-bold flex items-center gap-1 border shadow-2xs cursor-pointer transition-colors ${
+                                      hasAnyCourierNote
+                                        ? 'bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-200 dark:bg-amber-900/60 dark:text-amber-200 dark:border-amber-700'
+                                        : 'bg-green-600 text-white hover:bg-green-700 border-green-700'
+                                    }`}
+                                    title="Bantu berikan catatan untuk kurir (jika user lupa menulis catatan)"
+                                  >
+                                    <FileText className="w-3 h-3 text-amber-500 shrink-0" />
+                                    <span>{hasAnyCourierNote ? 'Catatan Kurir' : '+ Catatan Kurir'}</span>
+                                  </button>
+                                );
+                              })()}
                             </div>
                           </div>
 
@@ -1796,17 +1837,73 @@ export default function AdminPesanan() {
                             })()
                           )}
 
-                          {/* Catatan Manual Admin Wadah (Jika Pernah Ditambahkan) */}
-                          {group.orders.some(o => o.admin_notes) && (
-                            <div className="mt-1 p-1.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-[10.5px] text-amber-900 dark:text-amber-200 flex items-start justify-between gap-1.5">
-                              <div className="flex items-start gap-1 min-w-0">
-                                <FileText className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                                <span className="break-words">
-                                  <strong>Catatan Tambahan Admin:</strong> {group.orders.find(o => o.admin_notes)?.admin_notes}
-                                </span>
+                          {/* Seksi Tampilan Catatan Kurir & Pesanan di Level Wadah Utama */}
+                          {(() => {
+                            const customNotesList = group.orders.map(o => o.custom_notes).filter(Boolean);
+                            const adminNotesList = group.orders.map(o => o.admin_notes).filter(Boolean);
+                            const itemNotesList = group.orders.flatMap(o => (o.items || []).filter(it => it.notes).map(it => `${it.product?.name || 'Item'}: ${cleanItemNotes(it.notes)}`));
+                            const hasAnyCourierNote = customNotesList.length > 0 || adminNotesList.length > 0 || itemNotesList.length > 0;
+
+                            if (hasAnyCourierNote) {
+                              return (
+                                <div className="mt-1.5 p-1.5 bg-amber-50/90 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 text-[10.5px] text-amber-950 dark:text-amber-200 space-y-1">
+                                  <div className="flex items-center justify-between gap-1 border-b border-amber-200 dark:border-amber-800 pb-0.5">
+                                    <div className="flex items-center gap-1 font-bold text-amber-900 dark:text-amber-300 text-[10.5px]">
+                                      <Truck className="w-3.5 h-3.5 text-amber-700 dark:text-amber-400" />
+                                      <span>Catatan Pengantaran Kurir:</span>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenEditNotesModal(firstOrder, group.orders)}
+                                      className="text-[9.5px] font-bold text-amber-800 dark:text-amber-300 hover:underline cursor-pointer flex items-center gap-0.5"
+                                    >
+                                      <span>Edit Catatan</span>
+                                    </button>
+                                  </div>
+                                  {customNotesList.length > 0 && (
+                                    <div className="space-y-0.5">
+                                      {Array.from(new Set(customNotesList)).map((note, nIdx) => (
+                                        <div key={nIdx} className="font-semibold break-words flex items-start gap-1 text-gray-900 dark:text-gray-100">
+                                          <span className="text-amber-600 shrink-0">📌</span>
+                                          <span>{note}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {adminNotesList.length > 0 && (
+                                    <div className="text-[10px] text-amber-800 dark:text-amber-300 break-words flex items-start gap-1">
+                                      <span className="text-blue-600 dark:text-blue-400 shrink-0">ℹ️</span>
+                                      <span><strong>Internal Admin:</strong> {Array.from(new Set(adminNotesList)).join(' • ')}</span>
+                                    </div>
+                                  )}
+                                  {itemNotesList.length > 0 && (
+                                    <div className="text-[10px] text-gray-700 dark:text-gray-300 break-words flex items-start gap-1 pt-0.5 border-t border-amber-200/60 dark:border-amber-800/60">
+                                      <span className="shrink-0">📝</span>
+                                      <span><strong>Catatan Item:</strong> {itemNotesList.join('; ')}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            }
+
+                            // Jika user belum mengisi catatan kurir, tampilkan banner ajakan agar superadmin bisa langsung bantu isi
+                            return (
+                              <div className="mt-1.5 p-1.5 bg-amber-50/50 dark:bg-amber-950/20 border border-dashed border-amber-300/80 dark:border-amber-800/70 text-[10.5px] flex items-center justify-between gap-1 text-amber-900 dark:text-amber-300">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <Truck className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                                  <span className="truncate">User belum memberikan catatan kurir.</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditNotesModal(firstOrder, group.orders)}
+                                  className="px-2 py-0.5 bg-amber-600 hover:bg-amber-700 text-white rounded-none text-[9.5px] font-bold shrink-0 shadow-2xs transition-colors cursor-pointer"
+                                  title="Tulis catatan instruksi kurir jika pembeli lupa mengisi"
+                                >
+                                  + Beri Catatan Kurir
+                                </button>
                               </div>
-                            </div>
-                          )}
+                            );
+                          })()}
                         </div>
                       </div>
 
@@ -1936,9 +2033,13 @@ export default function AdminPesanan() {
                                   {order.items && order.items.length > 0 ? (
                                     order.items.map((item) => (
                                       <div key={item.id} className="flex justify-between items-center text-[10.5px]">
-                                        <span className="text-gray-700 dark:text-gray-300 truncate pr-2">
+                                        <span className="text-gray-700 dark:text-gray-300 truncate pr-2 flex items-center gap-1">
                                           <strong className="text-gray-900 dark:text-white font-bold">{item.quantity}x</strong> {item.product?.name || 'Produk'}
-                                          {item.notes && <span className="text-gray-400 italic text-[10px]"> ({cleanItemNotes(item.notes)})</span>}
+                                          {item.notes && (
+                                            <span className="text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/60 px-1 py-0.2 border border-amber-300 dark:border-amber-800 italic text-[9.5px] font-semibold rounded-none shrink-0">
+                                              📝 {cleanItemNotes(item.notes)}
+                                            </span>
+                                          )}
                                         </span>
                                         <span className="font-bold text-gray-900 dark:text-white shrink-0 font-mono">
                                           Rp {parseFloat(item.subtotal).toLocaleString('id-ID')}
@@ -2068,19 +2169,25 @@ export default function AdminPesanan() {
                                     <span className="truncate">Edit Status</span>
                                   </button>
 
-                                  <button
-                                    type="button"
-                                    onClick={() => handleOpenEditNotesModal(order)}
-                                    className={`h-6.5 px-1.5 rounded-none text-[10px] font-bold transition-colors flex items-center gap-0.5 border shadow-2xs shrink-0 cursor-pointer ${
-                                      order.admin_notes
-                                        ? 'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-900/60 dark:text-amber-200 dark:border-amber-700'
-                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700'
-                                    }`}
-                                    title={order.admin_notes ? `Catatan: ${order.admin_notes}` : 'Tambah Catatan Toko'}
-                                  >
-                                    <FileText className="w-2.5 h-2.5 text-amber-600 dark:text-amber-400" />
-                                    <span>{order.admin_notes ? 'Catatan' : '+ Catatan'}</span>
-                                  </button>
+                                  {(() => {
+                                    const hasItemNotes = order.items?.some(it => Boolean(it.notes));
+                                    const hasAnyNotes = Boolean(order.admin_notes || order.custom_notes || hasItemNotes);
+                                    return (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenEditNotesModal(order)}
+                                        className={`h-6.5 px-1.5 rounded-none text-[10px] font-bold transition-colors flex items-center gap-0.5 border shadow-2xs shrink-0 cursor-pointer ${
+                                          hasAnyNotes
+                                            ? 'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-900/60 dark:text-amber-200 dark:border-amber-700'
+                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700'
+                                        }`}
+                                        title={hasAnyNotes ? 'Edit Catatan Produk & Kurir' : 'Tulis Catatan Produk untuk Kurir'}
+                                      >
+                                        <FileText className="w-2.5 h-2.5 text-amber-600 dark:text-amber-400" />
+                                        <span>{hasAnyNotes ? 'Catatan' : '+ Catatan Kurir'}</span>
+                                      </button>
+                                    );
+                                  })()}
 
                                   <button
                                     type="button"
@@ -4333,48 +4440,178 @@ export default function AdminPesanan() {
         document.body
       )}
 
-      {/* MODAL EDIT CATATAN KHUSUS SUPERADMIN */}
+      {/* MODAL EDIT CATATAN PRODUK & KURIR OLEH SUPERADMIN */}
       {orderToEditNotes && createPortal(
         <div className="fixed inset-0 z-[110] bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-gray-900 rounded-none max-w-md w-full p-3.5 sm:p-4 border border-gray-200 dark:border-gray-800 shadow-2xl space-y-3 animate-in zoom-in-95 duration-150 my-auto">
-            <div className="flex items-center justify-between pb-2 border-b border-gray-100 dark:border-gray-800">
+          <div className="bg-white dark:bg-gray-900 rounded-none max-w-lg w-full p-3.5 sm:p-4 border border-gray-200 dark:border-gray-800 shadow-2xl space-y-3.5 animate-in zoom-in-95 duration-150 my-auto max-h-[92vh] flex flex-col">
+            {/* Header Modal */}
+            <div className="flex items-center justify-between pb-2.5 border-b border-gray-100 dark:border-gray-800 shrink-0">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-none bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 flex items-center justify-center border border-amber-300 dark:border-amber-800">
+                <div className="w-8 h-8 rounded-none bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 flex items-center justify-center border border-amber-300 dark:border-amber-800 shrink-0">
                   <FileText className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-gray-900 dark:text-white leading-tight">
-                    Catatan Khusus Superadmin
+                  <h3 className="text-sm font-black text-gray-900 dark:text-white leading-tight flex items-center gap-1.5">
+                    <span>Catatan Produk & Kurir</span>
+                    <span className="text-[9px] bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 px-1 py-0.2 border border-amber-300 dark:border-amber-800 uppercase font-bold">
+                      Bantuan Admin
+                    </span>
                   </h3>
-                  <p className="text-[10px] text-gray-500 dark:text-gray-400">
-                    Pesanan #{orderToEditNotes.id} • {orderToEditNotes.canteen?.name || 'Toko'}
+                  <p className="text-[10.5px] text-gray-500 dark:text-gray-400 mt-0.5">
+                    Pesanan #{orderToEditNotes.id} • {orderToEditNotes.canteen?.name || 'Toko'} • Santri: {orderToEditNotes.recipient_santri_name || orderToEditNotes.user?.santri_name || orderToEditNotes.user?.name} ({orderToEditNotes.delivery_location || orderToEditNotes.recipient_santri_room || 'Kamar Santri'})
                   </p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setOrderToEditNotes(null)}
-                className="w-7 h-7 rounded-none bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-500 flex items-center justify-center transition-colors border border-gray-200 dark:border-gray-700 cursor-pointer"
+                className="w-7 h-7 rounded-none bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-500 flex items-center justify-center transition-colors border border-gray-200 dark:border-gray-700 cursor-pointer shrink-0"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
 
-            <div className="space-y-1.5 text-left">
-              <label className="text-[11px] font-semibold text-gray-700 dark:text-gray-300 block">
-                Tulis Catatan / Keterangan Kendala:
-              </label>
-              <textarea
-                rows={3}
-                value={adminNotesText}
-                onChange={(e) => setAdminNotesText(e.target.value)}
-                placeholder="Contoh: Tanggal di bukti transfer tidak terbaca / bukti tertanggal kemarin tapi baru dikonfirmasi wali santri hari ini..."
-                className="w-full px-2.5 py-1.5 rounded-none border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white text-xs font-medium focus:ring-1 focus:ring-green-500 focus:outline-hidden"
-              />
+            {/* Body Scrollable */}
+            <div className="overflow-y-auto space-y-3.5 pr-1 text-left flex-1 min-h-0">
+              {/* 1. SEKSI CATATAN PESANAN UNTUK KURIR (DARI USER/WALI) - UTAMA */}
+              <div className="space-y-1.5 p-2 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700/80 rounded-none">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-black uppercase tracking-wider text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
+                    <Truck className="w-4 h-4 text-amber-600" />
+                    <span>Catatan Pengantaran untuk Kurir (Dari User / Wali)</span>
+                  </label>
+                  <span className="text-[9.5px] bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-200 font-bold px-1.5 py-0.2 rounded-none">
+                    Dilihat Kurir
+                  </span>
+                </div>
+                <textarea
+                  rows={2}
+                  value={customNotesText}
+                  onChange={(e) => setCustomNotesText(e.target.value)}
+                  placeholder="Tulis instruksi pengantaran kurir jika user lupa menulis (misal: Titipkan ke santri Ahmad kamar C03, santri ada di asrama, antar sebelum jam 8 malam)..."
+                  className="w-full px-2.5 py-1.5 rounded-none border border-amber-300 dark:border-amber-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-xs font-medium focus:ring-1 focus:ring-amber-500 focus:outline-hidden"
+                />
 
-              {/* Template Cepat */}
-              <div className="space-y-1 pt-1">
-                <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider block">Template Cepat:</span>
+                {/* Template Cepat Kurir */}
+                <div className="flex flex-wrap gap-1 pt-0.5">
+                  {[
+                    'Titipkan ke teman sekamar',
+                    'Titipkan di pos satpam / pengurus',
+                    'Wali sudah konfirmasi via WA',
+                    'Antar sebelum jam 8 malam',
+                    'Santri sedang berada di asrama',
+                    'Tolong pastikan serah terima langsung'
+                  ].map((cTpl, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setCustomNotesText(prev => prev ? `${prev}. ${cTpl}` : cTpl)}
+                      className="text-[9.5px] px-1.5 py-0.5 bg-white hover:bg-amber-100 text-amber-900 dark:bg-gray-800 dark:hover:bg-amber-950 dark:text-amber-200 border border-amber-200 dark:border-amber-800 rounded-none transition-colors cursor-pointer"
+                    >
+                      + {cTpl}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 2. SEKSI CATATAN PER PRODUK (UNTUK KURIR & TOKO) */}
+              {(() => {
+                const ordersList = orderToEditNotes._groupOrders || [orderToEditNotes];
+                const allItems = ordersList.flatMap(o => (o.items || []).map(it => ({ ...it, _canteenName: o.canteen?.name })));
+                const isMulti = ordersList.length > 1;
+
+                return (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between pb-1 border-b border-gray-200 dark:border-gray-700">
+                      <span className="text-[11px] font-black uppercase tracking-wider text-green-700 dark:text-green-400 flex items-center gap-1">
+                        <ShoppingBag className="w-3.5 h-3.5" />
+                        Catatan Per Produk (Porsi / Rasa / Sajian)
+                      </span>
+                      <span className="text-[10px] text-gray-500 font-mono">
+                        {allItems.length} Item {isMulti ? `(${ordersList.length} Toko)` : ''}
+                      </span>
+                    </div>
+
+                    {allItems.length > 0 ? (
+                      <div className="space-y-2">
+                        {allItems.map((item) => (
+                          <div key={item.id} className="p-2 bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-none space-y-1.5">
+                            <div className="flex justify-between items-center text-xs">
+                              <span className="font-bold text-gray-900 dark:text-white truncate pr-2">
+                                <span className="text-green-700 dark:text-green-400 font-black">{item.quantity}x</span> {item.product?.name || 'Produk'}
+                                {isMulti && item._canteenName && (
+                                  <span className="ml-1 text-[9.5px] text-gray-500 font-normal">({item._canteenName})</span>
+                                )}
+                              </span>
+                              <span className="text-[10px] text-gray-500 font-mono shrink-0">
+                                Rp {parseFloat(item.subtotal || 0).toLocaleString('id-ID')}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs text-gray-400 shrink-0">📝</span>
+                              <input
+                                type="text"
+                                value={orderItemNotes[item.id] || ''}
+                                onChange={(e) => setOrderItemNotes(prev => ({ ...prev, [item.id]: e.target.value }))}
+                                placeholder="Tulis catatan produk (misal: pedas level 1, kuah dipisah, tanpa seledri)..."
+                                className="flex-1 px-2 py-1 text-xs rounded-none border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-1 focus:ring-green-500 focus:outline-hidden"
+                              />
+                              {(orderItemNotes[item.id] || '') && (
+                                <button
+                                  type="button"
+                                  onClick={() => setOrderItemNotes(prev => ({ ...prev, [item.id]: '' }))}
+                                  className="p-1 text-gray-400 hover:text-red-500 transition-colors cursor-pointer"
+                                  title="Hapus Catatan Produk Ini"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Template Cepat Catatan Produk */}
+                            <div className="flex flex-wrap gap-1 pt-0.5">
+                              {['Tidak Pedas', 'Pedas Sedang', 'Tanpa Bawang/Seledri', 'Kuah Dipisah', 'Dingin/Es Sedikit', 'Hangat', 'Manis Sedang'].map((pChip, cIdx) => (
+                                <button
+                                  key={cIdx}
+                                  type="button"
+                                  onClick={() => setOrderItemNotes(prev => {
+                                    const current = (prev[item.id] || '').trim();
+                                    return { ...prev, [item.id]: current ? `${current} • ${pChip}` : pChip };
+                                  })}
+                                  className="text-[9px] px-1.5 py-0.2 bg-white dark:bg-gray-800 hover:bg-green-50 hover:text-green-800 dark:hover:bg-green-950 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-none transition-colors cursor-pointer"
+                                >
+                                  + {pChip}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="p-2.5 bg-gray-50 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700 text-center text-xs text-gray-500">
+                        Tidak ada item katalog (Pesanan Khusus / Titip Beli).
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* 3. SEKSI CATATAN INTERNAL ADMIN (VALIDASI KENDALA) */}
+              <div className="space-y-1.5 pt-2 border-t border-gray-100 dark:border-gray-800">
+                <label className="text-[10.5px] font-bold text-gray-600 dark:text-gray-400 flex items-center gap-1 uppercase tracking-wider">
+                  <FileText className="w-3 h-3 text-gray-500" />
+                  Catatan Internal Admin / Validasi Bank (Opsional)
+                </label>
+                <textarea
+                  rows={2}
+                  value={adminNotesText}
+                  onChange={(e) => setAdminNotesText(e.target.value)}
+                  placeholder="Catatan internal pengelola (misal: bukti transfer kemarin divalidasi hari ini)..."
+                  className="w-full px-2.5 py-1.5 rounded-none border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white text-xs font-medium focus:ring-1 focus:ring-green-500 focus:outline-hidden"
+                />
+
+                {/* Template Cepat Admin */}
                 <div className="flex flex-wrap gap-1">
                   {[
                     'Tanggal struk tidak tertera/terpotong',
@@ -4387,7 +4624,7 @@ export default function AdminPesanan() {
                       key={idx}
                       type="button"
                       onClick={() => setAdminNotesText(prev => prev ? `${prev}. ${tpl}` : tpl)}
-                      className="text-[9.5px] px-1.5 py-0.5 bg-gray-100 hover:bg-amber-50 hover:text-amber-800 dark:bg-gray-800 dark:hover:bg-amber-950/50 dark:text-gray-300 dark:hover:text-amber-300 border border-gray-200 dark:border-gray-700 rounded-none transition-colors cursor-pointer"
+                      className="text-[9.5px] px-1.5 py-0.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-none transition-colors cursor-pointer"
                     >
                       + {tpl}
                     </button>
@@ -4396,7 +4633,7 @@ export default function AdminPesanan() {
               </div>
 
               {orderToEditNotes.checkout_id && (
-                <label className="flex items-center gap-2 pt-2 cursor-pointer select-none">
+                <label className="flex items-center gap-2 pt-2 cursor-pointer select-none border-t border-gray-100 dark:border-gray-800">
                   <input
                     type="checkbox"
                     checked={syncCheckoutNotes}
@@ -4404,13 +4641,14 @@ export default function AdminPesanan() {
                     className="w-3.5 h-3.5 text-green-600 rounded-none focus:ring-0 cursor-pointer"
                   />
                   <span className="text-[11px] font-semibold text-gray-700 dark:text-gray-300">
-                    Terapkan catatan ini ke seluruh toko dalam wadah ({orderToEditNotes.checkout_id})
+                    Terapkan catatan kurir ini ke seluruh toko dalam wadah ({orderToEditNotes.checkout_id})
                   </span>
                 </label>
               )}
             </div>
 
-            <div className="flex gap-2 pt-1 border-t border-gray-100 dark:border-gray-800">
+            {/* Footer Modal */}
+            <div className="flex gap-2 pt-2 border-t border-gray-100 dark:border-gray-800 shrink-0">
               <button
                 type="button"
                 onClick={() => setOrderToEditNotes(null)}
@@ -4425,6 +4663,11 @@ export default function AdminPesanan() {
                   updateAdminNotesMutation.mutate({
                     id: orderToEditNotes.id,
                     admin_notes: adminNotesText,
+                    custom_notes: customNotesText,
+                    items: Object.entries(orderItemNotes).map(([id, notes]) => ({
+                      id: Number(id),
+                      notes: notes
+                    })),
                     sync_checkout: syncCheckoutNotes
                   });
                 }}
@@ -4439,7 +4682,7 @@ export default function AdminPesanan() {
                 ) : (
                   <>
                     <CheckCircle className="w-3.5 h-3.5" />
-                    <span>Simpan Catatan</span>
+                    <span>Simpan Catatan Produk & Kurir</span>
                   </>
                 )}
               </button>

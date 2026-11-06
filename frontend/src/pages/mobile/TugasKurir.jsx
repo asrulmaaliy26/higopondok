@@ -1883,8 +1883,14 @@ export default function TugasKurir() {
 
                                 {/* Items per toko */}
                                 {order.custom_notes && (
-                                  <div className="text-[11px] font-medium text-amber-800 dark:text-amber-300 pb-0.5">
-                                    ✨ {order.custom_notes}
+                                  <div className="text-[11px] font-bold text-amber-950 dark:text-amber-100 bg-amber-100/90 dark:bg-amber-950/80 px-2 py-1 border border-amber-300 dark:border-amber-700 mb-1 rounded-none flex items-start gap-1">
+                                    <span className="shrink-0 text-amber-700 dark:text-amber-400">📌</span>
+                                    <span className="break-words"><strong>Catatan Kurir:</strong> {order.custom_notes}</span>
+                                  </div>
+                                )}
+                                {order.admin_notes && (
+                                  <div className="text-[10.5px] font-semibold text-blue-900 dark:text-blue-200 bg-blue-50 dark:bg-blue-950/40 px-1.5 py-0.5 border border-blue-200 dark:border-blue-800 mb-1 rounded-none">
+                                    📌 <strong>Catatan Admin/User:</strong> {order.admin_notes}
                                   </div>
                                 )}
                                 {order.items && order.items.length > 0 ? (
@@ -1892,7 +1898,11 @@ export default function TugasKurir() {
                                     <div key={item.id} className="flex justify-between items-center text-[11px]">
                                       <span className="text-gray-800 dark:text-gray-200 truncate pr-2 flex items-center gap-1">
                                         <strong className="text-gray-900 dark:text-white font-bold">{item.quantity}x</strong> {item.product?.name || 'Produk'}
-                                        {item.notes && <span className="text-gray-400 italic text-[10px]"> ({cleanItemNotes(item.notes)})</span>}
+                                        {item.notes && (
+                                          <span className="text-amber-900 dark:text-amber-200 bg-amber-100/90 dark:bg-amber-950/70 px-1 py-0.2 border border-amber-300 dark:border-amber-700 font-bold italic text-[9.5px] rounded-none shrink-0">
+                                            📝 {cleanItemNotes(item.notes)}
+                                          </span>
+                                        )}
                                       </span>
                                       <span className="font-bold text-gray-900 dark:text-white shrink-0 font-mono text-[10px]">
                                         Rp {formatRupiah(getItemModalTotalHpp(item))}
@@ -2244,8 +2254,14 @@ export default function TugasKurir() {
                         {/* 3. COMPACT FOOD ITEMS BOX */}
                         <div className="bg-green-50/30 dark:bg-gray-800/50 rounded-lg p-2 space-y-0.5 text-xs border border-green-100/60 dark:border-gray-800">
                           {order.custom_notes && (
-                            <div className="text-[11px] font-medium text-amber-800 dark:text-amber-300 pb-0.5 border-b border-amber-100 dark:border-amber-900/40">
-                              ✨ {order.custom_notes}
+                            <div className="text-[11.5px] font-bold text-amber-950 dark:text-amber-100 bg-amber-100/90 dark:bg-amber-950/80 p-1.5 border border-amber-300 dark:border-amber-700 mb-1 rounded-none flex items-start gap-1">
+                              <span className="shrink-0 text-amber-700 dark:text-amber-400">📌</span>
+                              <span className="break-words"><strong>Catatan Kurir:</strong> {order.custom_notes}</span>
+                            </div>
+                          )}
+                          {order.admin_notes && (
+                            <div className="text-[10.5px] font-semibold text-blue-900 dark:text-blue-200 bg-blue-50 dark:bg-blue-950/40 p-1.5 border border-blue-200 dark:border-blue-800 rounded-none mb-1">
+                              📌 <strong>Catatan Admin/User:</strong> {order.admin_notes}
                             </div>
                           )}
                           {order.items && order.items.length > 0 ? (
@@ -2265,7 +2281,11 @@ export default function TugasKurir() {
                                   )}
                                   <span className="truncate">
                                     <strong className="text-gray-900 dark:text-white font-bold">{item.quantity}x</strong> {item.product?.name || 'Produk'}
-                                    {item.notes && <span className="text-gray-400 italic text-[10px]"> ({cleanItemNotes(item.notes)})</span>}
+                                    {item.notes && (
+                                      <span className="text-amber-900 dark:text-amber-200 bg-amber-100/90 dark:bg-amber-950/70 px-1 py-0.2 border border-amber-300 dark:border-amber-700 font-bold italic text-[9.5px] rounded-none shrink-0">
+                                        📝 {cleanItemNotes(item.notes)}
+                                      </span>
+                                    )}
                                   </span>
                                 </span>
                                 <span className="font-bold text-gray-900 dark:text-white shrink-0">

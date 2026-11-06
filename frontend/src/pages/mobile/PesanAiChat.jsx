@@ -190,7 +190,10 @@ function matchTutorialVideo(text = '', query = '') {
   const combined = ((text || '') + ' ' + (query || '')).toLowerCase();
   if (
     combined.includes('lebih dari 1 santri') || 
+    combined.includes('> 1 santri') ||
+    combined.includes('>1 santri') ||
     combined.includes('2 santri') || 
+    combined.includes('dua santri') || 
     combined.includes('banyak santri') ||
     combined.includes('beda gedung') ||
     combined.includes('kakak adik')
@@ -199,10 +202,14 @@ function matchTutorialVideo(text = '', query = '') {
   }
   if (
     combined.includes('lebih dari 1 toko') || 
+    combined.includes('> 1 toko') || 
+    combined.includes('>1 toko') || 
     combined.includes('multi toko') || 
     combined.includes('multi-toko') || 
     combined.includes('gabung pesanan') ||
-    combined.includes('beda toko')
+    combined.includes('beda toko') ||
+    combined.includes('dua toko') ||
+    combined.includes('banyak toko')
   ) {
     return TUTORIAL_VIDEOS.find((v) => v.id === 'multi_toko');
   }
@@ -210,8 +217,16 @@ function matchTutorialVideo(text = '', query = '') {
     combined.includes('bagaimana cara pesan') || 
     combined.includes('cara pesan / pakai') ||
     combined.includes('cara pesan makanan') ||
+    combined.includes('cara pesan') ||
+    combined.includes('cara pesen') ||
+    combined.includes('cara order') ||
+    combined.includes('cara belanja') ||
+    combined.includes('cara beli') ||
     combined.includes('cara pakai') || 
     combined.includes('cara memesan') || 
+    combined.includes('cara menggunakan') || 
+    combined.includes('panduan aplikasi') || 
+    combined.includes('tutorial') || 
     combined.includes('pengguna baru') || 
     combined.includes('lengkapi profil') || 
     combined.includes('kamar & keluarga') ||
@@ -1096,25 +1111,31 @@ export default function PesanAiChat() {
         {quickPrompts.map((q, idx) => {
           const matchedVid = matchTutorialVideo('', q.text);
           return (
-            <div key={idx} className="shrink-0 inline-flex items-stretch border border-gray-200 dark:border-gray-700 hover:border-green-500 rounded-none overflow-hidden">
+            <div key={idx} className="shrink-0 inline-flex items-stretch border border-gray-200 dark:border-gray-700 hover:border-green-500 rounded-none overflow-hidden shadow-2xs">
               <button
                 type="button"
-                onClick={() => handleSendMessage(q.text)}
+                onClick={() => {
+                  if (matchedVid) {
+                    setActiveVideoModal(matchedVid);
+                  }
+                  handleSendMessage(q.text);
+                }}
                 disabled={chatMutation.isPending}
-                className="text-[10.5px] font-medium px-2 py-0.5 bg-white dark:bg-gray-800 hover:bg-green-50 dark:hover:bg-green-950 text-gray-700 dark:text-gray-300 hover:text-green-700 dark:hover:text-green-300 transition-colors cursor-pointer rounded-none"
+                className={`text-[10.5px] font-medium px-2 py-0.5 transition-colors cursor-pointer rounded-none flex items-center gap-1.5 ${
+                  matchedVid
+                    ? 'bg-green-50 dark:bg-green-950/60 hover:bg-green-600 hover:text-white text-green-900 dark:text-green-200 font-semibold'
+                    : 'bg-white dark:bg-gray-800 hover:bg-green-50 dark:hover:bg-green-950 text-gray-700 dark:text-gray-300 hover:text-green-700 dark:hover:text-green-300'
+                }`}
+                title={matchedVid ? `Klik untuk putar video tutorial & tanya asisten AI: ${q.label}` : q.label}
               >
-                {q.label}
+                <span>{q.label}</span>
+                {matchedVid && (
+                  <span className="inline-flex items-center gap-0.5 px-1 py-0.2 bg-green-600 text-white text-[8.5px] font-black uppercase tracking-wider rounded-none shrink-0 shadow-2xs">
+                    <PlayCircle className="w-2.5 h-2.5" />
+                    <span>Video</span>
+                  </span>
+                )}
               </button>
-              {matchedVid && (
-                <button
-                  type="button"
-                  onClick={() => setActiveVideoModal(matchedVid)}
-                  className="px-1.5 py-0.5 bg-green-50 hover:bg-green-600 text-green-700 hover:text-white dark:bg-green-950/80 dark:text-green-300 border-l border-gray-200 dark:border-gray-700 transition-colors cursor-pointer rounded-none flex items-center justify-center"
-                  title="Putar Video Tutorial Sekarang"
-                >
-                  <PlayCircle className="w-3 h-3" />
-                </button>
-              )}
             </div>
           );
         })}
@@ -1329,29 +1350,31 @@ export default function PesanAiChat() {
                         {msg.quick_replies.map((reply, rIdx) => {
                           const isTutorialQuick = matchTutorialVideo('', reply);
                           return (
-                            <div key={rIdx} className="inline-flex items-stretch border border-green-200 dark:border-green-800/80 rounded-none overflow-hidden">
+                            <div key={rIdx} className="inline-flex items-stretch border border-green-300 dark:border-green-800 rounded-none overflow-hidden shadow-2xs">
                               <button
                                 type="button"
                                 disabled={chatMutation.isPending}
-                                onClick={() => handleSendMessage(reply)}
-                                className="text-left text-[10.5px] font-semibold px-2 py-1 bg-green-50 dark:bg-green-950/70 hover:bg-green-600 hover:text-white text-green-800 dark:text-green-300 transition-colors cursor-pointer rounded-none active:scale-[0.98]"
-                              >
-                                {reply}
-                              </button>
-                              {isTutorialQuick && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
+                                onClick={() => {
+                                  if (isTutorialQuick) {
                                     setActiveVideoModal(isTutorialQuick);
-                                  }}
-                                  className="px-1.5 bg-green-600 hover:bg-green-700 text-white flex items-center justify-center gap-0.5 text-[9.5px] font-bold transition-colors cursor-pointer rounded-none"
-                                  title="Putar Video Tutorial Sekarang"
-                                >
-                                  <PlayCircle className="w-3 h-3" />
-                                  <span className="hidden xxs:inline">Video</span>
-                                </button>
-                              )}
+                                  }
+                                  handleSendMessage(reply);
+                                }}
+                                className={`text-left text-[10.5px] font-semibold px-2 py-1 transition-colors cursor-pointer rounded-none active:scale-[0.98] inline-flex items-center gap-1.5 ${
+                                  isTutorialQuick
+                                    ? 'bg-green-100 dark:bg-green-950/80 hover:bg-green-600 hover:text-white text-green-900 dark:text-green-200'
+                                    : 'bg-green-50 dark:bg-green-950/70 hover:bg-green-600 hover:text-white text-green-800 dark:text-green-300'
+                                }`}
+                                title={isTutorialQuick ? `Klik untuk putar video & panduan: ${reply}` : reply}
+                              >
+                                <span>{reply}</span>
+                                {isTutorialQuick && (
+                                  <span className="inline-flex items-center gap-0.5 px-1 py-0.2 bg-green-600 text-white text-[8.5px] font-black uppercase tracking-wider rounded-none shrink-0 shadow-2xs">
+                                    <PlayCircle className="w-2.5 h-2.5" />
+                                    <span>Video</span>
+                                  </span>
+                                )}
+                              </button>
                             </div>
                           );
                         })}
