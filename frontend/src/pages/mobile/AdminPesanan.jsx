@@ -1837,70 +1837,43 @@ export default function AdminPesanan() {
                             })()
                           )}
 
-                          {/* Seksi Tampilan Catatan Kurir & Pesanan di Level Wadah Utama */}
+                          {/* Seksi Tampilan Catatan Kurir & Pesanan di Level Wadah Utama (Hanya jika ADA catatan) */}
                           {(() => {
                             const customNotesList = group.orders.map(o => o.custom_notes).filter(Boolean);
                             const adminNotesList = group.orders.map(o => o.admin_notes).filter(Boolean);
                             const itemNotesList = group.orders.flatMap(o => (o.items || []).filter(it => it.notes).map(it => `${it.product?.name || 'Item'}: ${cleanItemNotes(it.notes)}`));
                             const hasAnyCourierNote = customNotesList.length > 0 || adminNotesList.length > 0 || itemNotesList.length > 0;
 
-                            if (hasAnyCourierNote) {
-                              return (
-                                <div className="mt-1.5 p-1.5 bg-amber-50/90 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 text-[10.5px] text-amber-950 dark:text-amber-200 space-y-1">
-                                  <div className="flex items-center justify-between gap-1 border-b border-amber-200 dark:border-amber-800 pb-0.5">
-                                    <div className="flex items-center gap-1 font-bold text-amber-900 dark:text-amber-300 text-[10.5px]">
-                                      <Truck className="w-3.5 h-3.5 text-amber-700 dark:text-amber-400" />
-                                      <span>Catatan Pengantaran Kurir:</span>
-                                    </div>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleOpenEditNotesModal(firstOrder, group.orders)}
-                                      className="text-[9.5px] font-bold text-amber-800 dark:text-amber-300 hover:underline cursor-pointer flex items-center gap-0.5"
-                                    >
-                                      <span>Edit Catatan</span>
-                                    </button>
-                                  </div>
-                                  {customNotesList.length > 0 && (
-                                    <div className="space-y-0.5">
-                                      {Array.from(new Set(customNotesList)).map((note, nIdx) => (
-                                        <div key={nIdx} className="font-semibold break-words flex items-start gap-1 text-gray-900 dark:text-gray-100">
-                                          <span className="text-amber-600 shrink-0">📌</span>
-                                          <span>{note}</span>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                  {adminNotesList.length > 0 && (
-                                    <div className="text-[10px] text-amber-800 dark:text-amber-300 break-words flex items-start gap-1">
-                                      <span className="text-blue-600 dark:text-blue-400 shrink-0">ℹ️</span>
-                                      <span><strong>Internal Admin:</strong> {Array.from(new Set(adminNotesList)).join(' • ')}</span>
-                                    </div>
-                                  )}
-                                  {itemNotesList.length > 0 && (
-                                    <div className="text-[10px] text-gray-700 dark:text-gray-300 break-words flex items-start gap-1 pt-0.5 border-t border-amber-200/60 dark:border-amber-800/60">
-                                      <span className="shrink-0">📝</span>
-                                      <span><strong>Catatan Item:</strong> {itemNotesList.join('; ')}</span>
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            }
+                            if (!hasAnyCourierNote) return null;
 
-                            // Jika user belum mengisi catatan kurir, tampilkan banner ajakan agar superadmin bisa langsung bantu isi
                             return (
-                              <div className="mt-1.5 p-1.5 bg-amber-50/50 dark:bg-amber-950/20 border border-dashed border-amber-300/80 dark:border-amber-800/70 text-[10.5px] flex items-center justify-between gap-1 text-amber-900 dark:text-amber-300">
-                                <div className="flex items-center gap-1.5 min-w-0">
-                                  <Truck className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                                  <span className="truncate">User belum memberikan catatan kurir.</span>
+                              <div className="mt-1.5 p-1.5 bg-amber-50/90 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 text-[10.5px] text-amber-950 dark:text-amber-200 space-y-1">
+                                <div className="flex items-center gap-1 font-bold text-amber-900 dark:text-amber-300 text-[10.5px] border-b border-amber-200 dark:border-amber-800 pb-0.5">
+                                  <Truck className="w-3.5 h-3.5 text-amber-700 dark:text-amber-400" />
+                                  <span>Catatan Pengantaran Kurir:</span>
                                 </div>
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenEditNotesModal(firstOrder, group.orders)}
-                                  className="px-2 py-0.5 bg-amber-600 hover:bg-amber-700 text-white rounded-none text-[9.5px] font-bold shrink-0 shadow-2xs transition-colors cursor-pointer"
-                                  title="Tulis catatan instruksi kurir jika pembeli lupa mengisi"
-                                >
-                                  + Beri Catatan Kurir
-                                </button>
+                                {customNotesList.length > 0 && (
+                                  <div className="space-y-0.5">
+                                    {Array.from(new Set(customNotesList)).map((note, nIdx) => (
+                                      <div key={nIdx} className="font-semibold break-words flex items-start gap-1 text-gray-900 dark:text-gray-100">
+                                        <span className="text-amber-600 shrink-0">📌</span>
+                                        <span>{note}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                {adminNotesList.length > 0 && (
+                                  <div className="text-[10px] text-amber-800 dark:text-amber-300 break-words flex items-start gap-1">
+                                    <span className="text-blue-600 dark:text-blue-400 shrink-0">ℹ️</span>
+                                    <span><strong>Internal Admin:</strong> {Array.from(new Set(adminNotesList)).join(' • ')}</span>
+                                  </div>
+                                )}
+                                {itemNotesList.length > 0 && (
+                                  <div className="text-[10px] text-gray-700 dark:text-gray-300 break-words flex items-start gap-1 pt-0.5 border-t border-amber-200/60 dark:border-amber-800/60">
+                                    <span className="shrink-0">📝</span>
+                                    <span><strong>Catatan Item:</strong> {itemNotesList.join('; ')}</span>
+                                  </div>
+                                )}
                               </div>
                             );
                           })()}
@@ -2168,26 +2141,6 @@ export default function AdminPesanan() {
                                     <RotateCcw className="w-2.5 h-2.5 shrink-0" />
                                     <span className="truncate">Edit Status</span>
                                   </button>
-
-                                  {(() => {
-                                    const hasItemNotes = order.items?.some(it => Boolean(it.notes));
-                                    const hasAnyNotes = Boolean(order.admin_notes || order.custom_notes || hasItemNotes);
-                                    return (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleOpenEditNotesModal(order)}
-                                        className={`h-6.5 px-1.5 rounded-none text-[10px] font-bold transition-colors flex items-center gap-0.5 border shadow-2xs shrink-0 cursor-pointer ${
-                                          hasAnyNotes
-                                            ? 'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-900/60 dark:text-amber-200 dark:border-amber-700'
-                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700'
-                                        }`}
-                                        title={hasAnyNotes ? 'Edit Catatan Produk & Kurir' : 'Tulis Catatan Produk untuk Kurir'}
-                                      >
-                                        <FileText className="w-2.5 h-2.5 text-amber-600 dark:text-amber-400" />
-                                        <span>{hasAnyNotes ? 'Catatan' : '+ Catatan Kurir'}</span>
-                                      </button>
-                                    );
-                                  })()}
 
                                   <button
                                     type="button"
