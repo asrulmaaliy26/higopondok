@@ -14,6 +14,7 @@ Route::middleware('throttle:15,1')->group(function () {
 
 use App\Domains\Auth\Controllers\AdminController;
 use App\Domains\Admin\Controllers\GoogleDriveStorageController;
+use App\Domains\Admin\Controllers\AdminFinanceController;
 
 // Public GET callback for Google Drive OAuth Popup
 Route::get('/admin/gdrive-accounts/oauth-callback', [GoogleDriveStorageController::class, 'handleOAuthCallback']);
@@ -43,6 +44,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/admin/gdrive-accounts/{id}/check', [GoogleDriveStorageController::class, 'checkConnection']);
         Route::post('/admin/gdrive-accounts/{id}/create-folder', [GoogleDriveStorageController::class, 'createStandardFolders']);
         Route::delete('/admin/gdrive-accounts/{id}', [GoogleDriveStorageController::class, 'destroy']);
+
+        // Manajemen Keuangan & Pengeluaran Kas Higo (Super Admin)
+        Route::get('/admin/finance/summary', [AdminFinanceController::class, 'summary']);
+        Route::post('/admin/finance/expenses', [AdminFinanceController::class, 'store']);
+        Route::match(['put', 'post'], '/admin/finance/expenses/{id}', [AdminFinanceController::class, 'update']);
+        Route::delete('/admin/finance/expenses/{id}', [AdminFinanceController::class, 'destroy']);
     });
 
     // Admin & Super Admin operational routes

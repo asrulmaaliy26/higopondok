@@ -37,5 +37,20 @@ class DatabaseSeeder extends Seeder
                 'notes' => 'Akun penyimpanan bawaan sistem',
             ]);
         }
+
+        // Seed initial sample AdminExpense if table exists and is empty
+        if (\Illuminate\Support\Facades\Schema::hasTable('admin_expenses') && \App\Domains\Admin\AdminExpense::count() === 0) {
+            $superAdminId = \App\Domains\Auth\User::first()?->id;
+            \App\Domains\Admin\AdminExpense::create([
+                'admin_id' => $superAdminId,
+                'expense_date' => now('Asia/Jakarta')->toDateString(),
+                'title' => 'Pembelian Kertas Thermal Printer 58mm (10 Roll)',
+                'category' => 'perlengkapan',
+                'amount' => 35000,
+                'payment_method' => 'cash',
+                'recipient' => 'Toko ATK Al-Barokah',
+                'notes' => 'Stok kertas struk kurir & admin',
+            ]);
+        }
     }
 }

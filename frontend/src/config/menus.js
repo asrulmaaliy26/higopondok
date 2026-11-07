@@ -53,13 +53,22 @@ export const allMenus = [
     showOnMobile: true,
   },
   {
+    name: 'Keuangan & Kas',
+    desktopName: 'Keuangan & Kas Higo',
+    mobileName: 'Keuangan',
+    href: '/dashboard/admin/keuangan',
+    icon: Wallet,
+    roles: [ROLES.SUPER_ADMIN],
+    showOnMobile: true,
+  },
+  {
     name: 'Manajemen Voucher',
     desktopName: 'Manajemen Voucher',
     mobileName: 'Voucher',
     href: '/dashboard/admin/vouchers',
     icon: Ticket,
     roles: [ROLES.SUPER_ADMIN], // Khusus Super Admin
-    showOnMobile: true,
+    showOnMobile: false,
   },
   {
     name: 'Pengaturan Pertokoan',

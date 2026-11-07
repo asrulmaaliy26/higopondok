@@ -201,6 +201,17 @@ export default function AdminDashboard({ user }) {
             <span className="text-[10px] text-gray-500 dark:text-gray-400 hidden sm:block leading-none mt-0.5">Semua Transaksi Toko</span>
           </Link>
 
+          {isSuperAdmin && (
+            <Link
+              to="/dashboard/admin/keuangan"
+              className="flex flex-col items-center text-center justify-center p-2 rounded-none bg-green-50/60 hover:bg-green-100/70 dark:bg-green-950/40 dark:hover:bg-green-900/50 transition-all border border-green-200/70 dark:border-green-800/60 shadow-2xs cursor-pointer"
+            >
+              <Wallet className="w-5 h-5 text-green-600 dark:text-green-400 mb-1" />
+              <span className="text-xs font-bold text-gray-900 dark:text-white leading-tight">Keuangan &amp; Kas</span>
+              <span className="text-[10px] text-gray-500 dark:text-gray-400 hidden sm:block leading-none mt-0.5">Laba, Admin &amp; Pengeluaran</span>
+            </Link>
+          )}
+
           <Link
             to={isSuperAdmin ? "/dashboard/pertokoan" : "/dashboard/toko-saya"}
             className="flex flex-col items-center text-center justify-center p-2 rounded-none bg-green-50/60 hover:bg-green-100/70 dark:bg-green-950/40 dark:hover:bg-green-900/50 transition-all border border-green-200/70 dark:border-green-800/60 shadow-2xs cursor-pointer"

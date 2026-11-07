@@ -48,6 +48,7 @@ const Pembayaran = React.lazy(() => import('./pages/mobile/Pembayaran'));
 const TugasKurir = React.lazy(() => import('./pages/mobile/TugasKurir'));
 const Keranjang = React.lazy(() => import('./pages/mobile/Keranjang'));
 const AdminVouchers = React.lazy(() => import('./pages/mobile/AdminVouchers'));
+const AdminKeuangan = React.lazy(() => import('./pages/mobile/AdminKeuangan'));
 const Vouchers = React.lazy(() => import('./pages/mobile/Vouchers'));
 const PesanAiChat = React.lazy(() => import('./pages/mobile/PesanAiChat'));
 
@@ -322,6 +323,10 @@ function AdminVouchersPage() {
   return <RoleGuard allowedRoles={[ROLES.SUPER_ADMIN]}><AdminVouchers /></RoleGuard>;
 }
 
+function AdminKeuanganPage() {
+  return <RoleGuard allowedRoles={[ROLES.SUPER_ADMIN]}><AdminKeuangan /></RoleGuard>;
+}
+
 function VouchersPage() {
   return <Vouchers />;
 }
@@ -459,6 +464,12 @@ const adminVouchersRoute = createRoute({
   component: AdminVouchersPage,
 });
 
+const adminKeuanganRoute = createRoute({
+  getParentRoute: () => dashboardRoute,
+  path: '/admin/keuangan',
+  component: AdminKeuanganPage,
+});
+
 const vouchersRoute = createRoute({
   getParentRoute: () => dashboardRoute,
   path: '/vouchers',
@@ -512,6 +523,7 @@ const routeTree = rootRoute.addChildren([
     userManagementRoute,
     pertokoanRoute,
     adminPesananRoute,
+    adminKeuanganRoute,
     adminLogsRoute,
     adminVouchersRoute,
     vouchersRoute,
