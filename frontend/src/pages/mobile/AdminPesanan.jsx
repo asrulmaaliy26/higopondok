@@ -36,7 +36,10 @@ import {
   MessageCircle,
   ChevronDown,
   Package,
-  HardDrive
+  HardDrive,
+  Crown,
+  Sparkles,
+  Users
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api, { getStorageUrl } from '../../lib/axios';
@@ -50,6 +53,7 @@ import {
   isHeifFile
 } from '../../lib/fileUtils';
 import ThermalReceiptModal, { cleanItemNotes } from '../../components/receipt/ThermalReceiptModal';
+import UserAchievementModal from '../../components/modals/UserAchievementModal';
 import santriData from '../../data/santri.json';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { renderOrderDateTime } from '../../lib/orderUtils';
@@ -389,6 +393,9 @@ export default function AdminPesanan() {
     }
   };
 
+  // Prestasi User / Wali Modal State
+  const [selectedUserAchievementId, setSelectedUserAchievementId] = useState(null);
+
   // Receipt Modal State for Admin
   const [receiptModalConfig, setReceiptModalConfig] = useState({
     isOpen: false,
@@ -620,11 +627,13 @@ export default function AdminPesanan() {
     const map = new Map();
 
     orders.forEach((order) => {
-      // Gunakan checkout_id + tanggal pembuatan jika ada, atau fallback ke user_id + tanggal pembuatan
+      // Gunakan checkout_id + tanggal pembuatan jika ada, atau fallback ke user_id + santri + kamar + tanggal
       const dateKey = order.created_at ? order.created_at.substring(0, 10) : '';
+      const sName = (order.recipient_santri_name || order.user?.santri_name || order.user?.name || '').trim().toLowerCase();
+      const sRoom = (order.delivery_location || order.recipient_santri_room || order.user?.santri_room || '').trim().toLowerCase();
       const key = order.checkout_id
         ? `chk_${order.checkout_id}_${dateKey}`
-        : `usr_${order.user_id}_${dateKey || order.id}`;
+        : `usr_${order.user_id}_${sName}_${sRoom}_${dateKey || order.id}`;
 
       if (!map.has(key)) {
         const groupObj = {
@@ -656,6 +665,30 @@ export default function AdminPesanan() {
       const maxIdB = Math.max(...b.orders.map((o) => o.id || 0));
       return maxIdB - maxIdA;
     });
+  }, [orders]);
+
+  // Peta prestasi dan akumulasi santri yang dipesankan per user (wali)
+  const userOrderStatsMap = React.useMemo(() => {
+    const map = new Map();
+    orders.forEach((o) => {
+      const uId = o.user_id || o.user?.id;
+      if (!uId) return;
+      const sName = (o.recipient_santri_name || o.user?.santri_name || o.user?.name || '').trim();
+      if (!map.has(uId)) {
+        map.set(uId, {
+          totalOrders: 0,
+          totalSpent: 0,
+          santrisSet: new Set(),
+        });
+      }
+      const uStat = map.get(uId);
+      uStat.totalOrders += 1;
+      uStat.totalSpent += parseFloat(o.total_price || 0);
+      if (sName && sName !== '-') {
+        uStat.santrisSet.add(sName);
+      }
+    });
+    return map;
   }, [orders]);
 
   // Query Recap Data (Uses the exact same date & courier filter)
@@ -1700,6 +1733,24 @@ export default function AdminPesanan() {
                                   <span>{customerPhone}</span>
                                 </a>
                               )}
+                              {/* Prestasi User Wali & Akumulasi Santri yang Dipesankan */}
+                              {(() => {
+                                const targetUserId = group.user?.id || firstOrder?.user_id;
+                                if (!targetUserId) return null;
+                                const uStat = userOrderStatsMap.get(targetUserId);
+                                const santriCount = uStat?.santrisSet?.size || 1;
+                                return (
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedUserAchievementId(targetUserId)}
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-none bg-purple-50 hover:bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-300 dark:border-purple-700 text-[10px] font-bold cursor-pointer transition-colors shadow-2xs"
+                                    title={`Klik untuk lihat prestasi pemesan dan daftar ${santriCount} santri yang pernah dipesankan`}
+                                  >
+                                    <Crown className="w-3 h-3 text-purple-600 dark:text-purple-400 shrink-0" />
+                                    <span>Prestasi Wali ({santriCount} Santri)</span>
+                                  </button>
+                                );
+                              })()}
                               {(santriLevel || santriClass) && (
                                 <span className="inline-flex items-center px-1.5 py-0.2 rounded-none bg-green-50 dark:bg-green-950/60 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800 text-[10px] font-bold">
                                   🎓 {santriLevel ? `${santriLevel} ` : ''}{santriClass ? `Kelas ${santriClass}` : ''}
@@ -2825,10 +2876,20 @@ export default function AdminPesanan() {
                 </div>
               </div>
 
-              {/* Rekapitulasi Per Santri / Wali */}
+              {/* Rekapitulasi Prestasi Pemesan (Fokus Akun Wali) */}
               <div className="bg-white dark:bg-gray-900 rounded-none shadow-xs border border-gray-200 dark:border-gray-800 overflow-hidden">
-                <div className="p-1.5 sm:p-2 border-b border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30">
-                  <h3 className="font-bold text-gray-900 dark:text-white text-xs sm:text-sm">Rekapitulasi Per Wali / Santri</h3>
+                <div className="p-1.5 sm:p-2 border-b border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Crown className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                    <div>
+                      <h3 className="font-bold text-gray-900 dark:text-white text-xs sm:text-sm">
+                        Rekapitulasi Prestasi Pemesan (Fokus Akun Wali)
+                      </h3>
+                      <p className="text-[10px] text-gray-500">
+                        Statistik transaksi & akumulasi santri yang dipesankan per akun user
+                      </p>
+                    </div>
+                  </div>
                 </div>
                 <div className="divide-y divide-gray-200 dark:divide-gray-800 max-h-96 overflow-y-auto">
                   {!recapData?.user_recap || recapData.user_recap.length === 0 ? (
@@ -2839,15 +2900,42 @@ export default function AdminPesanan() {
                     recapData.user_recap.map((u) => (
                       <div
                         key={u.user_id}
-                        className="p-1.5 sm:p-2 flex flex-col md:flex-row md:items-center justify-between gap-1 hover:bg-gray-50/50 dark:hover:bg-gray-800/40 transition-colors"
+                        className="p-1.5 sm:p-2 flex flex-col md:flex-row md:items-center justify-between gap-1.5 hover:bg-gray-50/50 dark:hover:bg-gray-800/40 transition-colors"
                       >
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <h4 className="font-bold text-gray-900 dark:text-white text-xs sm:text-sm">{u.santri_name}</h4>
-                          <span className="text-[10px] text-gray-500 dark:text-gray-400">
-                            Wali: {u.wali_name} {u.santri_room ? `• ${u.santri_room}` : ''} ({u.order_count} pesanan)
-                          </span>
+                        <div className="flex flex-col gap-0.5 min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <h4 className="font-bold text-gray-900 dark:text-white text-xs sm:text-sm flex items-center gap-1">
+                              <User className="w-3.5 h-3.5 text-gray-400" />
+                              <span>{u.wali_name || 'Wali Santri'}</span>
+                            </h4>
+                            {u.achievement && (
+                              <span className={`inline-flex items-center gap-1 px-1.5 py-0.2 rounded-none text-[9.5px] font-bold border ${u.achievement.cls}`}>
+                                <Crown className="w-2.5 h-2.5" />
+                                <span>{u.achievement.badge}</span>
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setSelectedUserAchievementId(u.user_id)}
+                              className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-none bg-purple-50 hover:bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-300 dark:border-purple-700 text-[9.5px] font-bold cursor-pointer"
+                              title="Lihat riwayat prestasi & seluruh santri yang pernah dipesankan"
+                            >
+                              <span>Lihat Detail Santri ({u.santri_count || 1})</span>
+                              <ExternalLink className="w-2.5 h-2.5" />
+                            </button>
+                          </div>
+                          <div className="flex items-center gap-1 text-[10px] text-gray-500 dark:text-gray-400 flex-wrap">
+                            <span className="font-semibold text-gray-700 dark:text-gray-300">
+                              👥 {u.santri_count || 1} Santri:
+                            </span>
+                            <span className="text-gray-600 dark:text-gray-400 italic font-medium">
+                              {u.santri_names || u.santri_name}
+                            </span>
+                            <span>• ({u.order_count} pesanan)</span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-1 flex-wrap text-xs font-semibold">
+
+                        <div className="flex items-center gap-1 flex-wrap text-xs font-semibold shrink-0">
                           <span className="bg-gray-50 dark:bg-gray-800 px-1.5 py-0.5 rounded-none border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-[10.5px] font-mono">
                             Produk: Rp {u.total_products.toLocaleString('id-ID')}
                           </span>
@@ -4654,6 +4742,13 @@ export default function AdminPesanan() {
         orders={receiptModalConfig.orders}
         courierName={receiptModalConfig.order?.courier?.name || 'Administrator'}
         title={receiptModalConfig.title}
+      />
+
+      {/* MODAL PRESTASI & RIWAYAT SANTRI PER USER (WALI) */}
+      <UserAchievementModal
+        userId={selectedUserAchievementId}
+        isOpen={Boolean(selectedUserAchievementId)}
+        onClose={() => setSelectedUserAchievementId(null)}
       />
 
       {/* MODAL KONFIRMASI LANJUTKAN PESANAN BELUM LUNAS UNTUK SUPERADMIN */}

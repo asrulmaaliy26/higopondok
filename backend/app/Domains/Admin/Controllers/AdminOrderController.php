@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Domains\Canteen\Order;
 use App\Domains\Canteen\OrderItem;
+use App\Domains\Auth\User;
 use App\Domains\Admin\ActivityLog;
 use App\Domains\Admin\Requests\AdminUploadPaymentProofRequest;
 use App\Domains\Admin\Requests\AdminUpdateOrderNotesRequest;
@@ -99,6 +100,111 @@ class AdminOrderController extends Controller
         $orders = $query->get();
 
         return response()->json($orders);
+    }
+
+    /**
+     * Get user achievement statistics and all distinct santris ever ordered for by this user.
+     */
+    public function getUserAchievements($userId)
+    {
+        $user = User::findOrFail($userId);
+        $orders = Order::where('user_id', $userId)
+            ->where('status', '!=', 'cancelled')
+            ->orderBy('id', 'desc')
+            ->get();
+
+        $totalOrders = $orders->count();
+        $totalSpent = (float) $orders->sum('total_price');
+
+        $santrisMap = [];
+        foreach ($orders as $order) {
+            $sName = trim($order->recipient_santri_name ?: ($order->user?->santri_name ?: $order->user?->name ?: 'Santri'));
+            $sRoom = trim($order->recipient_santri_room ?: ($order->delivery_location ?: ($order->user?->santri_room ?: '-')));
+            $sClass = trim($order->recipient_santri_class ?: ($order->user?->santri_class ?: '-'));
+            $sKey = strtolower($sName);
+            if ($sKey === '' || $sKey === '-') continue;
+
+            if (!isset($santrisMap[$sKey])) {
+                $santrisMap[$sKey] = [
+                    'name' => $sName,
+                    'room' => $sRoom,
+                    'class' => $sClass,
+                    'order_count' => 0,
+                    'total_spent' => 0,
+                    'last_order_at' => $order->created_at ? $order->created_at->toISOString() : null,
+                ];
+            }
+            $santrisMap[$sKey]['order_count']++;
+            $santrisMap[$sKey]['total_spent'] += (float) ($order->total_price ?: 0);
+        }
+
+        $santris = array_values($santrisMap);
+        usort($santris, fn($a, $b) => ($b['total_spent'] <=> $a['total_spent']) ?: ($b['order_count'] <=> $a['order_count']));
+        $santriCount = count($santris);
+
+        if ($totalOrders >= 15 || $totalSpent >= 500000 || $santriCount >= 4) {
+            $achievement = [
+                'tier' => 'Sultan',
+                'badge' => '👑 Sultan Pondok',
+                'icon' => 'Crown',
+                'color' => 'purple',
+                'description' => "Wali Dermawan: {$totalOrders}x pesanan untuk {$santriCount} santri",
+                'cls' => 'bg-purple-100 text-purple-900 border-purple-300 dark:bg-purple-950/60 dark:text-purple-300 dark:border-purple-800'
+            ];
+        } elseif ($totalOrders >= 8 || $totalSpent >= 250000 || $santriCount >= 3) {
+            $achievement = [
+                'tier' => 'Platinum',
+                'badge' => '💎 Wali Prioritas',
+                'icon' => 'Sparkles',
+                'color' => 'indigo',
+                'description' => "Wali Aktif: {$totalOrders}x pesanan untuk {$santriCount} santri",
+                'cls' => 'bg-indigo-100 text-indigo-900 border-indigo-300 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800'
+            ];
+        } elseif ($totalOrders >= 4 || $totalSpent >= 100000 || $santriCount >= 2) {
+            $achievement = [
+                'tier' => 'Gold',
+                'badge' => '🥇 Wali Teladan',
+                'icon' => 'Medal',
+                'color' => 'amber',
+                'description' => "Wali Rutin: {$totalOrders}x pesanan untuk {$santriCount} santri",
+                'cls' => 'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800'
+            ];
+        } elseif ($totalOrders >= 2 || $totalSpent >= 50000) {
+            $achievement = [
+                'tier' => 'Silver',
+                'badge' => '⭐ Wali Rajin',
+                'icon' => 'Star',
+                'color' => 'blue',
+                'description' => "Wali Setia: {$totalOrders}x pesanan untuk {$santriCount} santri",
+                'cls' => 'bg-blue-100 text-blue-900 border-blue-300 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800'
+            ];
+        } else {
+            $achievement = [
+                'tier' => 'Bronze',
+                'badge' => '🥉 Wali Baru',
+                'icon' => 'Award',
+                'color' => 'gray',
+                'description' => "Wali Baru: {$totalOrders}x pesanan untuk {$santriCount} santri",
+                'cls' => 'bg-gray-100 text-gray-800 border-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700'
+            ];
+        }
+
+        return response()->json([
+            'success' => true,
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'phone' => $user->phone,
+                'email' => $user->email,
+                'role' => $user->roles->first()?->name ?? 'user',
+                'created_at' => $user->created_at ? $user->created_at->toISOString() : null,
+            ],
+            'achievement' => $achievement,
+            'total_orders' => $totalOrders,
+            'total_spent' => $totalSpent,
+            'santri_count' => $santriCount,
+            'santris' => $santris,
+        ]);
     }
 
     /**

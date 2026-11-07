@@ -555,16 +555,20 @@ class Order extends Model
             $canteenRecap[$cId]['grand_total'] += $totalPrice;
             $canteenRecap[$cId]['order_count'] += 1;
 
-            // 2. Group by Santri / Wali
-            $santriName = $order->user ? ($order->user->santri_name ?: $order->user->name) : 'Santri #' . $userId;
+            // 2. Group by User / Wali (Fokus per User dengan Prestasi & Santri yang Dipesankan)
+            $orderSantri = $order->recipient_santri_name ?: ($order->user?->santri_name ?: $order->user?->name ?: 'Santri #' . $userId);
+            $orderRoom = $order->recipient_santri_room ?: ($order->delivery_location ?: ($order->user?->santri_room ?: ''));
+            $orderClass = $order->recipient_santri_class ?: ($order->user?->santri_class ?: '');
             $waliName = $order->user ? $order->user->name : 'Wali #' . $userId;
+            $waliPhone = $order->user ? $order->user->phone : ($order->recipient_phone ?? '');
 
             if (!isset($userRecap[$userId])) {
                 $userRecap[$userId] = [
                     'user_id' => $userId,
-                    'santri_name' => $santriName,
+                    'santri_name' => $orderSantri,
                     'wali_name' => $waliName,
-                    'santri_room' => $order->user->santri_room ?? '',
+                    'phone' => $waliPhone,
+                    'santri_room' => $orderRoom,
                     'total_products' => 0,
                     'total_delivery_fee' => 0,
                     'total_admin_fee' => 0,
@@ -574,6 +578,7 @@ class Order extends Model
                     'net_admin_fee' => 0,
                     'grand_total' => 0,
                     'order_count' => 0,
+                    'santris' => [],
                 ];
             }
             $userRecap[$userId]['total_products'] += $productsSubtotal;
@@ -585,6 +590,21 @@ class Order extends Model
             $userRecap[$userId]['net_admin_fee'] += max(0, $adminFee - $voucherDiscount);
             $userRecap[$userId]['grand_total'] += $totalPrice;
             $userRecap[$userId]['order_count'] += 1;
+
+            $sKey = trim(strtolower($orderSantri));
+            if ($sKey !== '' && $sKey !== '-') {
+                if (!isset($userRecap[$userId]['santris'][$sKey])) {
+                    $userRecap[$userId]['santris'][$sKey] = [
+                        'name' => $orderSantri,
+                        'room' => $orderRoom,
+                        'class' => $orderClass,
+                        'order_count' => 0,
+                        'total_spent' => 0,
+                    ];
+                }
+                $userRecap[$userId]['santris'][$sKey]['order_count']++;
+                $userRecap[$userId]['santris'][$sKey]['total_spent'] += $totalPrice;
+            }
 
             // 3. Group by Courier / Kurir
             $courierId = $order->courier_id ?: 0;
@@ -770,6 +790,70 @@ class Order extends Model
                 }
             }
         }
+
+        // Finalisasi & Kalkulasi Prestasi per User (Wali)
+        foreach ($userRecap as $uId => &$uData) {
+            $sList = array_values($uData['santris'] ?? []);
+            // Urutkan santri berdasarkan total belanja terbanyak
+            usort($sList, fn($a, $b) => ($b['total_spent'] <=> $a['total_spent']) ?: ($b['order_count'] <=> $a['order_count']));
+            
+            $sCount = count($sList);
+            $uData['santri_count'] = $sCount;
+            $uData['santris_list'] = $sList;
+            $uData['santri_names'] = implode(', ', array_column($sList, 'name'));
+
+            // Level Prestasi User
+            $oCount = (int) ($uData['order_count'] ?? 0);
+            $gTot = (float) ($uData['grand_total'] ?? 0);
+
+            if ($oCount >= 15 || $gTot >= 500000 || $sCount >= 4) {
+                $uData['achievement'] = [
+                    'tier' => 'Sultan',
+                    'badge' => '👑 Sultan Pondok',
+                    'icon' => 'Crown',
+                    'color' => 'purple',
+                    'description' => "Wali dermawan loyal: {$oCount} pesanan untuk {$sCount} santri",
+                    'cls' => 'bg-purple-100 text-purple-900 border-purple-300 dark:bg-purple-950/60 dark:text-purple-300 dark:border-purple-800'
+                ];
+            } elseif ($oCount >= 8 || $gTot >= 250000 || $sCount >= 3) {
+                $uData['achievement'] = [
+                    'tier' => 'Platinum',
+                    'badge' => '💎 Wali Prioritas',
+                    'icon' => 'Sparkles',
+                    'color' => 'indigo',
+                    'description' => "Wali aktif: {$oCount} pesanan untuk {$sCount} santri",
+                    'cls' => 'bg-indigo-100 text-indigo-900 border-indigo-300 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800'
+                ];
+            } elseif ($oCount >= 4 || $gTot >= 100000 || $sCount >= 2) {
+                $uData['achievement'] = [
+                    'tier' => 'Gold',
+                    'badge' => '🥇 Wali Teladan',
+                    'icon' => 'Medal',
+                    'color' => 'amber',
+                    'description' => "Wali rutin: {$oCount} pesanan untuk {$sCount} santri",
+                    'cls' => 'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800'
+                ];
+            } elseif ($oCount >= 2 || $gTot >= 50000) {
+                $uData['achievement'] = [
+                    'tier' => 'Silver',
+                    'badge' => '⭐ Wali Rajin',
+                    'icon' => 'Star',
+                    'color' => 'blue',
+                    'description' => "Wali setia: {$oCount} pesanan untuk {$sCount} santri",
+                    'cls' => 'bg-blue-100 text-blue-900 border-blue-300 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800'
+                ];
+            } else {
+                $uData['achievement'] = [
+                    'tier' => 'Bronze',
+                    'badge' => '🥉 Wali Baru',
+                    'icon' => 'Award',
+                    'color' => 'gray',
+                    'description' => "Wali baru: {$oCount} pesanan untuk {$sCount} santri",
+                    'cls' => 'bg-gray-100 text-gray-800 border-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700'
+                ];
+            }
+        }
+        unset($uData);
 
         // Sort breakdowns
         usort($productBreakdown, fn($a, $b) => $b['total_quantity'] <=> $a['total_quantity'] ?: $b['total_subtotal'] <=> $a['total_subtotal']);

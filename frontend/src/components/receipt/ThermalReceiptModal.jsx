@@ -178,16 +178,33 @@ export default function ThermalReceiptModal({
     });
   }, [rawBatchOrders, mode]);
 
-  // Deteksi otomatis apakah seluruh orders milik 1 wadah/checkout/user yang sama (Struk Gabungan 1 User)
+  // Deteksi otomatis apakah seluruh orders milik 1 wadah/checkout/santri yang sama (Struk Gabungan 1 Santri)
   const isSameUserBundle = useMemo(() => {
-    if (mode === 'bundle' || mode === 'group') return true;
+    // Mode batch (cetak banyak struk kurir) HARUS SELALU mencetak per-santri, tidak boleh dilebur jadi 1 wadah
+    if (mode === 'batch') return false;
     if (rawBatchOrders.length <= 1) return false;
+
+    // Cek apakah seluruh order benar-benar untuk 1 santri penerima yang sama
+    const firstInfo = getSantriReceiptInfo(rawBatchOrders[0]?.user, rawBatchOrders[0]);
+    const firstSantri = (firstInfo.santriName || '').trim().toLowerCase();
+    const firstRoom = (firstInfo.santriRoom || '').trim().toLowerCase();
+
+    const isAllSameSantri = rawBatchOrders.every(o => {
+      const oInfo = getSantriReceiptInfo(o?.user, o);
+      const oSantri = (oInfo.santriName || '').trim().toLowerCase();
+      const oRoom = (oInfo.santriRoom || '').trim().toLowerCase();
+      return oSantri === firstSantri && (firstRoom === '-' || oRoom === '-' || oRoom === firstRoom);
+    });
+
+    // Jika pesanan ditujukan untuk santri berbeda (misal 1 user pesan untuk 4 santri), JANGAN DIGABUNG JADI 1 BUNDLE!
+    if (!isAllSameSantri) return false;
+
+    if (mode === 'bundle' || mode === 'group') return true;
+
     // Cek checkout_id yang sama
     const firstCheckout = rawBatchOrders[0]?.checkout_id;
     if (firstCheckout && rawBatchOrders.every(o => o.checkout_id === firstCheckout)) return true;
-    // Cek user_id yang sama
-    const firstUserId = rawBatchOrders[0]?.user_id || rawBatchOrders[0]?.user?.id;
-    if (firstUserId && rawBatchOrders.every(o => (o.user_id || o.user?.id) === firstUserId)) return true;
+
     return false;
   }, [mode, rawBatchOrders]);
 
@@ -201,31 +218,45 @@ export default function ThermalReceiptModal({
     return null;
   }, [order, rawBatchOrders]);
 
-  // Kelompokkan seluruh order berdasarkan User / Santri (1 User = 1 Struk Utuh, Seluruh Toko Digabung)
+  // Kelompokkan seluruh order berdasarkan Santri & Ruangan (1 Santri = 1 Struk Utuh, Seluruh Toko Digabung)
   const groupedOrdersByUser = useMemo(() => {
     if (!filteredBatchOrders || filteredBatchOrders.length === 0) return [];
     
-    const userGroups = new Map();
+    const santriGroups = new Map();
     
     filteredBatchOrders.forEach(o => {
       const u = o.user;
       const info = getSantriReceiptInfo(u, o);
-      // Kunci unik santri: id santri/user jika ada, atau kombinasi nama dan asrama
-      const userKey = u?.id || o.user_id || (info.santriName ? `${info.santriName.toLowerCase().trim()}_${(info.santriRoom || '').toLowerCase().trim()}` : `order_${o.id}`);
       
-      if (!userGroups.has(userKey)) {
-        userGroups.set(userKey, {
-          userKey,
+      // Kunci unik santri: WAJIB berdasarkan nama santri penerima asli, BUKAN user_id wali!
+      // Agar 1 wali dengan banyak santri tetap terpisah jelas per santri di struk kurir
+      const sName = (info.santriName || '').toLowerCase().trim();
+      const sRoom = (info.santriRoom || '').toLowerCase().trim();
+      const isTeacher = info.isTeacher;
+      
+      let santriKey = '';
+      if (isTeacher) {
+        santriKey = `guru_${u?.id || o.user_id || o.id}_${sName}`;
+      } else if (sName && sName !== '-') {
+        santriKey = `santri_${sName}_${sRoom}_${u?.id || o.user_id || ''}`;
+      } else {
+        santriKey = `order_${o.id}`;
+      }
+      
+      if (!santriGroups.has(santriKey)) {
+        santriGroups.set(santriKey, {
+          userKey: santriKey,
+          santriKey,
           user: u,
           primaryOrder: o,
           info,
           orders: []
         });
       }
-      userGroups.get(userKey).orders.push(o);
+      santriGroups.get(santriKey).orders.push(o);
     });
     
-    return Array.from(userGroups.values());
+    return Array.from(santriGroups.values());
   }, [filteredBatchOrders]);
 
   // Pisahkan santri pesanan hari ini dan santri pesanan pindahan
@@ -795,6 +826,13 @@ export default function ThermalReceiptModal({
                     </table>
                   </div>
 
+                  {/* CATATAN PENGANTARAN KURIR (JIKA ADA) */}
+                  {order.custom_notes && order.items && order.items.length > 0 && (
+                    <div className="p-2.5 bg-amber-50/70 border border-amber-300 rounded-none text-xs text-amber-900 font-medium">
+                      🚚 <strong>Catatan Pengantaran Kurir:</strong> {order.custom_notes}
+                    </div>
+                  )}
+
                   {/* RINGKASAN PEMBAYARAN */}
                   <div className="flex justify-end pt-2">
                     <div className="w-72 space-y-2 bg-gray-50 p-4 rounded-xl border border-gray-200 text-xs">
@@ -984,6 +1022,13 @@ export default function ThermalReceiptModal({
                       </tbody>
                     </table>
                   </div>
+
+                  {/* CATATAN PENGANTARAN KURIR (JIKA ADA) */}
+                  {order.custom_notes && order.items && order.items.length > 0 && (
+                    <div className="p-2.5 bg-amber-50/70 border border-amber-300 rounded-none text-xs text-amber-900 font-medium">
+                      🚚 <strong>Catatan Pengantaran Kurir:</strong> {order.custom_notes}
+                    </div>
+                  )}
 
                   {/* RINGKASAN PEMBAYARAN */}
                   <div className="flex justify-end pt-2">
@@ -1182,6 +1227,11 @@ export default function ThermalReceiptModal({
                                             ) : (
                                               <div className="text-sm sm:text-base font-black">
                                                 • 1x {o.custom_notes || 'Pesanan Khusus / Titip Beli'}
+                                              </div>
+                                            )}
+                                            {o.custom_notes && o.items && o.items.length > 0 && (
+                                              <div className="text-xs font-bold text-black border border-black p-1 bg-gray-100 my-1">
+                                                🚚 Catatan Kurir: {o.custom_notes}
                                               </div>
                                             )}
                                           </div>
@@ -1514,6 +1564,11 @@ export default function ThermalReceiptModal({
                           • 1x {order.custom_notes || 'Pesanan Khusus / Titip Beli'}
                         </div>
                       )}
+                      {order.custom_notes && order.items && order.items.length > 0 && (
+                        <div className="thermal-menu-note text-xs sm:text-sm font-bold text-black border border-black p-1 bg-gray-100 my-1">
+                          🚚 Catatan Kurir: {order.custom_notes}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -1632,6 +1687,11 @@ export default function ThermalReceiptModal({
                             ) : (
                               <div className="thermal-menu-item text-sm sm:text-base font-black text-black leading-tight">
                                 • 1x {o.custom_notes || 'Pesanan Khusus / Titip Beli'}
+                              </div>
+                            )}
+                            {o.custom_notes && o.items && o.items.length > 0 && (
+                              <div className="thermal-menu-note text-xs sm:text-sm font-bold text-black border border-black p-1 bg-gray-100 my-1">
+                                🚚 Catatan Kurir: {o.custom_notes}
                               </div>
                             )}
                           </div>
@@ -1763,6 +1823,11 @@ export default function ThermalReceiptModal({
                                           ) : (
                                             <div className="thermal-menu-item text-sm sm:text-base font-black text-black leading-tight">
                                               • 1x {o.custom_notes || 'Pesanan Khusus / Titip Beli'}
+                                            </div>
+                                          )}
+                                          {o.custom_notes && o.items && o.items.length > 0 && (
+                                            <div className="thermal-menu-note text-xs sm:text-sm font-bold text-black border border-black p-1 bg-gray-100 my-1">
+                                              🚚 Catatan Kurir: {o.custom_notes}
                                             </div>
                                           )}
                                         </div>
