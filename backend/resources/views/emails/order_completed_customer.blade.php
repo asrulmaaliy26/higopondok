@@ -159,8 +159,15 @@
             <p style="margin-top: 0; font-size: 14px; line-height: 1.5;">
                 Assalamu'alaikum <strong>{{ $user->name ?? 'Wali Santri / Santri' }}</strong>,
             </p>
+            @php
+                $isMultiStore = isset($bundleOrders) && count($bundleOrders) > 1;
+                $santriName = $order->recipient_santri_name ?: ($user->santri_name ?? $user->name ?? 'Santri');
+                $santriRoom = $order->recipient_santri_room ?: ($user->santri_room ?? '-');
+                $santriClass = $order->recipient_santri_class ?: ($user->santri_class ?? '-');
+                $storeNames = isset($bundleOrders) ? $bundleOrders->map(fn($o) => $o->canteen->name ?? 'Kantin')->unique()->implode(', ') : ($canteen->name ?? 'Kantin Pondok');
+            @endphp
             <p style="font-size: 14px; color: #4b5563; line-height: 1.5; margin-top: 0;">
-                Kabar gembira! Pesanan Anda dengan nomor <strong>#ORD-{{ $order->id }}</strong> dari <strong>{{ $canteen->name ?? 'Kantin Pondok' }}</strong> telah berhasil diantar dan diterima dengan baik.
+                Kabar gembira! Pesanan Anda <strong>{{ $isMultiStore ? '#' . $order->checkout_id . ' (' . count($bundleOrders) . ' Toko)' : '#ORD-' . $order->id }}</strong> dari <strong>{{ $storeNames }}</strong> untuk santri <strong>{{ $santriName }}</strong> telah berhasil diantar dan diterima dengan baik.
             </p>
 
             <!-- Informasi Pengantaran -->
@@ -168,27 +175,29 @@
                 <table style="width: 100%; font-size: 13px; border-collapse: collapse;">
                     <tr>
                         <td style="color: #6b7280; padding: 4px 0;">No. Pesanan</td>
-                        <td style="color: #111827; font-weight: 600; text-align: right; padding: 4px 0;">#ORD-{{ $order->id }}</td>
+                        <td style="color: #111827; font-weight: 600; text-align: right; padding: 4px 0;">
+                            {{ $isMultiStore ? $order->checkout_id . ' (' . $bundleOrders->map(fn($o) => '#ORD-' . $o->id)->implode(', ') . ')' : '#ORD-' . $order->id }}
+                        </td>
                     </tr>
                     <tr>
-                        <td style="color: #6b7280; padding: 4px 0;">Nama Santri</td>
-                        <td style="color: #111827; font-weight: 600; text-align: right; padding: 4px 0;">{{ $user->santri_name ?? $user->name }}</td>
+                        <td style="color: #6b7280; padding: 4px 0;">Nama Santri Penerima</td>
+                        <td style="color: #111827; font-weight: 600; text-align: right; padding: 4px 0;">{{ $santriName }}</td>
                     </tr>
-                    @if(!empty($user->santri_room) || !empty($user->santri_class))
+                    @if($santriRoom !== '-' || $santriClass !== '-')
                     <tr>
                         <td style="color: #6b7280; padding: 4px 0;">Kamar / Kelas</td>
                         <td style="color: #111827; font-weight: 600; text-align: right; padding: 4px 0;">
-                            {{ $user->santri_room ?? '-' }} / {{ $user->santri_class ?? '-' }}
+                            {{ $santriRoom }} / {{ $santriClass }}
                         </td>
                     </tr>
                     @endif
                     <tr>
                         <td style="color: #6b7280; padding: 4px 0;">Lokasi Antar</td>
-                        <td style="color: #111827; font-weight: 600; text-align: right; padding: 4px 0;">{{ $order->delivery_location ?? 'Pesantren Al Mannan' }}</td>
+                        <td style="color: #111827; font-weight: 600; text-align: right; padding: 4px 0;">{{ $order->delivery_location ?? $santriRoom ?? 'Pesantren Al Mannan' }}</td>
                     </tr>
                     <tr>
                         <td style="color: #6b7280; padding: 4px 0;">Kantin / Toko</td>
-                        <td style="color: #111827; font-weight: 600; text-align: right; padding: 4px 0;">{{ $canteen->name ?? 'Kantin' }}</td>
+                        <td style="color: #111827; font-weight: 600; text-align: right; padding: 4px 0;">{{ $storeNames }}</td>
                     </tr>
                     @if($courier)
                     <tr>
@@ -215,70 +224,89 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @if($items && count($items) > 0)
-                        @foreach($items as $item)
+                    @php
+                        $ordersToRender = isset($bundleOrders) && count($bundleOrders) > 0 ? $bundleOrders : collect([$order]);
+                    @endphp
+                    @foreach($ordersToRender as $bOrder)
+                        @if(count($ordersToRender) > 1)
                         <tr>
-                            <td>
-                                <strong>{{ $item->product->name ?? 'Produk' }}</strong>
-                                @if(!empty($item->notes))
-                                <div style="font-size: 11px; color: #6b7280; margin-top: 2px;">Catatan: {{ $item->notes }}</div>
-                                @endif
+                            <td colspan="4" style="background-color: #f0fdf4; font-weight: 700; color: #166534; font-size: 12px; padding: 6px 10px;">
+                                🏪 {{ $bOrder->canteen->name ?? 'Kantin' }} (#ORD-{{ $bOrder->id }})
                             </td>
-                            <td class="text-center">{{ $item->quantity }}</td>
-                            <td class="text-right">Rp {{ number_format($item->price, 0, ',', '.') }}</td>
-                            <td class="text-right">Rp {{ number_format($item->subtotal, 0, ',', '.') }}</td>
                         </tr>
-                        @endforeach
-                    @elseif(!empty($order->custom_items))
-                        @foreach($order->custom_items as $cItem)
-                        <tr>
-                            <td><strong>{{ $cItem['name'] ?? 'Pesanan Khusus' }}</strong></td>
-                            <td class="text-center">{{ $cItem['quantity'] ?? 1 }}</td>
-                            <td class="text-right">Rp {{ number_format($cItem['price'] ?? 0, 0, ',', '.') }}</td>
-                            <td class="text-right">Rp {{ number_format(($cItem['price'] ?? 0) * ($cItem['quantity'] ?? 1), 0, ',', '.') }}</td>
-                        </tr>
-                        @endforeach
-                    @endif
+                        @endif
+                        @if($bOrder->items && count($bOrder->items) > 0)
+                            @foreach($bOrder->items as $item)
+                            <tr>
+                                <td>
+                                    <strong>{{ $item->product->name ?? 'Produk' }}</strong>
+                                    @if(!empty($item->notes))
+                                    <div style="font-size: 11px; color: #6b7280; margin-top: 2px;">Catatan: {{ $item->notes }}</div>
+                                    @endif
+                                </td>
+                                <td class="text-center">{{ $item->quantity }}</td>
+                                <td class="text-right">Rp {{ number_format($item->price, 0, ',', '.') }}</td>
+                                <td class="text-right">Rp {{ number_format($item->subtotal, 0, ',', '.') }}</td>
+                            </tr>
+                            @endforeach
+                        @elseif(!empty($bOrder->custom_items))
+                            @foreach($bOrder->custom_items as $cItem)
+                            <tr>
+                                <td><strong>{{ $cItem['name'] ?? 'Pesanan Khusus' }}</strong></td>
+                                <td class="text-center">{{ $cItem['quantity'] ?? 1 }}</td>
+                                <td class="text-right">Rp {{ number_format($cItem['price'] ?? 0, 0, ',', '.') }}</td>
+                                <td class="text-right">Rp {{ number_format(($cItem['price'] ?? 0) * ($cItem['quantity'] ?? 1), 0, ',', '.') }}</td>
+                            </tr>
+                            @endforeach
+                        @endif
+                    @endforeach
                 </tbody>
             </table>
 
             <!-- Ringkasan Finansial -->
+            @php
+                $totalDeliveryFee = $ordersToRender->sum('delivery_fee');
+                $totalAdminFee = $ordersToRender->sum('admin_fee');
+                $totalVoucherDiscount = $ordersToRender->sum('voucher_discount');
+                $grandTotalPrice = $ordersToRender->sum('total_price');
+                $totalItemsPrice = $grandTotalPrice - $totalDeliveryFee - $totalAdminFee + $totalVoucherDiscount;
+            @endphp
             <div class="summary-box">
                 <table style="width: 100%; font-size: 13px; border-collapse: collapse;">
                     <tr>
                         <td style="color: #6b7280; padding: 4px 0;">Subtotal Belanja</td>
                         <td style="text-align: right; font-family: monospace; padding: 4px 0;">
-                            Rp {{ number_format(($items && count($items) > 0 ? $items->sum('subtotal') : $order->total_price - $order->delivery_fee - $order->admin_fee + ($order->voucher_discount ?? 0)), 0, ',', '.') }}
+                            Rp {{ number_format($totalItemsPrice, 0, ',', '.') }}
                         </td>
                     </tr>
-                    @if($order->delivery_fee > 0)
+                    @if($totalDeliveryFee > 0)
                     <tr>
                         <td style="color: #6b7280; padding: 4px 0;">Ongkos Kirim Kurir</td>
                         <td style="text-align: right; font-family: monospace; padding: 4px 0;">
-                            Rp {{ number_format($order->delivery_fee, 0, ',', '.') }}
+                            Rp {{ number_format($totalDeliveryFee, 0, ',', '.') }}
                         </td>
                     </tr>
                     @endif
-                    @if($order->admin_fee > 0)
+                    @if($totalAdminFee > 0)
                     <tr>
                         <td style="color: #6b7280; padding: 4px 0;">Biaya Layanan/Admin</td>
                         <td style="text-align: right; font-family: monospace; padding: 4px 0;">
-                            Rp {{ number_format($order->admin_fee, 0, ',', '.') }}
+                            Rp {{ number_format($totalAdminFee, 0, ',', '.') }}
                         </td>
                     </tr>
                     @endif
-                    @if(($order->voucher_discount ?? 0) > 0)
+                    @if($totalVoucherDiscount > 0)
                     <tr>
                         <td style="color: #15803d; font-weight: 600; padding: 4px 0;">Potongan Voucher</td>
                         <td style="text-align: right; font-family: monospace; color: #15803d; font-weight: 600; padding: 4px 0;">
-                            - Rp {{ number_format($order->voucher_discount, 0, ',', '.') }}
+                            - Rp {{ number_format($totalVoucherDiscount, 0, ',', '.') }}
                         </td>
                     </tr>
                     @endif
                     <tr style="border-top: 1px solid #e5e7eb;">
                         <td style="font-size: 15px; font-weight: 700; color: #15803d; padding: 10px 0 0 0;">Total Pembayaran</td>
                         <td style="font-size: 15px; font-weight: 800; color: #15803d; text-align: right; font-family: monospace; padding: 10px 0 0 0;">
-                            Rp {{ number_format($order->total_price, 0, ',', '.') }}
+                            Rp {{ number_format($grandTotalPrice, 0, ',', '.') }}
                         </td>
                     </tr>
                 </table>

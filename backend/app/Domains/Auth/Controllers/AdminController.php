@@ -507,25 +507,135 @@ class AdminController extends Controller
         $successRate = $totalOrders > 0 ? round(($totalCompleted / $totalOrders) * 100, 1) : 0;
         $totalTurnover = (float) \App\Domains\Canteen\Order::where('status', 'completed')->sum('total_price');
 
-        // 1. Top Santri / Pelanggan Pesanan Tertinggi
-        $topUsers = \App\Domains\Canteen\Order::where('status', 'completed')
-            ->selectRaw('user_id, count(*) as total_orders, sum(total_price) as total_spent')
-            ->groupBy('user_id')
-            ->orderByDesc('total_orders')
-            ->take(15)
-            ->with('user:id,name,santri_name,santri_room,santri_class,penalty_points')
-            ->get()
-            ->map(function ($row, $index) {
-                $u = $row->user;
+        // 1. Prestasi Per User / Akun Wali (Menghitung berapa santri yang pernah dibelikan & total pembelian sampai saat ini)
+        $validOrders = \App\Domains\Canteen\Order::with('user:id,name,email,phone,santri_name,santri_room,santri_class,santri_level,penalty_points')
+            ->where('status', '!=', 'cancelled')
+            ->orderByDesc('created_at')
+            ->get(['id', 'user_id', 'checkout_id', 'recipient_santri_name', 'recipient_santri_room', 'recipient_santri_class', 'recipient_santri_level', 'total_price', 'status', 'created_at']);
+
+        $usersMap = [];
+        $globalUniqueSantris = [];
+
+        foreach ($validOrders as $o) {
+            $uId = $o->user_id;
+            if (!$uId) {
+                continue;
+            }
+
+            $u = $o->user;
+            if (!isset($usersMap[$uId])) {
+                $usersMap[$uId] = [
+                    'user_id' => $uId,
+                    'name' => $u->name ?? "User #{$uId}",
+                    'email' => $u->email ?? '-',
+                    'phone' => $u->phone ?? '-',
+                    'penalty_points' => (int) ($u->penalty_points ?? 0),
+                    'total_orders' => 0,
+                    'completed_orders' => 0,
+                    'total_spent' => 0.0,
+                    'last_order_at' => $o->created_at ? $o->created_at->toIso8601String() : null,
+                    'santris_map' => [],
+                ];
+            }
+
+            $usersMap[$uId]['total_orders'] += 1;
+            if ($o->status === 'completed') {
+                $usersMap[$uId]['completed_orders'] += 1;
+            }
+            $usersMap[$uId]['total_spent'] += (float) $o->total_price;
+
+            $sName = trim($o->recipient_santri_name ?: ($u->santri_name ?: ($u->name ?: 'Santri')));
+            $sKey = mb_strtolower(preg_replace('/\s+/', ' ', $sName));
+            $globalUniqueSantris[$sKey] = true;
+
+            $sRoom = trim($o->recipient_santri_room ?: ($u->santri_room ?? '-'));
+            $sClass = trim($o->recipient_santri_class ?: ($u->santri_class ?? '-'));
+            $sLevel = trim($o->recipient_santri_level ?: ($u->santri_level ?? ''));
+
+            if (!isset($usersMap[$uId]['santris_map'][$sKey])) {
+                $usersMap[$uId]['santris_map'][$sKey] = [
+                    'name' => $sName,
+                    'room' => $sRoom ?: '-',
+                    'class' => $sClass ?: '-',
+                    'level' => $sLevel ?: '',
+                    'order_count' => 0,
+                    'total_spent' => 0.0,
+                ];
+            }
+            $usersMap[$uId]['santris_map'][$sKey]['order_count'] += 1;
+            $usersMap[$uId]['santris_map'][$sKey]['total_spent'] += (float) $o->total_price;
+        }
+
+        $topUsersCollection = collect(array_values($usersMap))
+            ->sort(function ($a, $b) {
+                if ($b['total_spent'] !== $a['total_spent']) {
+                    return $b['total_spent'] <=> $a['total_spent'];
+                }
+                return $b['total_orders'] <=> $a['total_orders'];
+            })
+            ->values()
+            ->map(function ($item, $index) {
+                $santrisList = collect(array_values($item['santris_map']))
+                    ->sortByDesc('total_spent')
+                    ->values()
+                    ->all();
+
+                $santriCount = count($santrisList);
+                $totalOrdersCount = $item['total_orders'];
+                $totalSpentAmount = $item['total_spent'];
+
+                // Tier Prestasi Wali / User
+                if ($totalOrdersCount >= 20 || $totalSpentAmount >= 500000 || $santriCount >= 4) {
+                    $achievement = [
+                        'tier' => 'Sultan',
+                        'badge' => '👑 Sultan Pondok',
+                        'cls' => 'bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-950/60 dark:text-purple-300 dark:border-purple-700',
+                    ];
+                } elseif ($totalOrdersCount >= 10 || $totalSpentAmount >= 250000 || $santriCount >= 3) {
+                    $achievement = [
+                        'tier' => 'Platinum',
+                        'badge' => '💎 Wali Prioritas',
+                        'cls' => 'bg-indigo-100 text-indigo-800 border-indigo-300 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-700',
+                    ];
+                } elseif ($totalOrdersCount >= 5 || $totalSpentAmount >= 100000 || $santriCount >= 2) {
+                    $achievement = [
+                        'tier' => 'Gold',
+                        'badge' => '🥇 Wali Teladan',
+                        'cls' => 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-700',
+                    ];
+                } elseif ($totalOrdersCount >= 2) {
+                    $achievement = [
+                        'tier' => 'Silver',
+                        'badge' => '⭐ Wali Rajin',
+                        'cls' => 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-700',
+                    ];
+                } else {
+                    $achievement = [
+                        'tier' => 'Bronze',
+                        'badge' => '🌱 Wali Baru',
+                        'cls' => 'bg-gray-100 text-gray-700 border-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700',
+                    ];
+                }
+
+                $firstSantri = $santrisList[0] ?? null;
+
                 return [
                     'rank' => $index + 1,
-                    'user_id' => $row->user_id,
-                    'name' => $u ? ($u->santri_name ?: $u->name) : "User #{$row->user_id}",
-                    'room' => $u->santri_room ?? '-',
-                    'class' => $u->santri_class ?? '-',
-                    'penalty_points' => (int) ($u->penalty_points ?? 0),
-                    'total_orders' => (int) $row->total_orders,
-                    'total_spent' => (float) $row->total_spent,
+                    'user_id' => $item['user_id'],
+                    'name' => $item['name'],
+                    'email' => $item['email'],
+                    'phone' => $item['phone'],
+                    'room' => $firstSantri['room'] ?? '-',
+                    'class' => $firstSantri['class'] ?? '-',
+                    'penalty_points' => $item['penalty_points'],
+                    'santri_count' => $santriCount,
+                    'santri_names' => implode(', ', array_map(fn($s) => $s['name'], $santrisList)),
+                    'santris_list' => $santrisList,
+                    'total_orders' => $totalOrdersCount,
+                    'completed_orders' => $item['completed_orders'],
+                    'total_spent' => $totalSpentAmount,
+                    'last_order_at' => $item['last_order_at'],
+                    'achievement' => $achievement,
                 ];
             });
 
@@ -534,7 +644,7 @@ class AdminController extends Controller
             ->selectRaw('canteen_id, count(*) as total_orders, sum(total_price) as total_revenue')
             ->groupBy('canteen_id')
             ->orderByDesc('total_orders')
-            ->take(15)
+            ->take(20)
             ->with('canteen:id,name,category')
             ->get()
             ->map(function ($row, $index) {
@@ -555,7 +665,7 @@ class AdminController extends Controller
             ->selectRaw('courier_id, count(*) as total_delivered, sum(delivery_fee) as total_fee')
             ->groupBy('courier_id')
             ->orderByDesc('total_delivered')
-            ->take(15)
+            ->take(20)
             ->with('courier:id,name')
             ->get()
             ->map(function ($row, $index) {
@@ -575,8 +685,10 @@ class AdminController extends Controller
                 'total_orders' => $totalOrders,
                 'success_rate' => $successRate,
                 'total_turnover' => $totalTurnover,
+                'total_unique_users' => $topUsersCollection->count(),
+                'total_unique_santris_ordered' => count($globalUniqueSantris),
             ],
-            'top_users' => $topUsers,
+            'top_users' => $topUsersCollection,
             'top_canteens' => $topCanteens,
             'top_couriers' => $topCouriers,
         ]);

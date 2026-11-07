@@ -292,7 +292,8 @@ abstract class Controller
         $updatedProofs = [];
         $changed = false;
 
-        $hasGoogleDisk = !empty(config('filesystems.disks.google.clientId')) || config('filesystems.default') === 'google';
+        $activeDriveConfig = \App\Domains\Admin\GoogleDriveAccount::getActiveConfig();
+        $hasGoogleDisk = !empty($activeDriveConfig['clientId']) || !empty($activeDriveConfig['refreshToken']) || config('filesystems.default') === 'google';
 
         foreach ($proofList as $path) {
             if (!is_string($path)) {
@@ -328,7 +329,32 @@ abstract class Controller
                     }
                 }
             } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::warning("[syncProofToGoogleDrive] Gagal upload {$cleanPath} ke Google Drive: " . $e->getMessage());
+                $errMsg = $e->getMessage();
+                \Illuminate\Support\Facades\Log::warning("[syncProofToGoogleDrive] Gagal upload {$cleanPath} ke Google Drive: " . $errMsg);
+
+                // Auto-switch ke akun Google Drive cadangan berikutnya jika penyimpanan akun aktif sudah penuh
+                if (str_contains(strtolower($errMsg), 'quota') || str_contains(strtolower($errMsg), 'storage')) {
+                    try {
+                        $currentActive = \App\Domains\Admin\GoogleDriveAccount::active()->first();
+                        if ($currentActive) {
+                            $currentActive->update(['status' => 'full', 'status_message' => 'Kapasitas penyimpanan penuh']);
+                            if ($currentActive->auto_switch_when_full) {
+                                $nextBackup = \App\Domains\Admin\GoogleDriveAccount::where('id', '!=', $currentActive->id)
+                                    ->whereIn('status', ['connected', 'unknown'])
+                                    ->whereNotNull('refresh_token')
+                                    ->orderBy('id', 'asc')
+                                    ->first();
+                                if ($nextBackup) {
+                                    \App\Domains\Admin\GoogleDriveAccount::query()->update(['is_active' => false]);
+                                    $nextBackup->update(['is_active' => true]);
+                                    \App\Domains\Admin\GoogleDriveAccount::purgeStorageDiskCache();
+                                }
+                            }
+                        }
+                    } catch (\Throwable $switchErr) {
+                        // Ignore auto-switch error
+                    }
+                }
             }
 
             $updatedProofs[] = $path;

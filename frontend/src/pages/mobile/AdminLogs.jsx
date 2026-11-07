@@ -33,7 +33,9 @@ import {
   Wallet,
   X,
   FileText,
-  Eye
+  Eye,
+  Crown,
+  ExternalLink
 } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
 import { 
@@ -42,6 +44,7 @@ import {
   getModelBadge as getModelBadgeBase, 
   getRoleBadge 
 } from '../../lib/activityLogUtils';
+import UserAchievementModal from '../../components/modals/UserAchievementModal';
 
 export default function AdminLogs() {
   const [activeTab, setActiveTab] = useState('activity');
@@ -52,6 +55,9 @@ export default function AdminLogs() {
   const [page, setPage] = useState(1);
   const [isLive, setIsLive] = useState(true);
   const [achievementCategory, setAchievementCategory] = useState('users');
+  const [achievementSearch, setAchievementSearch] = useState('');
+  const [achievementSort, setAchievementSort] = useState('spent_desc');
+  const [selectedUserAchievementId, setSelectedUserAchievementId] = useState(null);
 
   // State untuk Tab Seluruh Santri
   const [santriSearch, setSantriSearch] = useState('');
@@ -639,32 +645,32 @@ export default function AdminLogs() {
                 {/* 1. Ringkasan Metrik Audit Positif (High-Density Flat Grid) */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <div className="p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-none shadow-2xs">
-                    <span className="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase block leading-tight">Pesanan Selesai</span>
+                    <span className="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase block leading-tight">Total Pemesan Aktif</span>
                     <span className="text-base sm:text-lg font-black text-gray-900 dark:text-white font-mono block mt-1">
-                      {achievementsData?.summary?.total_completed_orders?.toLocaleString('id-ID') || 0}
+                      {(achievementsData?.summary?.total_unique_users ?? achievementsData?.top_users?.length ?? 0).toLocaleString('id-ID')} Akun
                     </span>
                     <span className="text-[9.5px] text-green-600 dark:text-green-400 font-bold flex items-center gap-1 mt-0.5">
-                      <CheckCircle2 className="w-2.5 h-2.5" /> 100% Terverifikasi
+                      <Users className="w-2.5 h-2.5" /> {achievementsData?.summary?.total_unique_santris_ordered || 0} Santri Dibelikan
                     </span>
                   </div>
 
                   <div className="p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-none shadow-2xs">
-                    <span className="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase block leading-tight">Rasio Keberhasilan</span>
+                    <span className="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase block leading-tight">Pesanan Selesai</span>
                     <span className="text-base sm:text-lg font-black text-green-600 dark:text-green-400 font-mono block mt-1">
-                      {achievementsData?.summary?.success_rate || 0}%
+                      {achievementsData?.summary?.total_completed_orders?.toLocaleString('id-ID') || 0} ({achievementsData?.summary?.success_rate || 0}%)
                     </span>
                     <span className="text-[9.5px] text-gray-400 block mt-0.5">
-                      Tingkat Penyelesaian Tinggi
+                      Dari {achievementsData?.summary?.total_orders?.toLocaleString('id-ID') || 0} Total Pesanan
                     </span>
                   </div>
 
                   <div className="p-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-none shadow-2xs">
-                    <span className="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase block leading-tight">Perputaran Belanja</span>
+                    <span className="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase block leading-tight">Total Pembelian s/d Saat Ini</span>
                     <span className="text-base sm:text-lg font-black text-gray-900 dark:text-white font-mono block mt-1">
                       Rp {parseFloat(achievementsData?.summary?.total_turnover || 0).toLocaleString('id-ID')}
                     </span>
                     <span className="text-[9.5px] text-green-600 dark:text-green-400 font-bold flex items-center gap-1 mt-0.5">
-                      <TrendingUp className="w-2.5 h-2.5" /> Arus Kas Berjalan
+                      <TrendingUp className="w-2.5 h-2.5" /> Akumulasi Seluruh Waktu
                     </span>
                   </div>
 
@@ -679,98 +685,227 @@ export default function AdminLogs() {
                   </div>
                 </div>
 
-                {/* 2. Pemilih Kategori Prestasi (High Density Flat Chips) */}
-                <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-2 rounded-none flex items-center justify-between gap-2 shadow-2xs">
-                  <div className="flex items-center gap-1 overflow-x-auto">
-                    {[
-                      { id: 'users', label: 'Santri & Pelanggan Teraktif', icon: <User className="w-3 h-3" /> },
-                      { id: 'canteens', label: 'Mitra Toko Terlaris', icon: <Store className="w-3 h-3" /> },
-                      { id: 'couriers', label: 'Kurir Berprestasi', icon: <Package className="w-3 h-3" /> },
-                    ].map(c => (
-                      <button
-                        key={c.id}
-                        type="button"
-                        onClick={() => setAchievementCategory(c.id)}
-                        className={`px-2.5 py-1 text-[11px] font-bold rounded-none border transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
-                          achievementCategory === c.id
-                            ? 'bg-green-600 text-white border-green-600'
-                            : 'bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-100'
-                        }`}
-                      >
-                        {c.icon}
-                        <span>{c.label}</span>
-                      </button>
-                    ))}
+                {/* 2. Pemilih Kategori Prestasi & Pencarian Per User */}
+                <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-2 rounded-none space-y-2 shadow-2xs">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-1 overflow-x-auto">
+                      {[
+                        { id: 'users', label: 'Prestasi Per User / Wali', icon: <User className="w-3 h-3" /> },
+                        { id: 'canteens', label: 'Mitra Toko Terlaris', icon: <Store className="w-3 h-3" /> },
+                        { id: 'couriers', label: 'Kurir Berprestasi', icon: <Package className="w-3 h-3" /> },
+                      ].map(c => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => setAchievementCategory(c.id)}
+                          className={`px-2.5 py-1 text-[11px] font-bold rounded-none border transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                            achievementCategory === c.id
+                              ? 'bg-green-600 text-white border-green-600'
+                              : 'bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-100'
+                          }`}
+                        >
+                          {c.icon}
+                          <span>{c.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <span className="text-[10px] font-mono text-gray-400 font-bold hidden sm:inline">
+                      Rekapitulasi Sepanjang Waktu
+                    </span>
                   </div>
-                  <span className="text-[10px] font-mono text-gray-400 font-bold hidden sm:inline">
-                    Top Leaderboard
-                  </span>
+
+                  {achievementCategory === 'users' && (
+                    <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+                      <div className="relative flex-1">
+                        <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          placeholder="Cari nama akun wali / user, nama santri yang dibelikan, atau nomor HP..."
+                          value={achievementSearch}
+                          onChange={(e) => setAchievementSearch(e.target.value)}
+                          className="w-full pl-8 pr-3 py-1.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-xs text-gray-900 dark:text-gray-100 focus:outline-hidden focus:border-green-600 rounded-none transition-colors"
+                        />
+                        {achievementSearch && (
+                          <button
+                            type="button"
+                            onClick={() => setAchievementSearch('')}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs cursor-pointer"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="text-[10px] text-gray-400 font-bold whitespace-nowrap">Urutkan:</span>
+                        <select
+                          value={achievementSort}
+                          onChange={(e) => setAchievementSort(e.target.value)}
+                          className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-xs px-2 py-1.5 rounded-none text-gray-800 dark:text-gray-200 focus:outline-hidden cursor-pointer"
+                        >
+                          <option value="spent_desc">Total Pembelian Tertinggi</option>
+                          <option value="orders_desc">Jumlah Pesanan Terbanyak</option>
+                          <option value="santri_desc">Jumlah Santri Dibelikan Terbanyak</option>
+                          <option value="name_asc">Nama User / Wali (A-Z)</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* 3. Tabel Rekapitulasi Presisi (Sesuai Aturan 13 AGENTS.md) */}
                 <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-none shadow-2xs overflow-x-auto">
-                  {achievementCategory === 'users' && (
-                    <table className="w-full text-left text-xs border-collapse">
-                      <thead>
-                        <tr className="bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-800 text-[10px] font-bold text-gray-500 uppercase tracking-wider">
-                          <th className="py-2 px-2.5 w-12 text-center">Peringkat</th>
-                          <th className="py-2 px-2.5">Nama Santri / Pelanggan</th>
-                          <th className="py-2 px-2.5 hidden sm:table-cell">Kamar / Kelas</th>
-                          <th className="py-2 px-2.5 text-center">Integritas</th>
-                          <th className="py-2 px-2.5 text-right">Pesanan Selesai</th>
-                          <th className="py-2 px-2.5 text-right">Total Belanja</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100 dark:divide-gray-800/80">
-                        {achievementsData?.top_users?.map((u) => (
-                          <tr key={u.user_id} className="hover:bg-gray-50/80 dark:hover:bg-gray-800/40 transition-colors">
-                            <td className="py-2 px-2.5 text-center">
-                              <span className={`inline-block font-mono font-black text-xs px-1.5 py-0.2 rounded-none border ${
-                                u.rank === 1 
-                                  ? 'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950 dark:text-amber-200' 
-                                  : u.rank === 2
-                                  ? 'bg-slate-100 text-slate-800 border-slate-300 dark:bg-slate-800 dark:text-slate-200'
-                                  : u.rank === 3
-                                  ? 'bg-orange-100 text-orange-900 border-orange-300 dark:bg-orange-950 dark:text-orange-200'
-                                  : 'bg-gray-50 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-400'
-                              }`}>
-                                #{u.rank}
-                              </span>
-                            </td>
-                            <td className="py-2 px-2.5">
-                              <div className="font-bold text-gray-900 dark:text-gray-100 flex items-center gap-1">
-                                <span>{u.name}</span>
-                                {u.rank === 1 && <Trophy className="w-3 h-3 text-amber-500 shrink-0" />}
-                              </div>
-                              <span className="text-[10px] text-gray-400 sm:hidden">
-                                {u.room !== '-' ? `Kamar: ${u.room}` : ''} {u.class !== '-' ? `• Kelas: ${u.class}` : ''}
-                              </span>
-                            </td>
-                            <td className="py-2 px-2.5 text-gray-600 dark:text-gray-400 text-[11px] hidden sm:table-cell">
-                              {u.room !== '-' ? `${u.room}` : '-'} / {u.class !== '-' ? u.class : '-'}
-                            </td>
-                            <td className="py-2 px-2.5 text-center">
-                              {u.penalty_points === 0 ? (
-                                <span className="inline-block px-1.5 py-0.2 text-[9px] font-bold bg-green-50 text-green-700 border border-green-200 dark:bg-green-950/40 dark:text-green-300 dark:border-green-800 rounded-none">
-                                  Disiplin (0)
-                                </span>
-                              ) : (
-                                <span className="inline-block px-1.5 py-0.2 text-[9px] font-bold bg-amber-50 text-amber-800 border border-amber-200 rounded-none">
-                                  {u.penalty_points} Poin
-                                </span>
-                              )}
-                            </td>
-                            <td className="py-2 px-2.5 text-right font-mono font-bold text-gray-800 dark:text-gray-200">
-                              {u.total_orders.toLocaleString('id-ID')}
-                            </td>
-                            <td className="py-2 px-2.5 text-right font-mono font-bold text-green-600 dark:text-green-400">
-                              Rp {u.total_spent.toLocaleString('id-ID')}
-                            </td>
+                  {achievementCategory === 'users' && (() => {
+                    const rawUsers = achievementsData?.top_users || [];
+                    const q = achievementSearch.trim().toLowerCase();
+                    const filteredUsers = rawUsers
+                      .filter((u) => {
+                        if (!q) return true;
+                        return (
+                          (u.name || '').toLowerCase().includes(q) ||
+                          (u.santri_names || '').toLowerCase().includes(q) ||
+                          (u.phone || '').toLowerCase().includes(q) ||
+                          (u.email || '').toLowerCase().includes(q)
+                        );
+                      })
+                      .sort((a, b) => {
+                        if (achievementSort === 'orders_desc') {
+                          return (b.total_orders || 0) - (a.total_orders || 0) || (b.total_spent || 0) - (a.total_spent || 0);
+                        }
+                        if (achievementSort === 'santri_desc') {
+                          return (b.santri_count || 0) - (a.santri_count || 0) || (b.total_spent || 0) - (a.total_spent || 0);
+                        }
+                        if (achievementSort === 'name_asc') {
+                          return (a.name || '').localeCompare(b.name || 'id');
+                        }
+                        return (b.total_spent || 0) - (a.total_spent || 0) || (b.total_orders || 0) - (a.total_orders || 0);
+                      });
+
+                    return (
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-800 text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                            <th className="py-2 px-2.5 w-12 text-center">Rank</th>
+                            <th className="py-2 px-2.5">Nama User / Akun Wali</th>
+                            <th className="py-2 px-2.5">Santri yang Pernah Dibelikan</th>
+                            <th className="py-2 px-2.5 text-center hidden md:table-cell">Integritas</th>
+                            <th className="py-2 px-2.5 text-right">Total Pesanan</th>
+                            <th className="py-2 px-2.5 text-right">Total Pembelian</th>
+                            <th className="py-2 px-2.5 text-center w-24">Rincian</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 dark:divide-gray-800/80">
+                          {filteredUsers.length === 0 ? (
+                            <tr>
+                              <td colSpan="7" className="py-6 text-center text-gray-400 text-xs">
+                                Tidak ada data prestasi user yang cocok dengan pencarian.
+                              </td>
+                            </tr>
+                          ) : (
+                            filteredUsers.map((u, idx) => {
+                              const displayRank = idx + 1;
+                              return (
+                                <tr key={u.user_id} className="hover:bg-gray-50/80 dark:hover:bg-gray-800/40 transition-colors">
+                                  <td className="py-2 px-2.5 text-center align-top">
+                                    <span className={`inline-block font-mono font-black text-xs px-1.5 py-0.2 rounded-none border ${
+                                      displayRank === 1 
+                                        ? 'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950 dark:text-amber-200' 
+                                        : displayRank === 2
+                                        ? 'bg-slate-100 text-slate-800 border-slate-300 dark:bg-slate-800 dark:text-slate-200'
+                                        : displayRank === 3
+                                        ? 'bg-orange-100 text-orange-900 border-orange-300 dark:bg-orange-950 dark:text-orange-200'
+                                        : 'bg-gray-50 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-400'
+                                    }`}>
+                                      #{displayRank}
+                                    </span>
+                                  </td>
+                                  <td className="py-2 px-2.5 align-top">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="font-bold text-gray-900 dark:text-gray-100">
+                                        {u.name}
+                                      </span>
+                                      {displayRank === 1 && <Trophy className="w-3 h-3 text-amber-500 shrink-0" />}
+                                      {u.achievement && (
+                                        <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-none text-[9.5px] font-bold border ${u.achievement.cls}`}>
+                                          <span>{u.achievement.badge}</span>
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="text-[10px] text-gray-500 dark:text-gray-400 font-mono mt-0.5 flex items-center gap-1.5 flex-wrap">
+                                      {u.phone && u.phone !== '-' && <span>📱 {u.phone}</span>}
+                                      {u.email && u.email !== '-' && <span className="truncate max-w-[180px]">✉️ {u.email}</span>}
+                                    </div>
+                                  </td>
+                                  <td className="py-2 px-2.5 align-top">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="inline-flex items-center gap-1 px-1.5 py-0.2 bg-green-50 dark:bg-green-950/60 text-green-700 dark:text-green-300 border border-green-300 dark:border-green-800 text-[10px] font-bold font-mono rounded-none">
+                                        <Users className="w-2.5 h-2.5" />
+                                        <span>{u.santri_count || 1} Santri</span>
+                                      </span>
+                                    </div>
+                                    <div className="mt-1 space-y-0.5">
+                                      {(u.santris_list || []).slice(0, 3).map((s, sIdx) => (
+                                        <div key={sIdx} className="text-[10.5px] text-gray-700 dark:text-gray-300 flex items-center gap-1 flex-wrap leading-tight">
+                                          <span className="font-bold text-gray-900 dark:text-white">• {s.name}</span>
+                                          {s.room && s.room !== '-' && (
+                                            <span className="text-[9.5px] text-gray-500 dark:text-gray-400">({s.room})</span>
+                                          )}
+                                          <span className="text-[9.5px] font-mono text-green-700 dark:text-green-400 font-semibold">
+                                            [{s.order_count}x • Rp {Math.round(s.total_spent || 0).toLocaleString('id-ID')}]
+                                          </span>
+                                        </div>
+                                      ))}
+                                      {(u.santris_list?.length || 0) > 3 && (
+                                        <button
+                                          type="button"
+                                          onClick={() => setSelectedUserAchievementId(u.user_id)}
+                                          className="text-[10px] text-green-600 dark:text-green-400 font-bold hover:underline cursor-pointer"
+                                        >
+                                          + {(u.santris_list.length - 3)} santri lainnya...
+                                        </button>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td className="py-2 px-2.5 text-center align-top hidden md:table-cell">
+                                    {u.penalty_points === 0 ? (
+                                      <span className="inline-block px-1.5 py-0.2 text-[9px] font-bold bg-green-50 text-green-700 border border-green-200 dark:bg-green-950/40 dark:text-green-300 dark:border-green-800 rounded-none">
+                                        Disiplin (0)
+                                      </span>
+                                    ) : (
+                                      <span className="inline-block px-1.5 py-0.2 text-[9px] font-bold bg-amber-50 text-amber-800 border border-amber-200 rounded-none">
+                                        {u.penalty_points} Poin
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="py-2 px-2.5 text-right align-top font-mono">
+                                    <div className="font-bold text-gray-900 dark:text-gray-100">
+                                      {u.total_orders.toLocaleString('id-ID')}x
+                                    </div>
+                                    <div className="text-[9.5px] text-gray-400">
+                                      {u.completed_orders ?? u.total_orders} selesai
+                                    </div>
+                                  </td>
+                                  <td className="py-2 px-2.5 text-right align-top font-mono font-bold text-green-600 dark:text-green-400 whitespace-nowrap">
+                                    Rp {Math.round(u.total_spent || 0).toLocaleString('id-ID')}
+                                  </td>
+                                  <td className="py-2 px-2.5 text-center align-top">
+                                    <button
+                                      type="button"
+                                      onClick={() => setSelectedUserAchievementId(u.user_id)}
+                                      className="inline-flex items-center gap-1 px-2 py-1 bg-green-50 dark:bg-green-950/60 hover:bg-green-600 hover:text-white dark:hover:bg-green-600 text-green-700 dark:text-green-300 border border-green-300 dark:border-green-800 text-[10px] font-bold rounded-none transition-colors cursor-pointer whitespace-nowrap"
+                                      title="Lihat rincian prestasi user & seluruh santri yang pernah dibelikan"
+                                    >
+                                      <Crown className="w-3 h-3 shrink-0" />
+                                      <span>Detail ({u.santri_count || 1})</span>
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    );
+                  })()}
 
                   {achievementCategory === 'canteens' && (
                     <table className="w-full text-left text-xs border-collapse">
@@ -1411,6 +1546,13 @@ export default function AdminLogs() {
             </div>
           </div>
         )}
+
+        {/* MODAL PRESTASI & RIWAYAT SANTRI PER USER (WALI) */}
+        <UserAchievementModal
+          userId={selectedUserAchievementId}
+          isOpen={Boolean(selectedUserAchievementId)}
+          onClose={() => setSelectedUserAchievementId(null)}
+        />
       </div>
     </div>
   );

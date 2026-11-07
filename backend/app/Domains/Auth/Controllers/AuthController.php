@@ -73,12 +73,12 @@ class AuthController extends Controller
 
             $googleUser = $response->json();
             
-            if (!isset($googleUser['email'])) {
-                return response()->json(['message' => 'Email tidak ditemukan dari akun Google'], 401);
+            if (!isset($googleUser['email']) || (($googleUser['email_verified'] ?? 'true') !== 'true' && ($googleUser['email_verified'] ?? true) !== true)) {
+                return response()->json(['message' => 'Email Google tidak ditemukan atau belum terverifikasi'], 401);
             }
 
-            // \u2705 Verifikasi bahwa token dikeluarkan untuk aplikasi ini (bukan dari app Google lain)
-            $googleClientId = config('services.google.client_id');
+            // ✅ Verifikasi bahwa token dikeluarkan untuk aplikasi ini (bukan dari app Google lain)
+            $googleClientId = config('services.google.client_id') ?: config('filesystems.disks.google.clientId');
             if ($googleClientId && isset($googleUser['aud']) && $googleUser['aud'] !== $googleClientId) {
                 return response()->json(['message' => 'Token Google tidak valid untuk aplikasi ini.'], 401);
             }
@@ -120,7 +120,8 @@ class AuthController extends Controller
             ]);
 
         } catch (\Exception $e) {
-            return response()->json(['message' => 'Terjadi kesalahan saat memproses login Google: ' . $e->getMessage()], 500);
+            \Illuminate\Support\Facades\Log::error('Google Login Error: ' . $e->getMessage());
+            return response()->json(['message' => 'Terjadi kesalahan saat memproses login Google.'], 500);
         }
     }
 

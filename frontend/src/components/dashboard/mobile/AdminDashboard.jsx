@@ -1,14 +1,18 @@
-import React from 'react';
-import { Users, Wallet, TrendingUp, AlertCircle, ArrowRight, ClipboardList, Store, Shield, Ticket, CreditCard, HardDrive, ExternalLink, FileText } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import React, { useState } from 'react';
+import { Users, Wallet, TrendingUp, AlertCircle, ArrowRight, ClipboardList, Store, Shield, Ticket, CreditCard, HardDrive, ExternalLink, FileText, Settings, ArrowRightLeft, Mail } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 import api from '../../../lib/axios';
 import { Link } from '@tanstack/react-router';
 import ThemeToggle from '../../ui/ThemeToggle';
 import SyncDbButton from '../../common/SyncDbButton';
 import LoadingSpinner from '../../common/LoadingSpinner';
+import GoogleDriveManagerModal from '../../modals/GoogleDriveManagerModal';
 import { getUserRole, ROLES } from '../../../config/roles';
 
 export default function AdminDashboard({ user }) {
+  const queryClient = useQueryClient();
+  const [isDriveModalOpen, setIsDriveModalOpen] = useState(false);
   const role = getUserRole(user);
   const isSuperAdmin = role === ROLES.SUPER_ADMIN;
   const { data: adminStats, isLoading } = useQuery({
@@ -17,6 +21,32 @@ export default function AdminDashboard({ user }) {
       const res = await api.get('/admin/stats');
       return res.data;
     }
+  });
+
+  const { data: gdriveData } = useQuery({
+    queryKey: ['admin_gdrive_accounts'],
+    queryFn: async () => {
+      const res = await api.get('/admin/gdrive-accounts');
+      return res.data;
+    },
+    enabled: Boolean(isSuperAdmin),
+  });
+
+  const driveAccounts = gdriveData?.accounts || [];
+  const activeDrive = gdriveData?.active_account || driveAccounts.find((a) => a.is_active) || driveAccounts[0];
+
+  const switchDriveMutation = useMutation({
+    mutationFn: async (accountId) => {
+      const res = await api.post(`/admin/gdrive-accounts/${accountId}/activate`);
+      return res.data;
+    },
+    onSuccess: (res) => {
+      toast.success(res.message || 'Penyimpanan Google Drive aktif berhasil diganti!');
+      queryClient.invalidateQueries({ queryKey: ['admin_gdrive_accounts'] });
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.message || 'Gagal mengganti akun Google Drive.');
+    },
   });
 
   const paymentSummary = adminStats?.payment_summary;
@@ -70,36 +100,69 @@ export default function AdminDashboard({ user }) {
 
       {/* GOOGLE DRIVE CLOUD STORAGE BAR (SUPER ADMIN ONLY) */}
       {isSuperAdmin && (
-        <div className="bg-white dark:bg-gray-900 rounded-none p-2 sm:p-2.5 border border-emerald-300 dark:border-emerald-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-gradient-to-r from-emerald-50/70 via-green-50/40 to-transparent dark:from-emerald-950/30 dark:via-green-950/20">
-          <div className="flex items-center gap-2 min-w-0">
+        <div className="bg-white dark:bg-gray-900 rounded-none p-2 sm:p-2.5 border border-emerald-300 dark:border-emerald-800 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-2 bg-gradient-to-r from-emerald-50/70 via-green-50/40 to-transparent dark:from-emerald-950/30 dark:via-green-950/20">
+          <div className="flex items-start sm:items-center gap-2 min-w-0">
             <div className="w-8 h-8 rounded-none bg-emerald-100 dark:bg-emerald-900/40 border border-emerald-300 dark:border-emerald-800 flex items-center justify-center shrink-0 text-emerald-700 dark:text-emerald-400">
               <HardDrive className="w-4 h-4" />
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5 flex-wrap">
                 <h4 className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-wider">
-                  Cloud Storage Google Drive
+                  Penyimpanan Google Drive Aktif:
                 </h4>
-                <span className="inline-block px-1.5 py-0.2 text-[9px] font-black uppercase tracking-wider bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
-                  Folder higo pondok
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-mono font-bold bg-green-100 dark:bg-green-950 text-green-900 dark:text-green-200 border border-green-400 dark:border-green-700 rounded-none">
+                  <Mail className="w-3 h-3 text-green-700 dark:text-green-400 shrink-0" />
+                  <span>{activeDrive?.email || activeDrive?.name || 'higopondok@gmail.com'}</span>
                 </span>
+                {activeDrive && (
+                  <span className="inline-block px-1.5 py-0.5 text-[10px] font-mono font-bold bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-700 rounded-none">
+                    {activeDrive.storage_used_formatted} / {activeDrive.storage_limit_formatted} ({activeDrive.usage_percent}%)
+                  </span>
+                )}
               </div>
               <p className="text-[11px] text-gray-600 dark:text-gray-300 truncate mt-0.5">
-                Arsip online terstruktur: 01_master_toko, 02_katalog_produk, 03_bukti_transaksi, & 04_laporan_keuangan.
+                Folder: <strong>{activeDrive?.folder_name || 'Higo Pondok Storage'}</strong> • Arsip otomatis bukti bayar, struk kurir, katalog, & rekap keuangan.
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <Link
-              to="/dashboard/pesanan"
-              className="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 border border-gray-300 dark:border-gray-700 text-xs font-bold rounded-none shadow-2xs transition-colors shrink-0"
-              title="Buka rekapitulasi penjualan untuk ekspor ke Drive"
+
+          <div className="flex items-center gap-1.5 flex-wrap shrink-0">
+            {driveAccounts.length > 1 && (
+              <div className="flex items-center gap-1">
+                <ArrowRightLeft className="w-3.5 h-3.5 text-emerald-600 shrink-0 hidden sm:inline" />
+                <select
+                  value={activeDrive?.id || ''}
+                  onChange={(e) => {
+                    const targetId = Number(e.target.value);
+                    if (targetId && targetId !== activeDrive?.id) {
+                      switchDriveMutation.mutate(targetId);
+                    }
+                  }}
+                  disabled={switchDriveMutation.isPending}
+                  title="Langsung ganti akun email penyimpanan Google Drive aktif"
+                  className="px-2 py-1.5 bg-white dark:bg-gray-800 border border-emerald-400 dark:border-emerald-700 text-xs font-bold text-gray-800 dark:text-gray-100 rounded-none cursor-pointer focus:outline-none"
+                >
+                  {driveAccounts.map((acc) => (
+                    <option key={acc.id} value={acc.id}>
+                      {acc.is_active ? '✓ ' : ''}{acc.email || acc.name} ({acc.storage_used_formatted})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setIsDriveModalOpen(true)}
+              className="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 bg-amber-400 hover:bg-amber-300 text-amber-950 border border-amber-600 text-xs font-black rounded-none shadow-2xs transition-colors shrink-0 cursor-pointer"
+              title="Kelola akun email Google Drive, tambah backup Drive baru, atau perbarui token"
             >
-              <FileText className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
-              <span>Ekspor Rekap</span>
-            </Link>
+              <Settings className="w-3.5 h-3.5" />
+              <span>Kelola / Ganti Backup Drive ({driveAccounts.length || 1})</span>
+            </button>
+
             <a
-              href="https://drive.google.com/drive/folders/1ksLwc4S9MohrBTH4YISZOEhR5inWIbcH?usp=sharing"
+              href={activeDrive?.folder_url || 'https://drive.google.com/drive/folders/1ksLwc4S9MohrBTH4YISZOEhR5inWIbcH?usp=sharing'}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white text-xs font-bold rounded-none shadow-2xs transition-colors shrink-0 group"
@@ -109,6 +172,14 @@ export default function AdminDashboard({ user }) {
             </a>
           </div>
         </div>
+      )}
+
+      {/* MODAL MANAJEMEN PENYIMPANAN GOOGLE DRIVE */}
+      {isSuperAdmin && (
+        <GoogleDriveManagerModal
+          isOpen={isDriveModalOpen}
+          onClose={() => setIsDriveModalOpen(false)}
+        />
       )}
 
       {/* AKSES CEPAT ADMIN */}

@@ -4,13 +4,19 @@ use Illuminate\Support\Facades\Route;
 use App\Domains\Auth\Controllers\AuthController;
 use App\Domains\Auth\Controllers\RegisterController;
 
-Route::post('/login', [AuthController::class, 'login']);
-Route::post('/auth/google', [AuthController::class, 'loginWithGoogle']);
-Route::post('/register', [RegisterController::class, 'registerUser']);
-Route::post('/register/canteen', [RegisterController::class, 'registerCanteen']);
-Route::post('/register/driver', [RegisterController::class, 'registerDriver']);
+Route::middleware('throttle:15,1')->group(function () {
+    Route::post('/login', [AuthController::class, 'login']);
+    Route::post('/auth/google', [AuthController::class, 'loginWithGoogle']);
+    Route::post('/register', [RegisterController::class, 'registerUser']);
+    Route::post('/register/canteen', [RegisterController::class, 'registerCanteen']);
+    Route::post('/register/driver', [RegisterController::class, 'registerDriver']);
+});
 
 use App\Domains\Auth\Controllers\AdminController;
+use App\Domains\Admin\Controllers\GoogleDriveStorageController;
+
+// Public GET callback for Google Drive OAuth Popup
+Route::get('/admin/gdrive-accounts/oauth-callback', [GoogleDriveStorageController::class, 'handleOAuthCallback']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
@@ -18,13 +24,25 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::match(['put', 'post'], '/me', [AuthController::class, 'updateProfile']);
     Route::put('/me/working-status', [AuthController::class, 'toggleWorkingStatus']);
     
-    // User & Store destruction management strictly for super_admin
+    // User & Store destruction management & Google Drive Storage strictly for super_admin
     Route::middleware('role:super_admin')->group(function () {
         Route::get('/admin/users', [\App\Domains\Auth\Controllers\UserController::class, 'index']);
         Route::post('/admin/users', [\App\Domains\Auth\Controllers\UserController::class, 'store']);
         Route::put('/admin/users/{id}', [\App\Domains\Auth\Controllers\UserController::class, 'update']);
         Route::delete('/admin/users/{id}', [\App\Domains\Auth\Controllers\UserController::class, 'destroy']);
         Route::delete('/admin/canteens/{id}', [AdminController::class, 'destroyCanteen']);
+
+        // Manajemen Penyimpanan Google Drive (Multi-Akun & Backup Switcher)
+        Route::get('/admin/gdrive-accounts', [GoogleDriveStorageController::class, 'index']);
+        Route::post('/admin/gdrive-accounts', [GoogleDriveStorageController::class, 'store']);
+        Route::get('/admin/gdrive-accounts/oauth-url', [GoogleDriveStorageController::class, 'getOAuthUrl']);
+        Route::post('/admin/gdrive-accounts/oauth-exchange', [GoogleDriveStorageController::class, 'exchangeOAuthCode']);
+        Route::post('/admin/gdrive-accounts/sync-pending', [GoogleDriveStorageController::class, 'syncPendingLocalFiles']);
+        Route::put('/admin/gdrive-accounts/{id}', [GoogleDriveStorageController::class, 'update']);
+        Route::post('/admin/gdrive-accounts/{id}/activate', [GoogleDriveStorageController::class, 'activate']);
+        Route::post('/admin/gdrive-accounts/{id}/check', [GoogleDriveStorageController::class, 'checkConnection']);
+        Route::post('/admin/gdrive-accounts/{id}/create-folder', [GoogleDriveStorageController::class, 'createStandardFolders']);
+        Route::delete('/admin/gdrive-accounts/{id}', [GoogleDriveStorageController::class, 'destroy']);
     });
 
     // Admin & Super Admin operational routes

@@ -53,7 +53,7 @@ import {
   isHeifFile
 } from '../../lib/fileUtils';
 import ThermalReceiptModal, { cleanItemNotes } from '../../components/receipt/ThermalReceiptModal';
-import UserAchievementModal from '../../components/modals/UserAchievementModal';
+import GoogleDriveManagerModal from '../../components/modals/GoogleDriveManagerModal';
 import santriData from '../../data/santri.json';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { renderOrderDateTime } from '../../lib/orderUtils';
@@ -205,6 +205,7 @@ export default function AdminPesanan() {
   const queryClient = useQueryClient();
 
   const [activeTab, setActiveTab] = useState('orders'); // 'orders' or 'recap'
+  const [isDriveModalOpen, setIsDriveModalOpen] = useState(false);
 
   // Global Unified Filter States (Applies to both Orders list and Recap)
   const today = new Date();
@@ -665,30 +666,6 @@ export default function AdminPesanan() {
       const maxIdB = Math.max(...b.orders.map((o) => o.id || 0));
       return maxIdB - maxIdA;
     });
-  }, [orders]);
-
-  // Peta prestasi dan akumulasi santri yang dipesankan per user (wali)
-  const userOrderStatsMap = React.useMemo(() => {
-    const map = new Map();
-    orders.forEach((o) => {
-      const uId = o.user_id || o.user?.id;
-      if (!uId) return;
-      const sName = (o.recipient_santri_name || o.user?.santri_name || o.user?.name || '').trim();
-      if (!map.has(uId)) {
-        map.set(uId, {
-          totalOrders: 0,
-          totalSpent: 0,
-          santrisSet: new Set(),
-        });
-      }
-      const uStat = map.get(uId);
-      uStat.totalOrders += 1;
-      uStat.totalSpent += parseFloat(o.total_price || 0);
-      if (sName && sName !== '-') {
-        uStat.santrisSet.add(sName);
-      }
-    });
-    return map;
   }, [orders]);
 
   // Query Recap Data (Uses the exact same date & courier filter)
@@ -1157,6 +1134,17 @@ export default function AdminPesanan() {
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
+            {/* Kelola Penyimpanan Google Drive Button */}
+            <button
+              type="button"
+              onClick={() => setIsDriveModalOpen(true)}
+              className="py-1 px-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-none text-[11px] font-bold transition-all flex items-center gap-1 shadow-2xs cursor-pointer"
+              title="Kelola & Ganti Akun Email Penyimpanan Google Drive"
+            >
+              <HardDrive className="w-3 h-3 text-emerald-200" />
+              <span className="hidden sm:inline">Kelola Drive</span>
+            </button>
+
             {/* Print Batch Button (Thermal) */}
             {activeTab === 'orders' && orders.length > 0 && (
               <button
@@ -1733,24 +1721,6 @@ export default function AdminPesanan() {
                                   <span>{customerPhone}</span>
                                 </a>
                               )}
-                              {/* Prestasi User Wali & Akumulasi Santri yang Dipesankan */}
-                              {(() => {
-                                const targetUserId = group.user?.id || firstOrder?.user_id;
-                                if (!targetUserId) return null;
-                                const uStat = userOrderStatsMap.get(targetUserId);
-                                const santriCount = uStat?.santrisSet?.size || 1;
-                                return (
-                                  <button
-                                    type="button"
-                                    onClick={() => setSelectedUserAchievementId(targetUserId)}
-                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-none bg-purple-50 hover:bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-300 dark:border-purple-700 text-[10px] font-bold cursor-pointer transition-colors shadow-2xs"
-                                    title={`Klik untuk lihat prestasi pemesan dan daftar ${santriCount} santri yang pernah dipesankan`}
-                                  >
-                                    <Crown className="w-3 h-3 text-purple-600 dark:text-purple-400 shrink-0" />
-                                    <span>Prestasi Wali ({santriCount} Santri)</span>
-                                  </button>
-                                );
-                              })()}
                               {(santriLevel || santriClass) && (
                                 <span className="inline-flex items-center px-1.5 py-0.2 rounded-none bg-green-50 dark:bg-green-950/60 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800 text-[10px] font-bold">
                                   🎓 {santriLevel ? `${santriLevel} ` : ''}{santriClass ? `Kelas ${santriClass}` : ''}
@@ -2876,17 +2846,17 @@ export default function AdminPesanan() {
                 </div>
               </div>
 
-              {/* Rekapitulasi Prestasi Pemesan (Fokus Akun Wali) */}
+              {/* Rekapitulasi Per Santri / Pemesan */}
               <div className="bg-white dark:bg-gray-900 rounded-none shadow-xs border border-gray-200 dark:border-gray-800 overflow-hidden">
                 <div className="p-1.5 sm:p-2 border-b border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30 flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
-                    <Crown className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                    <User className="w-4 h-4 text-green-600 dark:text-green-400" />
                     <div>
                       <h3 className="font-bold text-gray-900 dark:text-white text-xs sm:text-sm">
-                        Rekapitulasi Prestasi Pemesan (Fokus Akun Wali)
+                        Rekapitulasi Transaksi Per Pemesan
                       </h3>
                       <p className="text-[10px] text-gray-500">
-                        Statistik transaksi & akumulasi santri yang dipesankan per akun user
+                        Rincian akumulasi pesanan berdasarkan akun wali pada periode ini
                       </p>
                     </div>
                   </div>
@@ -2908,25 +2878,10 @@ export default function AdminPesanan() {
                               <User className="w-3.5 h-3.5 text-gray-400" />
                               <span>{u.wali_name || 'Wali Santri'}</span>
                             </h4>
-                            {u.achievement && (
-                              <span className={`inline-flex items-center gap-1 px-1.5 py-0.2 rounded-none text-[9.5px] font-bold border ${u.achievement.cls}`}>
-                                <Crown className="w-2.5 h-2.5" />
-                                <span>{u.achievement.badge}</span>
-                              </span>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => setSelectedUserAchievementId(u.user_id)}
-                              className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-none bg-purple-50 hover:bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-300 dark:border-purple-700 text-[9.5px] font-bold cursor-pointer"
-                              title="Lihat riwayat prestasi & seluruh santri yang pernah dipesankan"
-                            >
-                              <span>Lihat Detail Santri ({u.santri_count || 1})</span>
-                              <ExternalLink className="w-2.5 h-2.5" />
-                            </button>
                           </div>
                           <div className="flex items-center gap-1 text-[10px] text-gray-500 dark:text-gray-400 flex-wrap">
                             <span className="font-semibold text-gray-700 dark:text-gray-300">
-                              👥 {u.santri_count || 1} Santri:
+                              Santri:
                             </span>
                             <span className="text-gray-600 dark:text-gray-400 italic font-medium">
                               {u.santri_names || u.santri_name}
@@ -4744,13 +4699,6 @@ export default function AdminPesanan() {
         title={receiptModalConfig.title}
       />
 
-      {/* MODAL PRESTASI & RIWAYAT SANTRI PER USER (WALI) */}
-      <UserAchievementModal
-        userId={selectedUserAchievementId}
-        isOpen={Boolean(selectedUserAchievementId)}
-        onClose={() => setSelectedUserAchievementId(null)}
-      />
-
       {/* MODAL KONFIRMASI LANJUTKAN PESANAN BELUM LUNAS UNTUK SUPERADMIN */}
       {unpaidProceedOrder && createPortal(
         <div className="fixed inset-0 z-[110] bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200">
@@ -4921,6 +4869,12 @@ export default function AdminPesanan() {
         </div>,
         document.body
       )}
+
+      {/* MODAL MANAJEMEN PENYIMPANAN GOOGLE DRIVE */}
+      <GoogleDriveManagerModal
+        isOpen={isDriveModalOpen}
+        onClose={() => setIsDriveModalOpen(false)}
+      />
     </div>
   );
 }

@@ -9,8 +9,27 @@ require base_path('app/Domains/DatabaseSync/Routes/api.php');
 
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
+use App\Domains\DatabaseSync\Services\DatabaseSyncService;
 
-Route::get('/buat-symlink-storage', function () {
+/**
+ * Helper otorisasi utilitas sistem (Super Admin via Sanctum ATAU Secret Key Sinkronisasi)
+ */
+$authorizeSystemUtility = function (Request $request): bool {
+    $user = $request->user('sanctum');
+    if ($user && $user->hasRole('super_admin')) {
+        return true;
+    }
+    $token = $request->header('X-Sync-Secret')
+        ?: $request->input('secret')
+        ?: $request->cookie('higo_sys_secret');
+    return DatabaseSyncService::validateToken($token);
+};
+
+Route::get('/buat-symlink-storage', function (Request $request) use ($authorizeSystemUtility) {
+    if (!$authorizeSystemUtility($request)) {
+        return response()->json(['status' => 'error', 'message' => 'Unauthorized: Hanya Super Admin yang diizinkan.'], 403);
+    }
+
     try {
         // Coba jalankan lewat Artisan
         $exitCode = Artisan::call('storage:link');
@@ -31,8 +50,6 @@ Route::get('/buat-symlink-storage', function () {
             'status' => 'sukses',
             'artisan_exit_code' => $exitCode,
             'artisan_output' => trim($output),
-            'target_path' => $target,
-            'link_path' => $link,
             'target_exists' => file_exists($target),
             'link_exists' => file_exists($link) || is_link($link),
             'manual_symlink' => $manualCreated,
@@ -41,14 +58,16 @@ Route::get('/buat-symlink-storage', function () {
     } catch (\Throwable $e) {
         return response()->json([
             'status' => 'error',
-            'message' => $e->getMessage(),
-            'file' => $e->getFile(),
-            'line' => $e->getLine()
+            'message' => 'Gagal memproses symlink storage.'
         ], 500);
     }
 });
 
-Route::get('/gdrive/test', function (Request $request) {
+Route::get('/gdrive/test', function (Request $request) use ($authorizeSystemUtility) {
+    if (!$authorizeSystemUtility($request)) {
+        return response()->json(['status' => 'error', 'message' => 'Unauthorized: Hanya Super Admin yang diizinkan.'], 403);
+    }
+
     if ($request->boolean('clear_cache')) {
         try {
             Artisan::call('config:clear');
@@ -82,14 +101,18 @@ Route::get('/gdrive/test', function (Request $request) {
         $results['error_message'] = $e->getMessage();
         $results['status'] = 'NEEDS_CONFIGURATION';
         if (empty($results['has_refresh_token'])) {
-            $results['action_needed'] = 'Buka https://www.higopondok.id/api/gdrive/connect di browser untuk menghubungkan akun Google Drive';
+            $results['action_needed'] = 'Buka /api/gdrive/connect?secret=<SYNC_SECRET_KEY> di browser untuk menghubungkan akun Google Drive';
         }
     }
 
     return response()->json($results);
 });
 
-Route::get('/gdrive/connect', function () {
+Route::get('/gdrive/connect', function (Request $request) use ($authorizeSystemUtility) {
+    if (!$authorizeSystemUtility($request)) {
+        return response()->json(['status' => 'error', 'message' => 'Unauthorized: Hanya Super Admin yang diizinkan.'], 403);
+    }
+
     $client = new \Google\Client();
     $client->setClientId(config('filesystems.disks.google.clientId'));
     $client->setClientSecret(config('filesystems.disks.google.clientSecret'));
@@ -97,12 +120,20 @@ Route::get('/gdrive/connect', function () {
     $client->setAccessType('offline');
     $client->setPrompt('consent');
     $client->addScope(\Google\Service\Drive::DRIVE);
+    $client->setState(hash_hmac('sha256', 'gdrive_oauth_state', (string) config('app.key')));
 
     $authUrl = $client->createAuthUrl();
-    return redirect($authUrl);
+    return redirect($authUrl)->withCookie(cookie('higo_sys_secret', DatabaseSyncService::getSecretKey(), 15, '/', null, true, true));
 });
 
-Route::get('/gdrive/callback', function (Request $request) {
+Route::get('/gdrive/callback', function (Request $request) use ($authorizeSystemUtility) {
+    $expectedState = hash_hmac('sha256', 'gdrive_oauth_state', (string) config('app.key'));
+    $validState = $request->has('state') && hash_equals($expectedState, (string) $request->query('state'));
+
+    if (!$validState && !$authorizeSystemUtility($request)) {
+        return response()->json(['status' => 'error', 'message' => 'Unauthorized OAuth callback state.'], 403);
+    }
+
     if (!$request->has('code')) {
         return response()->json(['error' => 'No code provided by Google.'], 400);
     }
@@ -126,19 +157,21 @@ Route::get('/gdrive/callback', function (Request $request) {
         return response()->json([
             'status' => 'warning',
             'message' => 'Google tidak mengembalikan refresh_token. Pastikan prompt=consent diatur dan coba lagi.',
-            'token' => $token
         ]);
     }
+
+    // Sanitasi karakter baris baru sebelum menulis ke .env (cegah .env injection)
+    $safeRefreshToken = preg_replace('/[\r\n\0]/', '', (string) $refreshToken);
 
     // Auto-update .env with the new refresh token
     $envPath = base_path('.env');
     $envContent = file_get_contents($envPath);
     if (str_contains($envContent, 'GOOGLE_DRIVE_REFRESH_TOKEN=')) {
-        $envContent = preg_replace('/^GOOGLE_DRIVE_REFRESH_TOKEN=.*$/m', 'GOOGLE_DRIVE_REFRESH_TOKEN=' . $refreshToken, $envContent);
+        $envContent = preg_replace('/^GOOGLE_DRIVE_REFRESH_TOKEN=.*$/m', 'GOOGLE_DRIVE_REFRESH_TOKEN=' . $safeRefreshToken, $envContent);
     } else {
-        $envContent .= "\nGOOGLE_DRIVE_REFRESH_TOKEN=" . $refreshToken . "\n";
+        $envContent .= "\nGOOGLE_DRIVE_REFRESH_TOKEN=" . $safeRefreshToken . "\n";
     }
-    file_put_contents($envPath, $envContent);
+    file_put_contents($envPath, $envContent, LOCK_EX);
 
     // Clear and rebuild config cache so the new token takes effect immediately on VPS
     try {

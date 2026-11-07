@@ -40,11 +40,15 @@ class MediaStreamController extends Controller
         // 1. If cached, serve immediately (1-2ms response time)
         if (file_exists($cacheFile) && filesize($cacheFile) > 0) {
             $mime = file_exists($metaFile) ? trim(file_get_contents($metaFile)) : 'image/jpeg';
+            if (!preg_match('#^(image/(jpeg|png|gif|webp|bmp)|application/pdf)$#i', $mime)) {
+                $mime = 'image/jpeg';
+            }
             return response()->file($cacheFile, [
                 'Content-Type' => $mime,
                 'Cache-Control' => 'public, max-age=31536000, immutable',
                 'Access-Control-Allow-Origin' => '*',
                 'Content-Disposition' => 'inline; filename="gdrive_' . $fileId . '.jpg"',
+                'X-Content-Type-Options' => 'nosniff',
                 'X-Drive-Cache' => 'HIT'
             ]);
         }
@@ -53,23 +57,49 @@ class MediaStreamController extends Controller
         $content = null;
         $mime = 'image/jpeg';
 
-        // Attempt A: Use Google Drive API client if configured
+        // Attempt A: Use Google Drive API client if configured (check active account & backup accounts)
         try {
-            $config = config('filesystems.disks.google');
-            if (!empty($config['clientId']) && !empty($config['clientSecret']) && !empty($config['refreshToken'])) {
-                $client = new \Google\Client();
-                $client->setClientId($config['clientId']);
-                $client->setClientSecret($config['clientSecret']);
-                $client->refreshToken($config['refreshToken']);
-                $service = new \Google\Service\Drive($client);
-
-                $fileMeta = $service->files->get($fileId, ['fields' => 'mimeType, size', 'supportsAllDrives' => true]);
-                if (!empty($fileMeta->mimeType)) {
-                    $mime = $fileMeta->mimeType;
+            $configsToTry = [];
+            if (\Illuminate\Support\Facades\Schema::hasTable('google_drive_accounts')) {
+                $dbAccounts = \App\Domains\Admin\GoogleDriveAccount::orderByDesc('is_active')->get();
+                foreach ($dbAccounts as $acc) {
+                    $configsToTry[] = [
+                        'clientId' => $acc->client_id ?: config('filesystems.disks.google.clientId'),
+                        'clientSecret' => $acc->client_secret ?: config('filesystems.disks.google.clientSecret'),
+                        'refreshToken' => $acc->refresh_token,
+                    ];
                 }
+            }
+            if (empty($configsToTry)) {
+                $configsToTry[] = config('filesystems.disks.google');
+            }
 
-                $response = $service->files->get($fileId, ['alt' => 'media', 'supportsAllDrives' => true]);
-                $content = $response->getBody()->getContents();
+            foreach ($configsToTry as $config) {
+                if (!empty($config['clientId']) && !empty($config['clientSecret']) && !empty($config['refreshToken'])) {
+                    try {
+                        $client = new \Google\Client();
+                        $client->setClientId($config['clientId']);
+                        $client->setClientSecret($config['clientSecret']);
+                        $token = $client->fetchAccessTokenWithRefreshToken($config['refreshToken']);
+                        if (is_array($token) && isset($token['error'])) {
+                            continue;
+                        }
+                        $service = new \Google\Service\Drive($client);
+
+                        $fileMeta = $service->files->get($fileId, ['fields' => 'mimeType, size', 'supportsAllDrives' => true]);
+                        if (!empty($fileMeta->mimeType)) {
+                            $mime = $fileMeta->mimeType;
+                        }
+
+                        $response = $service->files->get($fileId, ['alt' => 'media', 'supportsAllDrives' => true]);
+                        $content = $response->getBody()->getContents();
+                        if ($content) {
+                            break;
+                        }
+                    } catch (\Throwable $innerErr) {
+                        continue;
+                    }
+                }
             }
         } catch (\Throwable $e) {
             Log::warning("MediaStreamController Google Client error for {$fileId}: " . $e->getMessage());
@@ -89,7 +119,7 @@ class MediaStreamController extends Controller
                     CURLOPT_RETURNTRANSFER => true,
                     CURLOPT_FOLLOWLOCATION => true,
                     CURLOPT_TIMEOUT => 10,
-                    CURLOPT_SSL_VERIFYPEER => false,
+                    CURLOPT_SSL_VERIFYPEER => true,
                     CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 ]);
                 $result = curl_exec($ch);
@@ -100,7 +130,10 @@ class MediaStreamController extends Controller
                 if ($httpCode === 200 && $result && strlen($result) > 200) {
                     $content = $result;
                     if ($contentType && !str_contains($contentType, 'text/html')) {
-                        $mime = explode(';', $contentType)[0];
+                        $detectedMime = trim(explode(';', $contentType)[0]);
+                        $mime = preg_match('#^(image/(jpeg|png|gif|webp|bmp)|application/pdf)$#i', $detectedMime)
+                            ? $detectedMime
+                            : 'image/jpeg';
                     }
                     break;
                 }
@@ -111,9 +144,13 @@ class MediaStreamController extends Controller
             return response()->json(['error' => 'Unable to retrieve file from Google Drive'], 404);
         }
 
+        if (!preg_match('#^(image/(jpeg|png|gif|webp|bmp)|application/pdf)$#i', $mime)) {
+            $mime = 'image/jpeg';
+        }
+
         // Save to disk cache for lightning-fast future loads
-        @file_put_contents($cacheFile, $content);
-        @file_put_contents($metaFile, $mime);
+        @file_put_contents($cacheFile, $content, LOCK_EX);
+        @file_put_contents($metaFile, $mime, LOCK_EX);
 
         return response($content, 200, [
             'Content-Type' => $mime,
@@ -121,6 +158,7 @@ class MediaStreamController extends Controller
             'Cache-Control' => 'public, max-age=31536000, immutable',
             'Access-Control-Allow-Origin' => '*',
             'Content-Disposition' => 'inline; filename="gdrive_' . $fileId . '.jpg"',
+            'X-Content-Type-Options' => 'nosniff',
             'X-Drive-Cache' => 'MISS'
         ]);
     }
