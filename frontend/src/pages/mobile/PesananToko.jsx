@@ -1093,7 +1093,10 @@ ${itemsListText}
           const qty = parseInt(item.quantity || 0, 10);
           const price = parseFloat(item.price || 0);
           const defaultItemHpp = price > 1000 ? (price - 1000) : price;
-          const rawItemHpp = item.product?.hpp;
+          // Prioritaskan HPP item dari backend (sudah termasuk biaya topping/varian), baru fallback ke HPP produk dasar
+          const rawItemHpp = (item.hpp !== undefined && item.hpp !== null && parseFloat(item.hpp) > 0)
+            ? item.hpp
+            : item.product?.hpp;
           const hpp = parseFloat(
             rawItemHpp !== undefined && rawItemHpp !== null && parseFloat(rawItemHpp) > 0 
               ? rawItemHpp 

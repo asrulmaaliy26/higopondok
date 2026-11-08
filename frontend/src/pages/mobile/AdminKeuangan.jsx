@@ -108,9 +108,11 @@ export default function AdminKeuangan() {
     if (period === 'day') {
       params.start_date = startDate;
       params.end_date = startDate;
-    } else if (period === 'custom') {
-      params.start_date = startDate;
-      params.end_date = endDate || startDate;
+    } else if (period === 'custom' || period === 'all') {
+      if (startDate && endDate) {
+        params.start_date = startDate;
+        params.end_date = endDate;
+      }
     }
     return params;
   }, [period, startDate, endDate, selectedCanteen, selectedCourier, selectedExpenseCategory, searchQuery]);
@@ -131,6 +133,9 @@ export default function AdminKeuangan() {
 
   const summary = financeData?.financial_summary || {};
   const expenses = financeData?.expenses || [];
+  const dateBounds = financeData?.date_bounds || {};
+  const earliestAvailableDate = dateBounds.earliest_date || '2026-08-31';
+  const latestAvailableDate = dateBounds.latest_date || getTodayStr();
   const categoriesMap = financeData?.expense_categories || {
     operasional: 'Operasional Harian',
     server_it: 'Server, Hosting & Domain',
@@ -328,6 +333,21 @@ export default function AdminKeuangan() {
     toast.success('Laporan CSV Keuangan & Pengeluaran Kas berhasil diunduh!');
   };
 
+  const handleSelectPeriod = (pId) => {
+    setPeriod(pId);
+    if (pId === 'all') {
+      // Otomatis rentang penuh dari data paling awal hingga hari ini
+      setStartDate(earliestAvailableDate);
+      setEndDate(latestAvailableDate);
+    } else if (pId === 'day') {
+      setStartDate(getTodayStr());
+      setEndDate(getTodayStr());
+    } else if (pId === 'custom') {
+      if (!startDate) setStartDate(earliestAvailableDate);
+      if (!endDate) setEndDate(latestAvailableDate);
+    }
+  };
+
   const getPeriodLabel = () => {
     switch (period) {
       case 'day':
@@ -341,7 +361,7 @@ export default function AdminKeuangan() {
       case 'custom':
         return `${startDate} s/d ${endDate}`;
       case 'all':
-        return 'Semua Waktu';
+        return `Sepanjang Waktu (${startDate || earliestAvailableDate} s/d ${endDate || latestAvailableDate})`;
       default:
         return 'Bulan Ini';
     }
@@ -420,12 +440,12 @@ export default function AdminKeuangan() {
                 { id: 'month', label: 'Bulan Ini' },
                 { id: 'year', label: 'Tahun Ini' },
                 { id: 'custom', label: 'Rentang Tanggal' },
-                { id: 'all', label: 'Semua Waktu' },
+                { id: 'all', label: 'Sepanjang Waktu (Semua)' },
               ].map((p) => (
                 <button
                   key={p.id}
                   type="button"
-                  onClick={() => setPeriod(p.id)}
+                  onClick={() => handleSelectPeriod(p.id)}
                   className={`px-2 py-1 text-[10.5px] font-bold rounded-none border transition-colors cursor-pointer whitespace-nowrap ${
                     period === p.id
                       ? 'bg-green-600 text-white border-green-600'
@@ -437,10 +457,55 @@ export default function AdminKeuangan() {
               ))}
             </div>
 
-            {/* Input Tanggal jika mode 'day' atau 'custom' */}
+            {/* Input Rentang Tanggal interaktif (untuk mode 'custom', 'all', atau 'day') */}
+            {(period === 'custom' || period === 'all') && (
+              <div className="flex items-center gap-1.5 flex-wrap bg-gray-50 dark:bg-gray-800/80 p-1.5 border border-gray-200 dark:border-gray-700">
+                <span className="text-[10.5px] text-gray-600 dark:text-gray-300 font-bold flex items-center gap-1">
+                  <Calendar className="w-3 h-3 text-green-600" />
+                  <span>Rentang:</span>
+                </span>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => {
+                    setStartDate(e.target.value);
+                    if (period === 'all') setPeriod('custom');
+                  }}
+                  className="px-2 py-1 text-xs font-mono font-bold bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 rounded-none focus:outline-none focus:border-green-600"
+                />
+                <span className="text-xs font-bold text-gray-400">s/d</span>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => {
+                    setEndDate(e.target.value);
+                    if (period === 'all') setPeriod('custom');
+                  }}
+                  className="px-2 py-1 text-xs font-mono font-bold bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 rounded-none focus:outline-none focus:border-green-600"
+                />
+                {period === 'custom' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStartDate(earliestAvailableDate);
+                      setEndDate(latestAvailableDate);
+                      setPeriod('all');
+                    }}
+                    className="text-[10px] font-bold text-green-600 dark:text-green-400 hover:underline px-1 cursor-pointer"
+                    title="Pilih seluruh rentang dari data paling awal hingga hari ini"
+                  >
+                    Set Awal-Akhir
+                  </button>
+                )}
+              </div>
+            )}
+
             {period === 'day' && (
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] text-gray-500 font-bold">Tanggal:</span>
+              <div className="flex items-center gap-1.5 bg-gray-50 dark:bg-gray-800/80 p-1.5 border border-gray-200 dark:border-gray-700">
+                <span className="text-[10.5px] text-gray-600 dark:text-gray-300 font-bold flex items-center gap-1">
+                  <Calendar className="w-3 h-3 text-green-600" />
+                  <span>Pilih Tanggal:</span>
+                </span>
                 <input
                   type="date"
                   value={startDate}
@@ -448,26 +513,7 @@ export default function AdminKeuangan() {
                     setStartDate(e.target.value);
                     setEndDate(e.target.value);
                   }}
-                  className="px-2 py-1 text-xs font-mono bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100 rounded-none"
-                />
-              </div>
-            )}
-
-            {period === 'custom' && (
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[10px] text-gray-500 font-bold">Dari:</span>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="px-2 py-1 text-xs font-mono bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100 rounded-none"
-                />
-                <span className="text-[10px] text-gray-500 font-bold">s/d:</span>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="px-2 py-1 text-xs font-mono bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100 rounded-none"
+                  className="px-2 py-1 text-xs font-mono font-bold bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 rounded-none focus:outline-none focus:border-green-600"
                 />
               </div>
             )}

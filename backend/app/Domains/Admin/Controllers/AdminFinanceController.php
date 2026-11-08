@@ -124,8 +124,28 @@ class AdminFinanceController extends Controller
         $allTimeExpenses = (float) AdminExpense::sum('amount');
         $allTimeCashBalance = $allTimeNetAdminIncome - $allTimeExpenses;
 
+        // Tanggal paling awal dan paling akhir data tersedia untuk kemudahan filter rentang tanggal
+        $earliestOrderDate = Order::min('created_at');
+        $earliestExpenseDate = AdminExpense::min('expense_date');
+        $latestOrderDate = Order::max('created_at');
+        $latestExpenseDate = AdminExpense::max('expense_date');
+
+        $earliestDate = collect([$earliestOrderDate, $earliestExpenseDate])
+            ->filter()
+            ->map(fn($d) => \Carbon\Carbon::parse($d)->toDateString())
+            ->min() ?: now('Asia/Jakarta')->toDateString();
+
+        $latestDate = collect([$latestOrderDate, $latestExpenseDate])
+            ->filter()
+            ->map(fn($d) => \Carbon\Carbon::parse($d)->toDateString())
+            ->max() ?: now('Asia/Jakarta')->toDateString();
+
         return response()->json([
             'period' => $period,
+            'date_bounds' => [
+                'earliest_date' => $earliestDate,
+                'latest_date' => $latestDate,
+            ],
             'financial_summary' => [
                 'total_orders' => (int) ($recapSummary['total_orders'] ?? 0),
                 'grand_total_transactions' => $grandTotalTransactions,
