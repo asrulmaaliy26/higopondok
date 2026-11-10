@@ -1882,6 +1882,12 @@ export default function TugasKurir() {
                                 </div>
 
                                 {/* Items per toko */}
+                                {order.order_notes && (
+                                  <div className="text-[11px] font-bold text-emerald-950 dark:text-emerald-100 bg-emerald-100/90 dark:bg-emerald-950/80 px-2 py-1 border border-emerald-400 dark:border-emerald-700 mb-1 rounded-none flex items-start gap-1">
+                                    <span className="shrink-0 text-emerald-700 dark:text-emerald-400">💌</span>
+                                    <span className="break-words"><strong>Pesan Wali untuk Santri:</strong> "{order.order_notes}"</span>
+                                  </div>
+                                )}
                                 {order.custom_notes && (
                                   <div className="text-[11px] font-bold text-amber-950 dark:text-amber-100 bg-amber-100/90 dark:bg-amber-950/80 px-2 py-1 border border-amber-300 dark:border-amber-700 mb-1 rounded-none flex items-start gap-1">
                                     <span className="shrink-0 text-amber-700 dark:text-amber-400">📌</span>
@@ -2253,6 +2259,12 @@ export default function TugasKurir() {
 
                         {/* 3. COMPACT FOOD ITEMS BOX */}
                         <div className="bg-green-50/30 dark:bg-gray-800/50 rounded-lg p-2 space-y-0.5 text-xs border border-green-100/60 dark:border-gray-800">
+                          {order.order_notes && (
+                            <div className="text-[11.5px] font-bold text-emerald-950 dark:text-emerald-100 bg-emerald-100/90 dark:bg-emerald-950/80 p-1.5 border border-emerald-400 dark:border-emerald-700 mb-1 rounded-none flex items-start gap-1">
+                              <span className="shrink-0 text-emerald-700 dark:text-emerald-400">💌</span>
+                              <span className="break-words"><strong>Pesan Wali untuk Santri:</strong> "{order.order_notes}"</span>
+                            </div>
+                          )}
                           {order.custom_notes && (
                             <div className="text-[11.5px] font-bold text-amber-950 dark:text-amber-100 bg-amber-100/90 dark:bg-amber-950/80 p-1.5 border border-amber-300 dark:border-amber-700 mb-1 rounded-none flex items-start gap-1">
                               <span className="shrink-0 text-amber-700 dark:text-amber-400">📌</span>

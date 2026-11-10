@@ -117,13 +117,17 @@ class OrderController extends Controller
             $delivery_fee = $fees['delivery_fee'];
             $admin_fee    = $fees['admin_fee'];
 
+            $orderNotes = !empty($request->order_notes) ? trim($request->order_notes) : null;
+            $customNotes = $request->custom_notes ?: ($orderNotes ?: null);
+
             $order = Order::create([
                 'checkout_id' => $request->checkout_id ?: ('CHK-' . date('Ymd') . '-' . strtoupper(\Illuminate\Support\Str::random(6))),
                 'user_id' => $user->id,
                 'canteen_id' => $canteen->id,
                 'courier_id' => null,
                 'is_custom' => false,
-                'custom_notes' => $request->custom_notes ?: null,
+                'custom_notes' => $customNotes,
+                'order_notes' => $orderNotes,
                 'status' => 'pending',
                 'payment_status' => 'unpaid',
                 'total_price' => 0, // Will update below
@@ -306,13 +310,17 @@ class OrderController extends Controller
                 $delivery_fee = $fees['delivery_fee'];
                 $admin_fee    = $fees['admin_fee'];
 
+                $orderNotes = !empty($request->order_notes) ? trim($request->order_notes) : (!empty($cData['order_notes']) ? trim($cData['order_notes']) : null);
+                $customNotes = !empty($cData['custom_notes']) ? trim($cData['custom_notes']) : ($orderNotes ?: null);
+
                 $order = Order::create([
                     'checkout_id' => $checkoutId,
                     'user_id' => $user->id,
                     'canteen_id' => $canteen->id,
                     'courier_id' => null,
                     'is_custom' => false,
-                    'custom_notes' => $cData['custom_notes'] ?? null,
+                    'custom_notes' => $customNotes,
+                    'order_notes' => $orderNotes,
                     'status' => 'pending',
                     'payment_status' => 'unpaid',
                     'total_price' => 0,

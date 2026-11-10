@@ -123,6 +123,7 @@ class TodayOrdersSeeder extends Seeder
                         'courier_id' => $courierId,
                         'is_custom' => false,
                         'custom_notes' => $sampleCustomNotes[array_rand($sampleCustomNotes)],
+                        'order_notes' => 'Doa dari rumah: semoga berkah & lancar belajarnya ya nak!',
                         'custom_items' => null,
                         'status' => $status,
                         'payment_status' => $paymentStatus,

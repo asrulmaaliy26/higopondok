@@ -1375,6 +1375,11 @@ class AdminOrderController extends Controller
                 $order->custom_notes = !empty($request->input('custom_notes')) ? trim($request->input('custom_notes')) : null;
             }
 
+            // 2b. Update Catatan Umum / Pesan untuk Santri (Tercetak di Struk)
+            if ($request->has('order_notes')) {
+                $order->order_notes = !empty($request->input('order_notes')) ? trim($request->input('order_notes')) : null;
+            }
+
             // 3. Update Catatan Khusus Admin jika dikirim
             if ($request->has('admin_notes')) {
                 $order->admin_notes = !empty($request->input('admin_notes')) ? trim($request->input('admin_notes')) : null;
@@ -1391,6 +1396,9 @@ class AdminOrderController extends Controller
                 if ($request->has('custom_notes')) {
                     $syncData['custom_notes'] = $order->custom_notes;
                 }
+                if ($request->has('order_notes')) {
+                    $syncData['order_notes'] = $order->order_notes;
+                }
                 if (!empty($syncData)) {
                     Order::where('checkout_id', $order->checkout_id)
                         ->where('id', '!=', $order->id)
@@ -1402,6 +1410,9 @@ class AdminOrderController extends Controller
             $descParts = [];
             if (!empty($itemNotesUpdated)) {
                 $descParts[] = 'Produk: ' . implode(', ', $itemNotesUpdated);
+            }
+            if ($request->has('order_notes')) {
+                $descParts[] = 'Pesan Santri: ' . ($order->order_notes ?: '(dikosongkan)');
             }
             if ($request->has('custom_notes')) {
                 $descParts[] = 'Catatan Kurir: ' . ($order->custom_notes ?: '(dikosongkan)');

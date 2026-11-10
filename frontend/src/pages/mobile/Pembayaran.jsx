@@ -1136,6 +1136,27 @@ export default function Pembayaran() {
                     )}
                   </div>
 
+                  {/* Pesan & Doa Wali untuk Santri (Tercetak di Struk) */}
+                  {(() => {
+                    const allNotes = Array.from(new Set(
+                      (group.orders || [singleOrder])
+                        .map(o => o.order_notes)
+                        .filter(Boolean)
+                    ));
+                    if (allNotes.length === 0) return null;
+                    return (
+                      <div className="p-2 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 rounded-none text-xs text-emerald-950 dark:text-emerald-100 my-1">
+                        <div className="text-[10px] font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-300 flex items-center gap-1 mb-0.5">
+                          <span>💌</span>
+                          <span>Pesan Anda untuk Santri (Tercetak di Struk):</span>
+                        </div>
+                        <p className="italic font-semibold text-[11px] leading-snug">
+                          "{allNotes.join(' • ')}"
+                        </p>
+                      </div>
+                    );
+                  })()}
+
                   {/* DEDICATED COMPACT DOCUMENTATION & PROOF TILES (Gojek Style) */}
                   {((group.proof_of_purchase && group.proof_of_purchase.length > 0) || 
                     (group.overallStatus === 'completed' && group.proof_of_delivery && group.proof_of_delivery.length > 0) ||

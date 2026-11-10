@@ -59,6 +59,7 @@ class Order extends Model
         'is_courier_paid_by_canteen',
         'proof_courier_paid',
         'custom_notes',
+        'order_notes',
         'custom_items',
         'admin_notes',
         'is_custom',

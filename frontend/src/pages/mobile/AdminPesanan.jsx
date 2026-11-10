@@ -261,6 +261,7 @@ export default function AdminPesanan() {
   const [orderToEditNotes, setOrderToEditNotes] = useState(null);
   const [adminNotesText, setAdminNotesText] = useState('');
   const [customNotesText, setCustomNotesText] = useState('');
+  const [orderNotesText, setOrderNotesText] = useState('');
   const [orderItemNotes, setOrderItemNotes] = useState({});
   const [syncCheckoutNotes, setSyncCheckoutNotes] = useState(true);
 
@@ -272,6 +273,7 @@ export default function AdminPesanan() {
     });
     setAdminNotesText(order.admin_notes || ordersList.find(o => o.admin_notes)?.admin_notes || '');
     setCustomNotesText(order.custom_notes || ordersList.find(o => o.custom_notes)?.custom_notes || '');
+    setOrderNotesText(order.order_notes || ordersList.find(o => o.order_notes)?.order_notes || '');
     const itemsMap = {};
     ordersList.forEach(ord => {
       if (ord.items && ord.items.length > 0) {
@@ -984,10 +986,11 @@ export default function AdminPesanan() {
 
   // Mutation Update Admin & Product & Courier Notes
   const updateAdminNotesMutation = useMutation({
-    mutationFn: async ({ id, admin_notes, custom_notes, items, sync_checkout }) => {
+    mutationFn: async ({ id, admin_notes, custom_notes, order_notes, items, sync_checkout }) => {
       const res = await api.put(`/admin/orders/${id}/notes`, {
         admin_notes,
         custom_notes,
+        order_notes,
         items,
         sync_checkout
       });
@@ -1771,7 +1774,7 @@ export default function AdminPesanan() {
 
                               {/* Tombol Catatan Kurir Utama di Card Header */}
                               {(() => {
-                                const hasAnyCourierNote = group.orders.some(o => o.custom_notes || o.admin_notes || (o.items && o.items.some(it => it.notes)));
+                                const hasAnyCourierNote = group.orders.some(o => o.order_notes || o.custom_notes || o.admin_notes || (o.items && o.items.some(it => it.notes)));
                                 return (
                                   <button
                                     type="button"
@@ -1860,15 +1863,29 @@ export default function AdminPesanan() {
 
                           {/* Seksi Tampilan Catatan Kurir & Pesanan di Level Wadah Utama (Hanya jika ADA catatan) */}
                           {(() => {
+                            const orderNotesList = group.orders.map(o => o.order_notes).filter(Boolean);
                             const customNotesList = group.orders.map(o => o.custom_notes).filter(Boolean);
                             const adminNotesList = group.orders.map(o => o.admin_notes).filter(Boolean);
                             const itemNotesList = group.orders.flatMap(o => (o.items || []).filter(it => it.notes).map(it => `${it.product?.name || 'Item'}: ${cleanItemNotes(it.notes)}`));
-                            const hasAnyCourierNote = customNotesList.length > 0 || adminNotesList.length > 0 || itemNotesList.length > 0;
+                            const hasAnyCourierNote = orderNotesList.length > 0 || customNotesList.length > 0 || adminNotesList.length > 0 || itemNotesList.length > 0;
 
                             if (!hasAnyCourierNote) return null;
 
                             return (
                               <div className="mt-1.5 p-1.5 bg-amber-50/90 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 text-[10.5px] text-amber-950 dark:text-amber-200 space-y-1">
+                                {orderNotesList.length > 0 && (
+                                  <div className="p-1.5 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 text-emerald-950 dark:text-emerald-200 space-y-0.5 mb-1">
+                                    <div className="flex items-center gap-1 font-bold text-emerald-900 dark:text-emerald-300 text-[10.5px] border-b border-emerald-200 dark:border-emerald-800 pb-0.5">
+                                      <span>💌</span>
+                                      <span>Pesan & Doa untuk Santri (Tercetak di Struk):</span>
+                                    </div>
+                                    {Array.from(new Set(orderNotesList)).map((note, nIdx) => (
+                                      <div key={nIdx} className="font-semibold italic break-words flex items-start gap-1 text-emerald-950 dark:text-emerald-100">
+                                        <span>\"${note}\"</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
                                 <div className="flex items-center gap-1 font-bold text-amber-900 dark:text-amber-300 text-[10.5px] border-b border-amber-200 dark:border-amber-800 pb-0.5">
                                   <Truck className="w-3.5 h-3.5 text-amber-700 dark:text-amber-400" />
                                   <span>Catatan Pengantaran Kurir:</span>
@@ -4469,7 +4486,50 @@ export default function AdminPesanan() {
 
             {/* Body Scrollable */}
             <div className="overflow-y-auto space-y-3.5 pr-1 text-left flex-1 min-h-0">
-              {/* 1. SEKSI CATATAN PESANAN UNTUK KURIR (DARI USER/WALI) - UTAMA */}
+              {/* 1. SEKSI PESAN & DOA UNTUK SANTRI (TERCETAK DI STRUK) */}
+              <div className="space-y-1.5 p-2 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-300 dark:border-emerald-700/80 rounded-none">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-black uppercase tracking-wider text-emerald-900 dark:text-emerald-200 flex items-center gap-1.5">
+                    <span className="text-sm">💌</span>
+                    <span>Pesan & Doa untuk Santri (Tercetak di Struk)</span>
+                  </label>
+                  <span className="text-[9.5px] bg-emerald-200 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-200 font-bold px-1.5 py-0.2 rounded-none">
+                    Tercetak di Struk
+                  </span>
+                </div>
+                <p className="text-[10px] text-emerald-800 dark:text-emerald-300 leading-tight">
+                  Tuliskan kata-kata semangat, doa, atau pujian dari wali untuk ananda santri.
+                </p>
+                <textarea
+                  rows={2}
+                  value={orderNotesText}
+                  onChange={(e) => setOrderNotesText(e.target.value)}
+                  placeholder="Contoh: Semangat belajarnya ya nak, hafalan Qur'annya dimuraja'ah terus. Dari Ummi & Abi 🤍..."
+                  className="w-full px-2.5 py-1.5 rounded-none border border-emerald-300 dark:border-emerald-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-xs font-medium focus:ring-1 focus:ring-emerald-500 focus:outline-hidden"
+                />
+
+                {/* Template Cepat Santri */}
+                <div className="flex flex-wrap gap-1 pt-0.5">
+                  {[
+                    "Semangat belajarnya ya nak! 🤍",
+                    "Barakallah fikum, sehat selalu sayang 🤲",
+                    "Alhamdulillah, selamat ya nak! 🌟",
+                    "Makan yang kenyang & jangan telat makan ya 🍱",
+                    "Doa terbaik dari Ummi & Abi di rumah ✨"
+                  ].map((sTpl, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setOrderNotesText(sTpl)}
+                      className="text-[9.5px] px-1.5 py-0.5 bg-white hover:bg-emerald-100 text-emerald-900 dark:bg-gray-800 dark:hover:bg-emerald-950 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-800 rounded-none transition-colors cursor-pointer"
+                    >
+                      + {sTpl}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 2. SEKSI CATATAN PESANAN UNTUK KURIR (DARI USER/WALI) - UTAMA */}
               <div className="space-y-1.5 p-2 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700/80 rounded-none">
                 <div className="flex items-center justify-between">
                   <label className="text-[11px] font-black uppercase tracking-wider text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
@@ -4660,6 +4720,7 @@ export default function AdminPesanan() {
                     id: orderToEditNotes.id,
                     admin_notes: adminNotesText,
                     custom_notes: customNotesText,
+                    order_notes: orderNotesText,
                     items: Object.entries(orderItemNotes).map(([id, notes]) => ({
                       id: Number(id),
                       notes: notes

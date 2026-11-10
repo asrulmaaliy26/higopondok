@@ -22,6 +22,7 @@ class AdminUpdateOrderNotesRequest extends FormRequest
         return [
             'admin_notes' => 'nullable|string|max:2000',
             'custom_notes' => 'nullable|string|max:2000',
+            'order_notes' => 'nullable|string|max:2000',
             'items' => 'nullable|array',
             'items.*.id' => 'required_with:items|integer',
             'items.*.notes' => 'nullable|string|max:1000',

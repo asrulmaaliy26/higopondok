@@ -1523,6 +1523,12 @@ ${itemsListText}
           {/* Items List & Courier (Full Width) */}
           <div className="w-full min-w-0 space-y-1">
             <div className="bg-gray-50/80 dark:bg-gray-800/50 rounded-none p-1.5 space-y-0.5 text-xs border border-gray-200 dark:border-gray-700">
+              {order.order_notes && (
+                <div className="text-[10.5px] font-bold text-emerald-950 dark:text-emerald-100 bg-emerald-100/90 dark:bg-emerald-950/80 px-2 py-1 border border-emerald-400 dark:border-emerald-700 mb-1 rounded-none flex items-start gap-1">
+                  <span className="shrink-0 text-emerald-700 dark:text-emerald-400">💌</span>
+                  <span className="break-words"><strong>Pesan Wali Santri:</strong> "{order.order_notes}"</span>
+                </div>
+              )}
               {order.custom_notes && (
                 <div className="text-[10.5px] font-bold text-amber-950 dark:text-amber-100 bg-amber-100/90 dark:bg-amber-950/80 px-2 py-1 border border-amber-300 dark:border-amber-700 mb-1 rounded-none flex items-start gap-1">
                   <span className="shrink-0 text-amber-700 dark:text-amber-400">📌</span>
@@ -1980,6 +1986,11 @@ ${itemsListText}
                   </div>
                 </div>
 
+                {o.order_notes && (
+                  <div className="text-[10px] font-bold text-emerald-800 dark:text-emerald-300 pb-0.5">
+                    💌 "{o.order_notes}"
+                  </div>
+                )}
                 {o.custom_notes && (
                   <div className="text-[10px] font-medium text-purple-800 dark:text-purple-300 pb-0.5">
                     ✨ {o.custom_notes}

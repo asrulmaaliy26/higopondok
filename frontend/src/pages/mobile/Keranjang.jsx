@@ -137,6 +137,7 @@ export default function Keranjang() {
     }
   };
   const [canteenNotes, setCanteenNotes] = useState({}); // canteenId -> general note
+  const [orderNotes, setOrderNotes] = useState(''); // general encouragement / note for santri
   const [isProcessing, setIsProcessing] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [selectedVoucher, setSelectedVoucher] = useState(null);
@@ -343,9 +344,11 @@ export default function Keranjang() {
         delivery_location: locFinal,
         order_for: orderFor,
         voucher_id: selectedVoucher ? selectedVoucher.id : null,
+        order_notes: orderNotes.trim() || null,
         canteens: canteenSummaries.map(({ canteen, itemList }) => ({
           canteen_id: canteen.id,
-          custom_notes: canteenNotes[canteen.id] || '',
+          order_notes: orderNotes.trim() || null,
+          custom_notes: orderNotes.trim() ? orderNotes.trim() : (canteenNotes[canteen.id] || ''),
           items: itemList.map(i => {
             const variantNote = (i.options && i.options.length > 0) ? `[${i.options.join(' | ')}]` : '';
             let userNote = (i.notes || '').trim();
@@ -872,6 +875,58 @@ export default function Keranjang() {
               >
                 {selectedVoucher ? 'Ganti' : 'Pakai Voucher'}
               </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Catatan Umum / Pesan & Doa untuk Santri (Tercetak di Struk Pengantaran) */}
+        <div className="bg-white dark:bg-gray-900 rounded-none border border-emerald-300 dark:border-emerald-800/80 p-3.5 shadow-xs space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <span className="text-base">💌</span>
+              <h3 className="font-bold text-xs sm:text-sm text-gray-900 dark:text-white">
+                Pesan & Doa untuk {orderFor === 'guru' ? 'Penerima' : 'Santri'}
+              </h3>
+            </div>
+            <span className="text-[9.5px] font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/70 border border-emerald-300 dark:border-emerald-800 px-1.5 py-0.5">
+              Tercetak di Struk
+            </span>
+          </div>
+
+          <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-snug">
+            Tuliskan kata-kata semangat, doa, atau pesan cinta dari wali. Pesan ini akan otomatis tercetak di struk pengantaran yang dipegang santri.
+          </p>
+
+          <textarea
+            rows={2}
+            value={orderNotes}
+            onChange={(e) => setOrderNotes(e.target.value)}
+            placeholder="Contoh: Semangat belajarnya ya nak, hafalan Qur'annya dimuraja'ah terus. Sehat selalu dari Ummi & Abi 🤍 (Opsional)"
+            className="w-full p-2.5 border border-gray-300 dark:border-gray-700 rounded-none text-xs bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-500 font-medium"
+          />
+
+          {/* Template Cepat Kata Semangat & Doa */}
+          <div className="space-y-1 pt-0.5">
+            <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500">
+              Pilihan Cepat (Klik untuk memilih):
+            </p>
+            <div className="flex flex-wrap gap-1">
+              {[
+                "Semangat belajarnya ya nak! 🤍",
+                "Barakallah fikum, sehat selalu sayang 🤲",
+                "Alhamdulillah, selamat ya nak! 🌟",
+                "Makan yang kenyang & jangan telat makan ya 🍱",
+                "Doa terbaik dari Ummi & Abi di rumah ✨"
+              ].map((msg, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => setOrderNotes(msg)}
+                  className="text-[10px] px-2 py-0.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-none transition-colors cursor-pointer"
+                >
+                  {msg}
+                </button>
+              ))}
             </div>
           </div>
         </div>
