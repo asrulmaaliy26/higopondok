@@ -1616,19 +1616,31 @@ export default function TugasKurir() {
             </div>
           </div>
 
-          {/* Financial Summary Row */}
-          <div className="flex items-center gap-1 flex-wrap">
-            <div className="flex items-center gap-1 px-2 py-0.5 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-none text-xs flex-1 min-w-0">
-              <span className="text-gray-500 font-medium shrink-0">Modal:</span>
-              <span className="font-extrabold font-mono text-gray-900 dark:text-white truncate">Rp {formatRupiah(filteredSummary.totalProducts)}</span>
+          {/* Financial Summary Row (Responsive High-Density ala Gojek Driver) */}
+          <div className="grid grid-cols-3 gap-1 sm:gap-1.5">
+            <div className="px-1.5 py-1 sm:px-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-none text-center flex flex-col justify-center shadow-2xs">
+              <span className="text-[9px] sm:text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider leading-none mb-0.5">
+                Modal Toko
+              </span>
+              <span className="font-black font-mono text-[11px] sm:text-xs md:text-sm text-gray-900 dark:text-white leading-tight whitespace-nowrap">
+                Rp {formatRupiah(filteredSummary.totalProducts)}
+              </span>
             </div>
-            <div className="flex items-center gap-1 px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 rounded-none text-xs flex-1 min-w-0">
-              <span className="text-emerald-700 dark:text-emerald-300 font-medium shrink-0">Ongkir:</span>
-              <span className="font-extrabold font-mono text-emerald-700 dark:text-emerald-300 truncate">Rp {formatRupiah(filteredSummary.totalDeliveryFee)}</span>
+            <div className="px-1.5 py-1 sm:px-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 rounded-none text-center flex flex-col justify-center shadow-2xs">
+              <span className="text-[9px] sm:text-[10px] text-emerald-700 dark:text-emerald-300 font-bold uppercase tracking-wider leading-none mb-0.5">
+                Ongkir Kurir
+              </span>
+              <span className="font-black font-mono text-[11px] sm:text-xs md:text-sm text-emerald-700 dark:text-emerald-300 leading-tight whitespace-nowrap">
+                Rp {formatRupiah(filteredSummary.totalDeliveryFee)}
+              </span>
             </div>
-            <div className="flex items-center gap-1 px-2 py-0.5 bg-green-100 dark:bg-green-950/60 border border-green-400 dark:border-green-800 rounded-none text-xs flex-1 min-w-0">
-              <span className="text-green-800 dark:text-green-300 font-medium shrink-0">Total:</span>
-              <span className="font-extrabold font-mono text-green-800 dark:text-green-400 truncate">Rp {formatRupiah(filteredSummary.grandTotal)}</span>
+            <div className="px-1.5 py-1 sm:px-2 bg-green-100 dark:bg-green-950/60 border border-green-400 dark:border-green-800 rounded-none text-center flex flex-col justify-center shadow-2xs">
+              <span className="text-[9px] sm:text-[10px] text-green-800 dark:text-green-300 font-bold uppercase tracking-wider leading-none mb-0.5">
+                Total Uang
+              </span>
+              <span className="font-black font-mono text-[11px] sm:text-xs md:text-sm text-green-800 dark:text-green-400 leading-tight whitespace-nowrap">
+                Rp {formatRupiah(filteredSummary.grandTotal)}
+              </span>
             </div>
           </div>
         </div>
