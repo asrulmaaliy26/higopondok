@@ -827,17 +827,21 @@ export default function ThermalReceiptModal({
                   </div>
 
                   {/* PESAN DARI WALI / CATATAN UNTUK SANTRI */}
-                  {Boolean(order.order_notes) && (
-                    <div className="p-3 bg-emerald-50 border-2 border-emerald-600 rounded-none text-xs text-emerald-950 font-medium">
-                      <div className="text-[11px] font-black uppercase tracking-wider text-emerald-800 flex items-center gap-1.5 mb-1 border-b border-emerald-200 pb-1">
-                        <span>💌</span>
-                        <span>PESAN DARI WALI / CATATAN UNTUK SANTRI:</span>
+                  {(() => {
+                    const bundleOrderNotes = order?.order_notes || filteredBatchOrders.find(o => o.order_notes)?.order_notes;
+                    if (!bundleOrderNotes) return null;
+                    return (
+                      <div className="p-3 bg-emerald-50 border-2 border-emerald-600 rounded-none text-xs text-emerald-950 font-medium">
+                        <div className="text-[11px] font-black uppercase tracking-wider text-emerald-800 flex items-center gap-1.5 mb-1 border-b border-emerald-200 pb-1">
+                          <span>💌</span>
+                          <span>PESAN DARI WALI / CATATAN UNTUK SANTRI:</span>
+                        </div>
+                        <p className="italic text-xs sm:text-sm font-bold whitespace-pre-wrap leading-relaxed">
+                          "{bundleOrderNotes}"
+                        </p>
                       </div>
-                      <p className="italic text-xs sm:text-sm font-bold whitespace-pre-wrap leading-relaxed">
-                        "{order.order_notes}"
-                      </p>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   {/* CATATAN PENGANTARAN KURIR (JIKA ADA & BEDA DARI PESAN SANTRI) */}
                   {order.custom_notes && order.custom_notes !== order.order_notes && order.items && order.items.length > 0 && (
@@ -1037,17 +1041,21 @@ export default function ThermalReceiptModal({
                   </div>
 
                   {/* PESAN DARI WALI / CATATAN UNTUK SANTRI */}
-                  {Boolean(order.order_notes) && (
-                    <div className="p-3 bg-emerald-50 border-2 border-emerald-600 rounded-none text-xs text-emerald-950 font-medium">
-                      <div className="text-[11px] font-black uppercase tracking-wider text-emerald-800 flex items-center gap-1.5 mb-1 border-b border-emerald-200 pb-1">
-                        <span>💌</span>
-                        <span>PESAN DARI WALI / CATATAN UNTUK SANTRI:</span>
+                  {(() => {
+                    const bundleOrderNotes = order?.order_notes || filteredBatchOrders.find(o => o.order_notes)?.order_notes;
+                    if (!bundleOrderNotes) return null;
+                    return (
+                      <div className="p-3 bg-emerald-50 border-2 border-emerald-600 rounded-none text-xs text-emerald-950 font-medium">
+                        <div className="text-[11px] font-black uppercase tracking-wider text-emerald-800 flex items-center gap-1.5 mb-1 border-b border-emerald-200 pb-1">
+                          <span>💌</span>
+                          <span>PESAN DARI WALI / CATATAN UNTUK SANTRI:</span>
+                        </div>
+                        <p className="italic text-xs sm:text-sm font-bold whitespace-pre-wrap leading-relaxed">
+                          "{bundleOrderNotes}"
+                        </p>
                       </div>
-                      <p className="italic text-xs sm:text-sm font-bold whitespace-pre-wrap leading-relaxed">
-                        "{order.order_notes}"
-                      </p>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   {/* CATATAN PENGANTARAN KURIR (JIKA ADA & BEDA DARI PESAN SANTRI) */}
                   {order.custom_notes && order.custom_notes !== order.order_notes && order.items && order.items.length > 0 && (
@@ -1255,16 +1263,7 @@ export default function ThermalReceiptModal({
                                                 • 1x {o.custom_notes || 'Pesanan Khusus / Titip Beli'}
                                               </div>
                                             )}
-                                            {o.order_notes && (
-                                              <div className="border border-black p-1 my-1 bg-white text-black text-left">
-                                                <div className="text-[10px] font-black uppercase tracking-wider border-b border-black pb-0.5 mb-0.5">
-                                                  💌 PESAN DARI WALI:
-                                                </div>
-                                                <div className="text-xs font-black italic whitespace-pre-wrap leading-tight">
-                                                  "{o.order_notes}"
-                                                </div>
-                                              </div>
-                                            )}
+                                            
                                             {o.custom_notes && o.custom_notes !== o.order_notes && o.items && o.items.length > 0 && (
                                               <div className="text-xs font-bold text-black border border-black p-1 bg-gray-100 my-1">
                                                 🚚 Catatan Kurir: {o.custom_notes}
@@ -1275,7 +1274,23 @@ export default function ThermalReceiptModal({
                                       ))}
                                     </div>
 
-                                    {/* FOOTER CUT MARK */}
+                                    {/* PESAN DARI WALI SANTRI (CUKUP DICETAK 1X UNTUK SELURUH WADAH) */}
+                                     {(() => {
+                                       const allWaliNotes = Array.from(new Set(orders.map(o => o.order_notes?.trim()).filter(Boolean)));
+                                       if (allWaliNotes.length === 0) return null;
+                                       return allWaliNotes.map((note, nIdx) => (
+                                         <div key={nIdx} className="border border-black p-1.5 my-2 bg-white text-black text-left">
+                                           <div className="text-[10px] font-black uppercase tracking-wider border-b border-black pb-0.5 mb-0.5">
+                                             💌 PESAN DARI WALI:
+                                           </div>
+                                           <div className="text-xs font-black italic whitespace-pre-wrap leading-tight">
+                                             "{note}"
+                                           </div>
+                                         </div>
+                                       ));
+                                     })()}
+
+                                     {/* FOOTER CUT MARK */}
                                     <div className="pt-3 border-t-2 border-dashed border-black text-center space-y-0.5">
                                       <div className="text-xs sm:text-sm font-black tracking-widest text-black">
                                         ✂️ ------------------ GUNTING / POTONG DI SINI ------------------ ✂️
@@ -1735,16 +1750,6 @@ export default function ThermalReceiptModal({
                                 • 1x {o.custom_notes || 'Pesanan Khusus / Titip Beli'}
                               </div>
                             )}
-                            {o.order_notes && (
-                              <div className="border-2 border-black p-1.5 my-1 bg-white text-black text-left">
-                                <div className="text-[10px] font-black uppercase tracking-wider border-b border-black pb-0.5 mb-0.5">
-                                  💌 PESAN DARI WALI SANTRI:
-                                </div>
-                                <div className="text-xs sm:text-sm font-black italic whitespace-pre-wrap leading-tight">
-                                  "{o.order_notes}"
-                                </div>
-                              </div>
-                            )}
                             {o.custom_notes && o.custom_notes !== o.order_notes && o.items && o.items.length > 0 && (
                               <div className="thermal-menu-note text-xs sm:text-sm font-bold text-black border border-black p-1 bg-gray-100 my-1">
                                 🚚 Catatan Kurir: {o.custom_notes}
@@ -1754,6 +1759,22 @@ export default function ThermalReceiptModal({
                         </div>
                       ))}
                     </div>
+
+                    {/* PESAN DARI WALI SANTRI (CUKUP DICETAK 1X UNTUK SELURUH WADAH GABUNGAN) */}
+                    {(() => {
+                      const allWaliNotes = Array.from(new Set(filteredBatchOrders.map(o => o.order_notes?.trim()).filter(Boolean)));
+                      if (allWaliNotes.length === 0) return null;
+                      return allWaliNotes.map((note, nIdx) => (
+                        <div key={nIdx} className="border-2 border-black p-1.5 my-2 bg-white text-black text-left">
+                          <div className="text-[10px] font-black uppercase tracking-wider border-b border-black pb-0.5 mb-0.5">
+                            💌 PESAN DARI WALI SANTRI:
+                          </div>
+                          <div className="text-xs sm:text-sm font-black italic whitespace-pre-wrap leading-tight">
+                            "{note}"
+                          </div>
+                        </div>
+                      ));
+                    })()}
                   </div>
 
                   {/* FOOTER */}
@@ -1881,16 +1902,7 @@ export default function ThermalReceiptModal({
                                               • 1x {o.custom_notes || 'Pesanan Khusus / Titip Beli'}
                                             </div>
                                           )}
-                                          {o.order_notes && (
-                                            <div className="border-2 border-black p-1.5 my-1 bg-white text-black text-left">
-                                              <div className="text-[10px] font-black uppercase tracking-wider border-b border-black pb-0.5 mb-0.5">
-                                                💌 PESAN DARI WALI:
-                                              </div>
-                                              <div className="text-xs font-black italic whitespace-pre-wrap leading-tight">
-                                                "{o.order_notes}"
-                                              </div>
-                                            </div>
-                                          )}
+                                          
                                           {o.custom_notes && o.custom_notes !== o.order_notes && o.items && o.items.length > 0 && (
                                             <div className="thermal-menu-note text-xs sm:text-sm font-bold text-black border border-black p-1 bg-gray-100 my-1">
                                               🚚 Catatan Kurir: {o.custom_notes}
@@ -1900,6 +1912,22 @@ export default function ThermalReceiptModal({
                                       </div>
                                     ))}
                                   </div>
+
+                                  {/* PESAN DARI WALI SANTRI (CUKUP DICETAK 1X UNTUK SELURUH WADAH) */}
+                                  {(() => {
+                                    const allWaliNotes = Array.from(new Set(group.orders.map(o => o.order_notes?.trim()).filter(Boolean)));
+                                    if (allWaliNotes.length === 0) return null;
+                                    return allWaliNotes.map((note, nIdx) => (
+                                      <div key={nIdx} className="border-2 border-black p-1.5 my-2 bg-white text-black text-left">
+                                        <div className="text-[10px] font-black uppercase tracking-wider border-b border-black pb-0.5 mb-0.5">
+                                          💌 PESAN DARI WALI:
+                                        </div>
+                                        <div className="text-xs sm:text-sm font-black italic whitespace-pre-wrap leading-tight">
+                                          "{note}"
+                                        </div>
+                                      </div>
+                                    ));
+                                  })()}
                                 </div>
                               );
                             };

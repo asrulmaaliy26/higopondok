@@ -2028,7 +2028,7 @@ export default function AdminPesanan() {
 
                                 {/* Konten Rincian Produk */}
                                 <div className="p-1.5 pt-1 space-y-0.5 text-xs bg-white dark:bg-gray-900">
-                                  {order.custom_notes && (
+                                  {order.custom_notes && (order.is_custom || (order.custom_notes.trim() !== order.order_notes?.trim() && !group.orders.some(o => o.order_notes?.trim() === order.custom_notes?.trim()))) && (
                                     <div className="text-[10px] font-medium text-purple-800 dark:text-purple-300 pb-0.5 border-b border-purple-100 dark:border-purple-900/40">
                                       ✨ {order.custom_notes}
                                     </div>

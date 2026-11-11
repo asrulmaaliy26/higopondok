@@ -1991,7 +1991,7 @@ ${itemsListText}
                     💌 "{o.order_notes}"
                   </div>
                 )}
-                {o.custom_notes && (
+                {o.custom_notes && o.custom_notes.trim() !== o.order_notes?.trim() && (
                   <div className="text-[10px] font-medium text-purple-800 dark:text-purple-300 pb-0.5">
                     ✨ {o.custom_notes}
                   </div>
