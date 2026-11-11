@@ -1600,6 +1600,60 @@ class OrderController extends Controller
         });
     }
 
+    /**
+     * Pembaruan Catatan / Pesan untuk Santri oleh Wali/User setelah Checkout
+     */
+    public function updateUserOrderNotes(\App\Domains\Canteen\Requests\UpdateUserOrderNotesRequest $request, $id)
+    {
+        $user = $request->user();
+        $orderNotes = !empty($request->input('order_notes')) ? trim($request->input('order_notes')) : null;
+
+        return DB::transaction(function () use ($request, $id, $user, $orderNotes) {
+            $query = Order::lockForUpdate();
+            if (is_numeric($id)) {
+                $query->where('id', $id);
+            } else {
+                $query->where('checkout_id', $id);
+            }
+
+            if (!$user->hasRole('admin') && !$user->hasRole('super_admin')) {
+                $query->where('user_id', $user->id);
+            }
+
+            $order = $query->firstOrFail();
+
+            if (!in_array($order->status, ['pending', 'processing']) && !$user->hasRole('admin') && !$user->hasRole('super_admin')) {
+                return response()->json([
+                    'message' => 'Pesan santri tidak dapat diubah karena pesanan sudah selesai atau dibatalkan.'
+                ], 422);
+            }
+
+            // Update catatan santri pada pesanan utama
+            $order->order_notes = $orderNotes;
+            $order->save();
+
+            // Jika pesanan merupakan bagian dari checkout gabungan (multi-toko), sinkronkan ke seluruh toko dalam checkout ini
+            $syncedCount = 1;
+            if (!empty($order->checkout_id)) {
+                $syncQuery = Order::where('checkout_id', $order->checkout_id)
+                    ->where('id', '!=', $order->id);
+
+                if (!$user->hasRole('admin') && !$user->hasRole('super_admin')) {
+                    $syncQuery->where('user_id', $user->id);
+                }
+
+                $syncedCount += $syncQuery->update(['order_notes' => $orderNotes]);
+            }
+
+            return response()->json([
+                'message' => 'Pesan untuk santri berhasil diperbarui!',
+                'order_notes' => $orderNotes,
+                'synced_count' => $syncedCount,
+                'order' => $order->fresh()->load(['items.product', 'canteen', 'voucher'])
+            ]);
+        });
+    }
+
     // For User: Upload Payment Proof
     public function uploadPaymentProof(Request $request, $id)
     {

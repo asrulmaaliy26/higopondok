@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   ShoppingBag, ChevronLeft, CheckCircle, Clock, Store, MessageCircle, 
   Image as ImageIcon, X, XCircle, FileText, Download, ExternalLink, 
-  Trash2, Camera, Receipt, Eye, Sparkles, Filter, Calendar, ChevronDown, RefreshCw, Lock, Copy, QrCode, Search 
+  Trash2, Camera, Receipt, Eye, Sparkles, Filter, Calendar, ChevronDown, RefreshCw, Lock, Copy, QrCode, Search, Edit3 
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api, { getStorageUrl, getPublicUrl } from '../../lib/axios';
@@ -95,6 +95,23 @@ export default function Pembayaran() {
   const [activeOrderForPaymentProof, setActiveOrderForPaymentProof] = useState(null);
   const [paymentProofFiles, setPaymentProofFiles] = useState([]);
   const [isCompressing, setIsCompressing] = useState(false);
+
+  // Edit Pesan Santri Modal States
+  const [showEditPesanModal, setShowEditPesanModal] = useState(false);
+  const [activeOrderForPesan, setActiveOrderForPesan] = useState(null);
+  const [pesanSantriText, setPesanSantriText] = useState('');
+
+  const handleOpenEditPesan = (group, singleOrder, initialText = '') => {
+    setActiveOrderForPesan({
+      orderId: singleOrder?.id,
+      checkoutId: group?.key || singleOrder?.checkout_id,
+      storeName: singleOrder?.canteen?.name || 'Kantin',
+      santriName: singleOrder?.recipient_santri_name || group?.user?.santri_name || 'Santri',
+      isMulti: Boolean(group?.isMultiStore || (group?.orders && group?.orders.length > 1))
+    });
+    setPesanSantriText(initialText || '');
+    setShowEditPesanModal(true);
+  };
 
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
@@ -337,6 +354,33 @@ export default function Pembayaran() {
     },
     onError: (err) => {
       toast.error(err.response?.data?.message || 'Gagal mengunggah bukti transfer. Silakan periksa koneksi dan coba lagi.');
+    }
+  });
+
+  // Mutation Update Order Notes / Pesan untuk Santri
+  const updateOrderNotesMutation = useMutation({
+    mutationFn: async ({ targetId, order_notes }) => {
+      const res = await api.put(`/orders/${targetId}/order-notes`, {
+        order_notes,
+        sync_checkout: true
+      });
+      return res.data;
+    },
+    onSuccess: (data) => {
+      toast.success(data?.message || 'Pesan untuk santri berhasil diperbarui!');
+      setShowEditPesanModal(false);
+      setActiveOrderForPesan(null);
+      setPesanSantriText('');
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.message || 'Gagal memperbarui pesan santri.');
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      queryClient.invalidateQueries({ queryKey: ['user_orders'] });
+      queryClient.invalidateQueries({ queryKey: ['admin_orders'] });
+      queryClient.invalidateQueries({ queryKey: ['courier_orders'] });
+      queryClient.invalidateQueries({ queryKey: ['canteen_orders'] });
     }
   });
 
@@ -1136,22 +1180,58 @@ export default function Pembayaran() {
                     )}
                   </div>
 
-                  {/* Pesan & Doa Wali untuk Santri (Tercetak di Struk) */}
+                  {/* Pesan & Doa Wali untuk Santri (Tercetak di Struk & Dapat Diedit) */}
                   {(() => {
                     const allNotes = Array.from(new Set(
                       (group.orders || [singleOrder])
                         .map(o => o.order_notes)
                         .filter(Boolean)
                     ));
-                    if (allNotes.length === 0) return null;
+                    const currentNote = allNotes.join(' • ');
+                    const canEditOrderNotes = ['pending', 'processing'].includes(group.overallStatus);
+
+                    if (allNotes.length === 0) {
+                      if (!canEditOrderNotes) return null;
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditPesan(group, singleOrder, '')}
+                          className="w-full py-1.5 px-2.5 border border-dashed border-emerald-400 dark:border-emerald-700/80 bg-emerald-50/50 hover:bg-emerald-100/60 dark:bg-emerald-950/20 dark:hover:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 rounded-none text-xs font-semibold flex items-center justify-between gap-1 my-1 transition-all cursor-pointer shadow-2xs"
+                          title="Tulis pesan atau kata semangat untuk santri"
+                        >
+                          <span className="flex items-center gap-1.5 text-[10.5px]">
+                            <span>💌</span>
+                            <span>+ Tambah Pesan / Doa untuk Santri (Tercetak di Struk)</span>
+                          </span>
+                          <span className="text-[9.5px] font-bold text-emerald-700 dark:text-emerald-300 flex items-center gap-0.5 underline">
+                            <Edit3 className="w-2.5 h-2.5" />
+                            <span>Tulis</span>
+                          </span>
+                        </button>
+                      );
+                    }
+
                     return (
                       <div className="p-2 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 rounded-none text-xs text-emerald-950 dark:text-emerald-100 my-1">
-                        <div className="text-[10px] font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-300 flex items-center gap-1 mb-0.5">
-                          <span>💌</span>
-                          <span>Pesan Anda untuk Santri (Tercetak di Struk):</span>
+                        <div className="flex items-center justify-between gap-1 border-b border-emerald-200 dark:border-emerald-800/60 pb-1 mb-1">
+                          <div className="text-[10px] font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-300 flex items-center gap-1 truncate">
+                            <span>💌</span>
+                            <span className="truncate">Pesan Anda untuk Santri (Tercetak di Struk):</span>
+                          </div>
+                          {canEditOrderNotes && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditPesan(group, singleOrder, currentNote)}
+                              className="shrink-0 text-[9.5px] font-bold text-emerald-800 dark:text-emerald-300 hover:text-emerald-950 dark:hover:text-white flex items-center gap-1 px-1.5 py-0.5 bg-white dark:bg-emerald-900/60 border border-emerald-300 dark:border-emerald-700 rounded-none cursor-pointer hover:bg-emerald-100 transition-colors shadow-2xs"
+                              title="Ubah pesan untuk santri"
+                            >
+                              <Edit3 className="w-2.5 h-2.5 text-emerald-600 dark:text-emerald-400" />
+                              <span>Ubah Pesan</span>
+                            </button>
+                          )}
                         </div>
-                        <p className="italic font-semibold text-[11px] leading-snug">
-                          "{allNotes.join(' • ')}"
+                        <p className="italic font-semibold text-[11px] leading-snug break-words">
+                          "{currentNote}"
                         </p>
                       </div>
                     );
@@ -2309,6 +2389,118 @@ export default function Pembayaran() {
                     <span>{paymentProofFiles.length > 0 ? `Unggah (${paymentProofFiles.length}) Bukti` : 'Unggah Bukti'}</span>
                     <CheckCircle className="w-4 h-4" />
                   </span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* MODAL UBAH / EDIT PESAN UNTUK SANTRI */}
+      {showEditPesanModal && activeOrderForPesan && typeof document !== 'undefined' && createPortal(
+        <div 
+          className="fixed inset-0 z-[120] bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 animate-in fade-in duration-200"
+          onClick={() => setShowEditPesanModal(false)}
+        >
+          <div 
+            className="bg-white dark:bg-gray-900 border border-emerald-500 w-full max-w-md rounded-none shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="bg-emerald-700 dark:bg-emerald-900 text-white px-3.5 py-2.5 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-base">💌</span>
+                <div>
+                  <h3 className="font-bold text-xs sm:text-sm leading-tight">
+                    Ubah Pesan & Doa untuk Santri
+                  </h3>
+                  <p className="text-[10px] text-emerald-100">
+                    {activeOrderForPesan.isMulti ? 'Terapkan ke seluruh toko dalam checkout ini' : `#${activeOrderForPesan.checkoutId || activeOrderForPesan.orderId}`} • Santri: {activeOrderForPesan.santriName}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowEditPesanModal(false)}
+                className="w-7 h-7 flex items-center justify-center text-white/80 hover:text-white hover:bg-emerald-800 rounded-none transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-3.5 space-y-3">
+              <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
+                Tuliskan kata semangat, pujian, atau doa untuk ananda. Pesan ini akan otomatis <strong>tercetak di struk pengantaran</strong> yang diterima santri.
+              </p>
+
+              <textarea
+                rows={3}
+                value={pesanSantriText}
+                onChange={(e) => setPesanSantriText(e.target.value)}
+                placeholder="Contoh: Semangat belajarnya ya nak, hafalan Qur'annya dimuraja'ah terus. Dari Ummi & Abi 🤍..."
+                className="w-full p-2.5 border border-emerald-300 dark:border-emerald-700 rounded-none text-xs bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-500 font-medium"
+                autoFocus
+              />
+
+              {/* Template Cepat */}
+              <div className="space-y-1">
+                <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                  Template Cepat (Klik untuk memilih):
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {[
+                    "Semangat belajarnya ya nak! 🤍",
+                    "Barakallah fikum, sehat selalu sayang 🤲",
+                    "Alhamdulillah, selamat ya nak! 🌟",
+                    "Makan yang kenyang & jangan telat makan ya 🍱",
+                    "Doa terbaik dari Ummi & Abi di rumah ✨"
+                  ].map((tpl, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setPesanSantriText(tpl)}
+                      className="text-[9.5px] px-2 py-0.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-800 rounded-none transition-colors cursor-pointer"
+                    >
+                      + {tpl}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-3 bg-gray-50 dark:bg-gray-800/60 border-t border-gray-200 dark:border-gray-800 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowEditPesanModal(false)}
+                disabled={updateOrderNotesMutation.isPending}
+                className="px-3 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-none cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  updateOrderNotesMutation.mutate({
+                    targetId: activeOrderForPesan.checkoutId || activeOrderForPesan.orderId,
+                    order_notes: pesanSantriText.trim()
+                  });
+                }}
+                disabled={updateOrderNotesMutation.isPending}
+                className="px-3.5 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-none flex items-center gap-1.5 shadow-xs disabled:opacity-50 cursor-pointer"
+              >
+                {updateOrderNotesMutation.isPending ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    <span>Menyimpan...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    <span>Simpan Pesan</span>
+                  </>
                 )}
               </button>
             </div>
