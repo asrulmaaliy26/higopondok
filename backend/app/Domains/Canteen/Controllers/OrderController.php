@@ -24,7 +24,7 @@ class OrderController extends Controller
             'items' => 'required_unless:is_custom,true|array',
             'items.*.product_id' => 'required_with:items|exists:products,id',
             'items.*.quantity' => 'required_with:items|integer|min:1',
-            'delivery_location' => 'required|string',
+            'delivery_location' => 'nullable|string',
         ]);
 
         $canteen = Canteen::findOrFail($request->canteen_id);
@@ -60,7 +60,7 @@ class OrderController extends Controller
 
         $defaultLocation = ($orderFor === 'guru') 
             ? ($request->delivery_location ?: ('Ruang Guru / Kantor ' . ($user->teacher_unit ?: 'Yayasan')))
-            : $request->delivery_location;
+            : ($request->delivery_location ?: ($user->santri_room ?: 'Kamar Santri'));
 
         try {
             DB::beginTransaction();
@@ -277,7 +277,7 @@ class OrderController extends Controller
 
         $defaultLocation = ($orderFor === 'guru') 
             ? ($request->delivery_location ?: ('Ruang Guru / Kantor ' . ($user->teacher_unit ?: 'Yayasan')))
-            : $request->delivery_location;
+            : ($request->delivery_location ?: ($user->santri_room ?: 'Kamar Santri'));
 
         $request->validate([
             'delivery_location' => 'nullable|string|max:255',
@@ -311,7 +311,7 @@ class OrderController extends Controller
                 $admin_fee    = $fees['admin_fee'];
 
                 $orderNotes = !empty($request->order_notes) ? trim($request->order_notes) : (!empty($cData['order_notes']) ? trim($cData['order_notes']) : null);
-                $customNotes = !empty($cData['custom_notes']) ? trim($cData['custom_notes']) : ($orderNotes ?: null);
+                $customNotes = !empty($cData['custom_notes']) ? trim($cData['custom_notes']) : null;
 
                 $order = Order::create([
                     'checkout_id' => $checkoutId,
@@ -1608,12 +1608,25 @@ class OrderController extends Controller
         $user = $request->user();
         $orderNotes = !empty($request->input('order_notes')) ? trim($request->input('order_notes')) : null;
 
-        return DB::transaction(function () use ($request, $id, $user, $orderNotes) {
+        // Sanitasi prefix identifikasi jika ada (seperti 'chk_' atau 'ord_')
+        $cleanId = $id;
+        if (is_string($cleanId)) {
+            if (str_starts_with($cleanId, 'chk_')) {
+                $cleanId = substr($cleanId, 4);
+            } elseif (str_starts_with($cleanId, 'ord_')) {
+                $cleanId = substr($cleanId, 4);
+            }
+        }
+
+        return DB::transaction(function () use ($request, $cleanId, $id, $user, $orderNotes) {
             $query = Order::lockForUpdate();
-            if (is_numeric($id)) {
-                $query->where('id', $id);
+            if (is_numeric($cleanId)) {
+                $query->where('id', $cleanId);
             } else {
-                $query->where('checkout_id', $id);
+                $query->where(function ($q) use ($cleanId, $id) {
+                    $q->where('checkout_id', $cleanId)
+                      ->orWhere('checkout_id', $id);
+                });
             }
 
             if (!$user->hasRole('admin') && !$user->hasRole('super_admin')) {

@@ -24,12 +24,12 @@ export default function Keranjang() {
   const { cart, addItem, removeItem, incrementItem, clearCanteen, clearAll, updateItemNote } = useCartStore();
 
   const [orderFor, setOrderFor] = useState(user?.is_teacher ? 'guru' : 'santri');
-  const [deliveryLocation, setDeliveryLocation] = useState(() => {
-    if (user?.is_teacher) {
+  const deliveryLocation = React.useMemo(() => {
+    if (orderFor === 'guru') {
       return `Ruang Guru / Kantor ${user?.teacher_unit || 'Yayasan'}`;
     }
     return user?.santri_room || '';
-  });
+  }, [orderFor, user]);
 
   // Validasi apakah akun guru sudah memiliki data santri di profil
   const hasSantriProfile = Boolean(
@@ -130,11 +130,6 @@ export default function Keranjang() {
     }
 
     setOrderFor(target);
-    if (target === 'guru') {
-      setDeliveryLocation(`Ruang Guru / Kantor ${user?.teacher_unit || 'Yayasan'}`);
-    } else {
-      setDeliveryLocation(user?.santri_room || '');
-    }
   };
   const [canteenNotes, setCanteenNotes] = useState({}); // canteenId -> general note
   const [orderNotes, setOrderNotes] = useState(''); // general encouragement / note for santri
@@ -323,9 +318,13 @@ export default function Keranjang() {
 
   // Eksekusi pesanan ke backend API
   const executeOrderCheckout = async (loc, activeUser = user) => {
-    const locFinal = (loc || deliveryLocation || '').trim();
+    const defaultLoc = orderFor === 'guru'
+      ? `Ruang Guru / Kantor ${activeUser?.teacher_unit || 'Yayasan'}`
+      : (activeUser?.santri_room || '');
+    const locFinal = (loc || defaultLoc).trim();
     if (!locFinal) {
-      toast.error('Silakan pilih atau ketik lokasi pengiriman Anda terlebih dahulu sebelum Checkout.');
+      setShowProfileModal(true);
+      toast.error('Silakan lengkapi data profil kamar santri Anda terlebih dahulu.');
       return;
     }
 
@@ -348,7 +347,7 @@ export default function Keranjang() {
         canteens: canteenSummaries.map(({ canteen, itemList }) => ({
           canteen_id: canteen.id,
           order_notes: orderNotes.trim() || null,
-          custom_notes: orderNotes.trim() ? orderNotes.trim() : (canteenNotes[canteen.id] || ''),
+          custom_notes: (canteenNotes[canteen.id] || '').trim() || null,
           items: itemList.map(i => {
             const variantNote = (i.options && i.options.length > 0) ? `[${i.options.join(' | ')}]` : '';
             let userNote = (i.notes || '').trim();
@@ -471,8 +470,6 @@ export default function Keranjang() {
       const targetLoc = isOrderingForTeacher
         ? `Ruang Guru / Kantor ${updatedUser?.teacher_unit || 'Yayasan'}`
         : (updatedUser?.santri_room || profileFormData.santri_room.trim());
-
-      setDeliveryLocation(targetLoc);
 
       // Otomatis lanjutkan proses checkout langsung tanpa perlu klik ulang!
       await executeOrderCheckout(targetLoc, updatedUser);
@@ -746,39 +743,6 @@ export default function Keranjang() {
             </div>
           </div>
         )}
-
-        {/* Delivery Location */}
-        <div className="bg-white dark:bg-gray-900 rounded-none border border-gray-200 dark:border-gray-800 p-3.5 shadow-xs">
-          <div className="flex items-center justify-between gap-1.5 mb-1.5">
-            <div className="flex items-center gap-1.5">
-              <MapPin className="w-4 h-4 text-green-600" />
-              <h3 className="font-bold text-xs sm:text-sm text-gray-900 dark:text-white">Lokasi Pengiriman</h3>
-            </div>
-            {orderFor === 'guru' && (
-              <span className="text-[10px] bg-indigo-100 dark:bg-indigo-900/60 text-indigo-800 dark:text-indigo-300 font-bold px-1.5 py-0.5 border border-indigo-300 dark:border-indigo-700">
-                ⚡ Prioritas Diantar Langsung
-              </span>
-            )}
-          </div>
-          <p className="text-[11px] text-gray-500 dark:text-gray-400 mb-2.5">
-            {orderFor === 'guru'
-              ? 'Pesanan akan diantar langsung oleh kurir ke lokasi kantor atau ruang guru ini.'
-              : 'Otomatis terisi dari data kamar Santri dan dapat Anda edit bebas di sini.'}
-          </p>
-          <div>
-            <input
-              type="text"
-              placeholder={orderFor === 'guru' ? `Ruang Guru / Kantor ${user?.teacher_unit || 'Yayasan'}` : 'Masukkan lokasi pengiriman (misal: Al Majid 1 / Asrama B)'}
-              value={deliveryLocation}
-              onChange={e => setDeliveryLocation(e.target.value)}
-              className={`w-full p-2.5 border rounded-none text-xs bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none font-medium ${
-                orderFor === 'guru' 
-                  ? 'border-indigo-300 dark:border-indigo-700 focus:border-indigo-600' 
-                  : 'border-gray-300 dark:border-gray-700 focus:border-green-600'
-              }`}
-            />
-          </div>
-        </div>
 
         {/* DYNAMIC VOUCHER MOTIVATION BANNER (Hanya Muncul Jika Benar-Benar Ada Voucher di Database) */}
         {voucherNudge && voucherNudge.type === 'progress' ? (

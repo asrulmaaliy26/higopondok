@@ -26,11 +26,23 @@ class UpdateUserOrderNotesRequest extends FormRequest
             return true;
         }
 
+        $cleanId = $id;
+        if (is_string($cleanId)) {
+            if (str_starts_with($cleanId, 'chk_')) {
+                $cleanId = substr($cleanId, 4);
+            } elseif (str_starts_with($cleanId, 'ord_')) {
+                $cleanId = substr($cleanId, 4);
+            }
+        }
+
         $query = Order::query();
-        if (is_numeric($id)) {
-            $query->where('id', $id);
+        if (is_numeric($cleanId)) {
+            $query->where('id', $cleanId);
         } else {
-            $query->where('checkout_id', $id);
+            $query->where(function ($q) use ($cleanId, $id) {
+                $q->where('checkout_id', $cleanId)
+                  ->orWhere('checkout_id', $id);
+            });
         }
 
         $order = $query->first();

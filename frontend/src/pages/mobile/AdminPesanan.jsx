@@ -1863,11 +1863,14 @@ export default function AdminPesanan() {
 
                           {/* Seksi Tampilan Catatan Kurir & Pesanan di Level Wadah Utama (Hanya jika ADA catatan) */}
                           {(() => {
-                            const orderNotesList = group.orders.map(o => o.order_notes).filter(Boolean);
-                            const customNotesList = group.orders.map(o => o.custom_notes).filter(Boolean);
-                            const adminNotesList = group.orders.map(o => o.admin_notes).filter(Boolean);
+                            const orderNotesList = Array.from(new Set(group.orders.map(o => o.order_notes?.trim()).filter(Boolean)));
+                            // Jangan tampilkan custom_notes jika teksnya sama persis dengan order_notes agar tidak duplikat 2x
+                            const customNotesList = Array.from(new Set(group.orders.map(o => o.custom_notes?.trim()).filter(Boolean)))
+                              .filter(note => !orderNotesList.includes(note));
+                            const adminNotesList = Array.from(new Set(group.orders.map(o => o.admin_notes?.trim()).filter(Boolean)));
                             const itemNotesList = group.orders.flatMap(o => (o.items || []).filter(it => it.notes).map(it => `${it.product?.name || 'Item'}: ${cleanItemNotes(it.notes)}`));
-                            const hasAnyCourierNote = orderNotesList.length > 0 || customNotesList.length > 0 || adminNotesList.length > 0 || itemNotesList.length > 0;
+                            const hasCourierSpecificNote = customNotesList.length > 0 || adminNotesList.length > 0 || itemNotesList.length > 0;
+                            const hasAnyCourierNote = orderNotesList.length > 0 || hasCourierSpecificNote;
 
                             if (!hasAnyCourierNote) return null;
 
@@ -1879,38 +1882,42 @@ export default function AdminPesanan() {
                                       <span>💌</span>
                                       <span>Pesan & Doa untuk Santri (Tercetak di Struk):</span>
                                     </div>
-                                    {Array.from(new Set(orderNotesList)).map((note, nIdx) => (
+                                    {orderNotesList.map((note, nIdx) => (
                                       <div key={nIdx} className="font-semibold italic break-words flex items-start gap-1 text-emerald-950 dark:text-emerald-100">
-                                        <span>\"${note}\"</span>
+                                        <span>"{note}"</span>
                                       </div>
                                     ))}
                                   </div>
                                 )}
-                                <div className="flex items-center gap-1 font-bold text-amber-900 dark:text-amber-300 text-[10.5px] border-b border-amber-200 dark:border-amber-800 pb-0.5">
-                                  <Truck className="w-3.5 h-3.5 text-amber-700 dark:text-amber-400" />
-                                  <span>Catatan Pengantaran Kurir:</span>
-                                </div>
-                                {customNotesList.length > 0 && (
-                                  <div className="space-y-0.5">
-                                    {Array.from(new Set(customNotesList)).map((note, nIdx) => (
-                                      <div key={nIdx} className="font-semibold break-words flex items-start gap-1 text-gray-900 dark:text-gray-100">
-                                        <span className="text-amber-600 shrink-0">📌</span>
-                                        <span>{note}</span>
+                                {hasCourierSpecificNote && (
+                                  <>
+                                    <div className="flex items-center gap-1 font-bold text-amber-900 dark:text-amber-300 text-[10.5px] border-b border-amber-200 dark:border-amber-800 pb-0.5">
+                                      <Truck className="w-3.5 h-3.5 text-amber-700 dark:text-amber-400" />
+                                      <span>Catatan Pengantaran Kurir:</span>
+                                    </div>
+                                    {customNotesList.length > 0 && (
+                                      <div className="space-y-0.5">
+                                        {customNotesList.map((note, nIdx) => (
+                                          <div key={nIdx} className="font-semibold break-words flex items-start gap-1 text-gray-900 dark:text-gray-100">
+                                            <span className="text-amber-600 shrink-0">📌</span>
+                                            <span>{note}</span>
+                                          </div>
+                                        ))}
                                       </div>
-                                    ))}
-                                  </div>
-                                )}
-                                {adminNotesList.length > 0 && (
-                                  <div className="text-[10px] text-amber-800 dark:text-amber-300 break-words flex items-start gap-1">
-                                    <span className="text-blue-600 dark:text-blue-400 shrink-0">ℹ️</span>
-                                    <span><strong>Internal Admin:</strong> {Array.from(new Set(adminNotesList)).join(' • ')}</span>
-                                  </div>
-                                )}
-                                {itemNotesList.length > 0 && (
-                                  <div className="text-[10px] text-gray-700 dark:text-gray-300 break-words flex items-start gap-1 pt-0.5 border-t border-amber-200/60 dark:border-amber-800/60">
-                                    <span className="shrink-0">📝</span>
-                                    <span><strong>Catatan Item:</strong> {itemNotesList.join('; ')}</span>
-                                  </div>
+                                    )}
+                                    {adminNotesList.length > 0 && (
+                                      <div className="text-[10px] text-amber-800 dark:text-amber-300 break-words flex items-start gap-1">
+                                        <span className="text-blue-600 dark:text-blue-400 shrink-0">ℹ️</span>
+                                        <span><strong>Internal Admin:</strong> {adminNotesList.join(' • ')}</span>
+                                      </div>
+                                    )}
+                                    {itemNotesList.length > 0 && (
+                                      <div className="text-[10px] text-gray-700 dark:text-gray-300 break-words flex items-start gap-1 pt-0.5 border-t border-amber-200/60 dark:border-amber-800/60">
+                                        <span className="shrink-0">📝</span>
+                                        <span><strong>Catatan Item:</strong> {itemNotesList.join('; ')}</span>
+                                      </div>
+                                    )}
+                                  </>
                                 )}
                               </div>
                             );

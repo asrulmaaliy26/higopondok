@@ -181,11 +181,7 @@ export default function Kantin() {
       toast.error('Mohon tulis rincian pesanan khusus Anda.');
       return;
     }
-    const loc = customLocation.trim() || user?.santri_room || 'Kamar Santri';
-    if (!loc) {
-      toast.error('Mohon cantumkan lokasi pengantaran / kamar santri.');
-      return;
-    }
+    const loc = user?.santri_room || 'Kamar Santri';
 
     // Tentukan toko/kantin tujuan
     let targetCanteenId = customCanteenId;
@@ -694,22 +690,15 @@ export default function Kantin() {
                 />
               </div>
 
-              {/* Lokasi Pengantaran / Kamar Santri */}
-              <div>
-                <label className="block text-xs font-extrabold uppercase tracking-wide text-gray-700 dark:text-gray-300 mb-1">
-                  Lokasi Pengantaran / Kamar Santri <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={customLocation}
-                    onChange={(e) => setCustomLocation(e.target.value)}
-                    placeholder="Contoh: Asrama Umar Kamar 04 / Ruang Guru"
-                    required
-                    className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100 text-xs py-2 pl-8 pr-3 rounded-none outline-none focus:border-purple-600 focus:bg-white dark:focus:bg-gray-900"
-                  />
-                  <MapPin className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                </div>
+              {/* Lokasi Pengantaran Otomatis Sesuai Profil */}
+              <div className="p-2 bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700 flex items-center justify-between text-xs">
+                <span className="text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-green-600" />
+                  <span>Tujuan Pengantaran:</span>
+                </span>
+                <span className="font-bold text-gray-800 dark:text-gray-200">
+                  {user?.santri_room || 'Kamar Santri (Sesuai Profil)'}
+                </span>
               </div>
 
               {/* Estimasi Anggaran (Opsional) */}

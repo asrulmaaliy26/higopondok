@@ -102,9 +102,16 @@ export default function Pembayaran() {
   const [pesanSantriText, setPesanSantriText] = useState('');
 
   const handleOpenEditPesan = (group, singleOrder, initialText = '') => {
+    // Bersihkan prefix seperti chk_ atau ord_ agar ID selalu murni (e.g. CHK-20261111-MWIDG9 atau 3407)
+    const rawCheckoutId = group?.checkout_id || singleOrder?.checkout_id || (typeof group?.key === 'string' && group.key.startsWith('chk_') ? group.key.replace(/^chk_/, '') : null);
+    const rawOrderId = singleOrder?.id || group?.orders?.[0]?.id || (typeof group?.key === 'string' && group.key.startsWith('ord_') ? group.key.replace(/^ord_/, '') : null);
+    const targetIdentifier = rawCheckoutId || rawOrderId;
+
     setActiveOrderForPesan({
-      orderId: singleOrder?.id,
-      checkoutId: group?.key || singleOrder?.checkout_id,
+      orderId: rawOrderId,
+      checkoutId: rawCheckoutId,
+      targetId: targetIdentifier,
+      displayKey: rawCheckoutId ? `#${rawCheckoutId}` : (rawOrderId ? `#ORD-${rawOrderId}` : ''),
       storeName: singleOrder?.canteen?.name || 'Kantin',
       santriName: singleOrder?.recipient_santri_name || group?.user?.santri_name || 'Santri',
       isMulti: Boolean(group?.isMultiStore || (group?.orders && group?.orders.length > 1))
@@ -2416,7 +2423,7 @@ export default function Pembayaran() {
                     Ubah Pesan & Doa untuk Santri
                   </h3>
                   <p className="text-[10px] text-emerald-100">
-                    {activeOrderForPesan.isMulti ? 'Terapkan ke seluruh toko dalam checkout ini' : `#${activeOrderForPesan.checkoutId || activeOrderForPesan.orderId}`} • Santri: {activeOrderForPesan.santriName}
+                    {activeOrderForPesan.isMulti ? 'Terapkan ke seluruh toko dalam checkout ini' : activeOrderForPesan.displayKey} • Santri: {activeOrderForPesan.santriName}
                   </p>
                 </div>
               </div>
@@ -2484,7 +2491,7 @@ export default function Pembayaran() {
                 type="button"
                 onClick={() => {
                   updateOrderNotesMutation.mutate({
-                    targetId: activeOrderForPesan.checkoutId || activeOrderForPesan.orderId,
+                    targetId: activeOrderForPesan.targetId || activeOrderForPesan.checkoutId || activeOrderForPesan.orderId,
                     order_notes: pesanSantriText.trim()
                   });
                 }}
