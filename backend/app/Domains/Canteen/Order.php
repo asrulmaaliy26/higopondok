@@ -452,6 +452,7 @@ class Order extends Model
         $pindahanGrandTotal = 0;
 
         $canteenRecap = [];
+        $dailyRecap = [];
         $userRecap = [];
         $courierRecap = [];
         $productBreakdown = [];
@@ -555,6 +556,85 @@ class Order extends Model
             $canteenRecap[$cId]['net_admin_fee'] += max(0, $adminFee - $voucherDiscount);
             $canteenRecap[$cId]['grand_total'] += $totalPrice;
             $canteenRecap[$cId]['order_count'] += 1;
+
+            // 1b. Group by Date / Harian (Rekap Harian per Tanggal: HPP, Ongkir, Admin, & Laba)
+            if (!isset($dailyRecap[$orderDate])) {
+                $cDate = $order->created_at ? $order->created_at->copy()->timezone('Asia/Jakarta') : \Carbon\Carbon::parse($orderDate, 'Asia/Jakarta');
+                $cDate->locale('id');
+                $dailyRecap[$orderDate] = [
+                    'date' => $orderDate,
+                    'date_formatted' => $cDate->translatedFormat('d M Y'),
+                    'day_name' => $cDate->translatedFormat('l'),
+                    'order_count' => 0,
+                    'total_products' => 0,
+                    'total_hpp' => 0,
+                    'total_profit' => 0,
+                    'total_delivery_fee' => 0,          // Ongkir Bersih Kurir
+                    'total_courier_cut_to_admin' => 0,  // Potongan Pindahan Ongkir ke Kas Admin
+                    'gross_delivery_fee' => 0,          // Total Ongkir Kotor
+                    'total_admin_fee' => 0,
+                    'total_base_admin_fee' => 0,
+                    'total_voucher_discount' => 0,
+                    'net_admin_fee' => 0,
+                    'grand_total' => 0,
+                    'canteens' => [],
+                    'couriers' => [],
+                ];
+            }
+            $dailyRecap[$orderDate]['order_count'] += 1;
+            $dailyRecap[$orderDate]['total_products'] += $productsSubtotal;
+            $dailyRecap[$orderDate]['total_hpp'] += $orderHpp;
+            $dailyRecap[$orderDate]['total_profit'] += ($productsSubtotal - $orderHpp);
+            $dailyRecap[$orderDate]['total_delivery_fee'] += $deliveryFee;
+            $dailyRecap[$orderDate]['total_courier_cut_to_admin'] += $courierCutToAdmin;
+            $dailyRecap[$orderDate]['gross_delivery_fee'] += ($deliveryFee + $courierCutToAdmin);
+            $dailyRecap[$orderDate]['total_admin_fee'] += $adminFee;
+            $dailyRecap[$orderDate]['total_base_admin_fee'] += $baseAdminFee;
+            $dailyRecap[$orderDate]['total_voucher_discount'] += $voucherDiscount;
+            $dailyRecap[$orderDate]['net_admin_fee'] += max(0, $adminFee - $voucherDiscount);
+            $dailyRecap[$orderDate]['grand_total'] += $totalPrice;
+
+            if (!isset($dailyRecap[$orderDate]['canteens'][$cId])) {
+                $dailyRecap[$orderDate]['canteens'][$cId] = [
+                    'canteen_id' => $cId,
+                    'canteen_name' => $cName,
+                    'order_count' => 0,
+                    'total_products' => 0,
+                    'total_hpp' => 0,
+                    'total_profit' => 0,
+                    'total_delivery_fee' => 0,
+                    'total_admin_fee' => 0,
+                    'grand_total' => 0,
+                ];
+            }
+            $dailyRecap[$orderDate]['canteens'][$cId]['order_count'] += 1;
+            $dailyRecap[$orderDate]['canteens'][$cId]['total_products'] += $productsSubtotal;
+            $dailyRecap[$orderDate]['canteens'][$cId]['total_hpp'] += $orderHpp;
+            $dailyRecap[$orderDate]['canteens'][$cId]['total_profit'] += ($productsSubtotal - $orderHpp);
+            $dailyRecap[$orderDate]['canteens'][$cId]['total_delivery_fee'] += $deliveryFee;
+            $dailyRecap[$orderDate]['canteens'][$cId]['total_admin_fee'] += $adminFee;
+            $dailyRecap[$orderDate]['canteens'][$cId]['grand_total'] += $totalPrice;
+
+            // Kurir breakdown pada hari ini
+            $courierId = $order->courier_id ?: 0;
+            $courierName = $order->courier ? $order->courier->name : ($courierId ? 'Kurir #' . $courierId : 'Tanpa Kurir');
+
+            if (!isset($dailyRecap[$orderDate]['couriers'][$courierId])) {
+                $dailyRecap[$orderDate]['couriers'][$courierId] = [
+                    'courier_id' => $courierId,
+                    'courier_name' => $courierName,
+                    'order_count' => 0,
+                    'delivery_fee' => 0,
+                    'courier_cut_to_admin' => 0,
+                    'gross_delivery_fee' => 0,
+                    'grand_total' => 0,
+                ];
+            }
+            $dailyRecap[$orderDate]['couriers'][$courierId]['order_count'] += 1;
+            $dailyRecap[$orderDate]['couriers'][$courierId]['delivery_fee'] += $deliveryFee;
+            $dailyRecap[$orderDate]['couriers'][$courierId]['courier_cut_to_admin'] += $courierCutToAdmin;
+            $dailyRecap[$orderDate]['couriers'][$courierId]['gross_delivery_fee'] += ($deliveryFee + $courierCutToAdmin);
+            $dailyRecap[$orderDate]['couriers'][$courierId]['grand_total'] += $totalPrice;
 
             // 2. Group by User / Wali (Fokus per User dengan Prestasi & Santri yang Dipesankan)
             $orderSantri = $order->recipient_santri_name ?: ($order->user?->santri_name ?: $order->user?->name ?: 'Santri #' . $userId);
@@ -864,6 +944,55 @@ class Order extends Model
         usort($userRecap, fn($a, $b) => $b['grand_total'] <=> $a['grand_total']);
         usort($courierRecap, fn($a, $b) => $b['order_count'] <=> $a['order_count'] ?: $b['net_delivery_fee'] <=> $a['net_delivery_fee']);
 
+        // Urutkan rekap harian berdasarkan tanggal terbaru terlebih dahulu
+        krsort($dailyRecap);
+        foreach ($dailyRecap as &$dayItem) {
+            $dayItem['canteens'] = array_values($dayItem['canteens']);
+            usort($dayItem['canteens'], fn($a, $b) => $b['grand_total'] <=> $a['grand_total']);
+
+            $cList = array_values($dayItem['couriers'] ?? []);
+            // Urutkan kurir: ID 12 (Pak Faris) selalu Kurir 1, ID 794 (Pak Feri) selalu Kurir 2
+            usort($cList, function($a, $b) {
+                if ($a['courier_id'] == 12) return -1;
+                if ($b['courier_id'] == 12) return 1;
+                if ($a['courier_id'] == 794) return -1;
+                if ($b['courier_id'] == 794) return 1;
+                return $a['courier_id'] <=> $b['courier_id'];
+            });
+
+            // Ekstrak Kurir 1 (Pak Faris) dan Kurir 2 (Pak Feri)
+            $c1 = null;
+            $c2 = null;
+            foreach ($cList as $cItem) {
+                if ($cItem['courier_id'] == 12 || stripos($cItem['courier_name'], 'faris') !== false) {
+                    $c1 = $cItem;
+                } elseif ($cItem['courier_id'] == 794 || stripos($cItem['courier_name'], 'feri') !== false) {
+                    $c2 = $cItem;
+                }
+            }
+
+            $dayItem['couriers'] = $cList;
+            $dayItem['courier_1'] = $c1 ?: [
+                'courier_id' => 12,
+                'courier_name' => 'Kurir pak faris',
+                'order_count' => 0,
+                'delivery_fee' => 0,
+                'courier_cut_to_admin' => 0,
+                'gross_delivery_fee' => 0,
+                'grand_total' => 0,
+            ];
+            $dayItem['courier_2'] = $c2 ?: [
+                'courier_id' => 794,
+                'courier_name' => 'kurir pak feri',
+                'order_count' => 0,
+                'delivery_fee' => 0,
+                'courier_cut_to_admin' => 0,
+                'gross_delivery_fee' => 0,
+                'grand_total' => 0,
+            ];
+        }
+        unset($dayItem);
+
         return [
             'period' => $period,
             'summary' => [
@@ -916,6 +1045,7 @@ class Order extends Model
                 ],
             ],
             'canteen_recap' => array_values($canteenRecap),
+            'daily_recap' => array_values($dailyRecap),
             'user_recap' => array_values($userRecap),
             'courier_recap' => array_values($courierRecap),
             'product_breakdown' => array_values($productBreakdown),

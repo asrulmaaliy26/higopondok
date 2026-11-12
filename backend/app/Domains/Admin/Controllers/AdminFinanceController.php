@@ -177,6 +177,7 @@ class AdminFinanceController extends Controller
                 'all_time_cash_balance' => $allTimeCashBalance,
             ],
             'canteen_recap' => $recap['canteen_recap'] ?? [],
+            'daily_recap' => $recap['daily_recap'] ?? [],
             'courier_recap' => $recap['courier_recap'] ?? [],
             'expense_categories' => $categoriesMeta,
             'expense_category_breakdown' => $expenseCategoryBreakdown,

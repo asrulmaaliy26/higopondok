@@ -9,6 +9,9 @@ import {
   Plus,
   Search,
   Calendar,
+  CalendarDays,
+  ChevronDown,
+  ChevronUp,
   Store,
   Bike,
   TrendingUp,
@@ -60,7 +63,16 @@ export default function AdminKeuangan() {
   const [selectedCourier, setSelectedCourier] = useState('all');
   const [selectedExpenseCategory, setSelectedExpenseCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeSubTab, setActiveSubTab] = useState('expenses'); // 'expenses' | 'rekap_laba_admin_ongkir'
+  const [activeSubTab, setActiveSubTab] = useState('daily'); // 'daily' | 'rekap_laba_admin_ongkir' | 'expenses'
+  const [expandedDates, setExpandedDates] = useState({});
+  const [expandAllDays, setExpandAllDays] = useState(false);
+
+  const toggleExpandDate = (dateStr) => {
+    setExpandedDates((prev) => ({
+      ...prev,
+      [dateStr]: !prev[dateStr],
+    }));
+  };
 
   // Modal Tambah/Edit Pengeluaran States
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -148,6 +160,15 @@ export default function AdminKeuangan() {
   const categoryBreakdown = financeData?.expense_category_breakdown || [];
   const canteenRecap = financeData?.canteen_recap || [];
   const courierRecap = financeData?.courier_recap || [];
+  const dailyRecap = financeData?.daily_recap || [];
+
+  const courier1Total = useMemo(() => {
+    return courierRecap.find((c) => c.courier_id === 12 || c.courier_name?.toLowerCase().includes('faris'));
+  }, [courierRecap]);
+
+  const courier2Total = useMemo(() => {
+    return courierRecap.find((c) => c.courier_id === 794 || c.courier_name?.toLowerCase().includes('feri'));
+  }, [courierRecap]);
 
   // Buka Modal Tambah / Edit
   const handleOpenAddModal = () => {
@@ -724,21 +745,21 @@ export default function AdminKeuangan() {
               </div>
             </div>
 
-            {/* 3. SUB-TAB NAVIGASI: BUKU PENGELUARAN HIGO vs TABEL REKAP LABA, ADMIN & ONGKIR */}
+            {/* 3. SUB-TAB NAVIGASI: REKAP HARIAN vs RINCIAN PER TOKO & KURIR vs PENGELUARAN HIGO */}
             <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-none shadow-2xs">
               <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-800 px-2.5 pt-2 gap-2 flex-wrap">
                 <div className="flex items-center gap-2 overflow-x-auto">
                   <button
                     type="button"
-                    onClick={() => setActiveSubTab('expenses')}
+                    onClick={() => setActiveSubTab('daily')}
                     className={`pb-2 px-2 text-xs font-black border-b-2 rounded-none cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
-                      activeSubTab === 'expenses'
+                      activeSubTab === 'daily'
                         ? 'border-green-600 text-green-700 dark:text-green-400'
                         : 'border-transparent text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'
                     }`}
                   >
-                    <Receipt className="w-3.5 h-3.5" />
-                    <span>Daftar Pengeluaran Kas Higo ({expenses.length})</span>
+                    <CalendarDays className="w-3.5 h-3.5" />
+                    <span>Rekap Harian per Tanggal ({dailyRecap.length} Hari)</span>
                   </button>
 
                   <button
@@ -751,7 +772,20 @@ export default function AdminKeuangan() {
                     }`}
                   >
                     <Layers className="w-3.5 h-3.5" />
-                    <span>Rincian Laba Toko, Biaya Admin &amp; Ongkir ({canteenRecap.length} Toko)</span>
+                    <span>Rekap per Toko &amp; Kurir ({canteenRecap.length} Toko)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveSubTab('expenses')}
+                    className={`pb-2 px-2 text-xs font-black border-b-2 rounded-none cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                      activeSubTab === 'expenses'
+                        ? 'border-green-600 text-green-700 dark:text-green-400'
+                        : 'border-transparent text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'
+                    }`}
+                  >
+                    <Receipt className="w-3.5 h-3.5" />
+                    <span>Daftar Pengeluaran Kas Higo ({expenses.length})</span>
                   </button>
                 </div>
 
@@ -759,6 +793,348 @@ export default function AdminKeuangan() {
                   Grand Total Perputaran Transaksi: <strong className="text-gray-900 dark:text-white">{formatRp(summary.grand_total_transactions)}</strong>
                 </div>
               </div>
+
+              {/* ================= SUB-TAB 0: REKAP HARIAN PER TANGGAL (HPP, ONGKIR, OMZET & LABA) ================= */}
+              {activeSubTab === 'daily' && (
+                <div className="p-2.5 sm:p-3 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div>
+                      <h3 className="text-xs font-black uppercase tracking-wider text-gray-900 dark:text-white flex items-center gap-1.5">
+                        <CalendarDays className="w-3.5 h-3.5 text-green-600" />
+                        <span>Tabel Rekapitulasi HPP, Ongkir &amp; Omzet Per Tanggal</span>
+                      </h3>
+                      <p className="text-[10px] text-gray-500 dark:text-gray-400">
+                        Daftar rincian modal toko (HPP) dan ongkir kurir untuk setiap hari transaksi di periode <span className="font-bold text-gray-700 dark:text-gray-300">{getPeriodLabel()}</span>
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {dailyRecap.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (expandAllDays) {
+                              setExpandedDates({});
+                              setExpandAllDays(false);
+                            } else {
+                              const all = {};
+                              dailyRecap.forEach((d) => { all[d.date] = true; });
+                              setExpandedDates(all);
+                              setExpandAllDays(true);
+                            }
+                          }}
+                          className="px-2 py-1 text-[10.5px] font-bold bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-700 rounded-none cursor-pointer flex items-center gap-1"
+                        >
+                          {expandAllDays ? (
+                            <>
+                              <ChevronUp className="w-3 h-3 text-green-600" />
+                              <span>Tutup Semua Rincian Toko</span>
+                            </>
+                          ) : (
+                            <>
+                              <ChevronDown className="w-3 h-3 text-gray-500" />
+                              <span>Buka Semua Rincian Toko</span>
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto border border-gray-200 dark:border-gray-800 rounded-none">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-gray-100 dark:bg-gray-800 text-[10px] font-bold uppercase text-gray-600 dark:text-gray-300 border-b border-gray-200 dark:border-gray-700">
+                          <th rowSpan="2" className="py-2 px-2 text-center w-8 align-middle">No</th>
+                          <th rowSpan="2" className="py-2 px-2.5 align-middle">Tanggal Transaksi</th>
+                          <th rowSpan="2" className="py-2 px-2 text-right align-middle">Order</th>
+                          <th rowSpan="2" className="py-2 px-2.5 text-right align-middle">Omzet (HPJ)</th>
+                          <th rowSpan="2" className="py-2 px-2.5 text-right bg-amber-50/60 dark:bg-amber-950/20 text-amber-900 dark:text-amber-300 border-x border-amber-200/50 dark:border-amber-900/40 align-middle">
+                            Modal Toko (HPP)
+                          </th>
+                          <th rowSpan="2" className="py-2 px-2.5 text-right align-middle">Laba Toko</th>
+                          <th colSpan="3" className="py-1 px-2 text-center bg-sky-50 dark:bg-sky-950/40 text-sky-900 dark:text-sky-300 border-x border-sky-200 dark:border-sky-800 font-black">
+                            ONGKIR PENGANTARAN KURIR
+                          </th>
+                          <th rowSpan="2" className="py-2 px-2.5 text-right align-middle">Biaya Admin</th>
+                          <th rowSpan="2" className="py-2 px-2.5 text-right align-middle">Grand Total</th>
+                          <th rowSpan="2" className="py-2 px-2 text-center w-28 align-middle">Rincian</th>
+                        </tr>
+                        <tr className="bg-sky-50/70 dark:bg-sky-950/30 text-[9.5px] font-bold uppercase text-sky-900 dark:text-sky-300 border-b border-gray-200 dark:border-gray-700">
+                          <th className="py-1 px-2 text-right border-l border-sky-200/50 dark:border-sky-900/40">
+                            🛵 Kurir 1 (Faris)
+                          </th>
+                          <th className="py-1 px-2 text-right border-x border-sky-200/50 dark:border-sky-900/40">
+                            🛵 Kurir 2 (Feri)
+                          </th>
+                          <th className="py-1 px-2 text-right border-r border-sky-200/50 dark:border-sky-900/40 font-black">
+                            Total Ongkir
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 dark:divide-gray-800 font-mono text-[11px]">
+                        {dailyRecap.length === 0 ? (
+                          <tr>
+                            <td colSpan="12" className="py-8 text-center font-sans text-gray-500">
+                              Tidak ada riwayat transaksi pada periode tanggal ini.
+                            </td>
+                          </tr>
+                        ) : (
+                          dailyRecap.map((d, idx) => {
+                            const isExpanded = !!expandedDates[d.date];
+                            return (
+                              <React.Fragment key={d.date || idx}>
+                                <tr className={`hover:bg-gray-50/80 dark:hover:bg-gray-800/40 transition-colors ${isExpanded ? 'bg-emerald-50/20 dark:bg-emerald-950/20' : ''}`}>
+                                  <td className="py-2 px-2 text-center text-gray-400">{idx + 1}</td>
+                                  <td className="py-2 px-2.5 font-sans">
+                                    <div className="font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
+                                      <span>{d.date_formatted}</span>
+                                    </div>
+                                    <span className="text-[10px] text-gray-500 dark:text-gray-400 font-medium">
+                                      {d.day_name} • {d.date}
+                                    </span>
+                                  </td>
+                                  <td className="py-2 px-2 text-right font-bold text-gray-800 dark:text-gray-200">
+                                    {d.order_count}x
+                                  </td>
+                                  <td className="py-2 px-2.5 text-right text-gray-800 dark:text-gray-200">
+                                    {formatRp(d.total_products)}
+                                  </td>
+                                  <td className="py-2 px-2.5 text-right font-bold text-amber-700 dark:text-amber-400 bg-amber-50/30 dark:bg-amber-950/10 border-x border-amber-200/40 dark:border-amber-900/30">
+                                    {formatRp(d.total_hpp)}
+                                  </td>
+                                  <td className="py-2 px-2.5 text-right font-bold text-emerald-700 dark:text-emerald-400">
+                                    {formatRp(d.total_profit)}
+                                  </td>
+
+                                  {/* Kurir 1 (Pak Faris) */}
+                                  <td className="py-2 px-2 text-right font-bold text-sky-800 dark:text-sky-300 bg-sky-50/20 dark:bg-sky-950/10 border-l border-sky-200/40 dark:border-sky-900/30">
+                                    <div>{formatRp(d.courier_1?.delivery_fee || 0)}</div>
+                                    <span className="text-[9.5px] font-normal text-gray-400">
+                                      {d.courier_1?.order_count || 0}x
+                                    </span>
+                                  </td>
+
+                                  {/* Kurir 2 (Pak Feri) */}
+                                  <td className="py-2 px-2 text-right font-bold text-sky-800 dark:text-sky-300 bg-sky-50/20 dark:bg-sky-950/10 border-x border-sky-200/40 dark:border-sky-900/30">
+                                    <div>{formatRp(d.courier_2?.delivery_fee || 0)}</div>
+                                    <span className="text-[9.5px] font-normal text-gray-400">
+                                      {d.courier_2?.order_count || 0}x
+                                    </span>
+                                  </td>
+
+                                  {/* Total Ongkir Kurir */}
+                                  <td className="py-2 px-2.5 text-right font-black text-sky-900 dark:text-sky-200 bg-sky-50/30 dark:bg-sky-950/20 border-r border-sky-200/40 dark:border-sky-900/30">
+                                    <div>{formatRp(d.total_delivery_fee)}</div>
+                                    {Number(d.total_courier_cut_to_admin || 0) > 0 && (
+                                      <span className="block text-[9px] font-normal text-amber-600 dark:text-amber-400">
+                                        +{formatRp(d.total_courier_cut_to_admin)} adm
+                                      </span>
+                                    )}
+                                  </td>
+
+                                  <td className="py-2 px-2.5 text-right font-bold text-green-700 dark:text-green-400">
+                                    {formatRp(d.total_admin_fee)}
+                                  </td>
+                                  <td className="py-2 px-2.5 text-right font-black text-gray-900 dark:text-white">
+                                    {formatRp(d.grand_total)}
+                                  </td>
+                                  <td className="py-2 px-2 text-center">
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleExpandDate(d.date)}
+                                      className="px-1.5 py-1 text-[10px] font-sans font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-none cursor-pointer flex items-center justify-center gap-1 mx-auto"
+                                      title="Lihat rincian HPP toko dan tugas kurir di tanggal ini"
+                                    >
+                                      <span>{d.canteens?.length || 0} Toko</span>
+                                      {isExpanded ? <ChevronUp className="w-3 h-3 text-green-600" /> : <ChevronDown className="w-3 h-3 text-gray-400" />}
+                                    </button>
+                                  </td>
+                                </tr>
+
+                                {/* Expanded sub-row: Detail Toko & Kurir pada tanggal ini */}
+                                {isExpanded && (
+                                  <tr className="bg-gray-50/60 dark:bg-gray-900/70 border-b border-gray-200 dark:border-gray-800">
+                                    <td colSpan="12" className="p-2 sm:p-3">
+                                      <div className="border border-green-200 dark:border-green-900/60 bg-white dark:bg-gray-900 rounded-none p-2 sm:p-2.5 shadow-2xs space-y-2.5">
+                                        
+                                        {/* Kartu Ringkasan Pembagian Ongkir Kurir 1 & 2 */}
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 font-sans">
+                                          <div className="bg-sky-50/60 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800/80 p-2 rounded-none flex items-center justify-between">
+                                            <div className="flex items-center gap-2">
+                                              <div className="w-7 h-7 bg-sky-600 text-white rounded-none flex items-center justify-center">
+                                                <Bike className="w-4 h-4" />
+                                              </div>
+                                              <div>
+                                                <div className="text-[9.5px] font-black uppercase text-sky-800 dark:text-sky-300 tracking-wider">
+                                                  Kurir 1 (Pak Faris)
+                                                </div>
+                                                <div className="text-[10px] text-gray-500 font-mono">
+                                                  {d.courier_1?.order_count || 0} pesanan diantar
+                                                </div>
+                                              </div>
+                                            </div>
+                                            <div className="text-right">
+                                              <div className="text-xs font-black font-mono text-sky-900 dark:text-sky-200">
+                                                {formatRp(d.courier_1?.delivery_fee || 0)}
+                                              </div>
+                                              <span className="text-[9px] text-gray-400">Ongkir Bersih</span>
+                                            </div>
+                                          </div>
+
+                                          <div className="bg-sky-50/60 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800/80 p-2 rounded-none flex items-center justify-between">
+                                            <div className="flex items-center gap-2">
+                                              <div className="w-7 h-7 bg-sky-700 text-white rounded-none flex items-center justify-center">
+                                                <Bike className="w-4 h-4" />
+                                              </div>
+                                              <div>
+                                                <div className="text-[9.5px] font-black uppercase text-sky-800 dark:text-sky-300 tracking-wider">
+                                                  Kurir 2 (Pak Feri)
+                                                </div>
+                                                <div className="text-[10px] text-gray-500 font-mono">
+                                                  {d.courier_2?.order_count || 0} pesanan diantar
+                                                </div>
+                                              </div>
+                                            </div>
+                                            <div className="text-right">
+                                              <div className="text-xs font-black font-mono text-sky-900 dark:text-sky-200">
+                                                {formatRp(d.courier_2?.delivery_fee || 0)}
+                                              </div>
+                                              <span className="text-[9px] text-gray-400">Ongkir Bersih</span>
+                                            </div>
+                                          </div>
+                                        </div>
+
+                                        {/* Tabel Rincian Toko */}
+                                        <div>
+                                          <div className="flex items-center justify-between pb-1 mb-1 border-b border-gray-100 dark:border-gray-800">
+                                            <div className="flex items-center gap-1.5 font-sans">
+                                              <Store className="w-3.5 h-3.5 text-green-600" />
+                                              <span className="text-[11px] font-black uppercase text-gray-900 dark:text-white">
+                                                Rincian HPP, Omzet &amp; Laba Per Toko • {d.date_formatted} ({d.day_name})
+                                              </span>
+                                            </div>
+                                            <span className="text-[10px] font-mono text-gray-500">
+                                              Total: {d.order_count} pesanan
+                                            </span>
+                                          </div>
+
+                                          <div className="overflow-x-auto">
+                                            <table className="w-full text-left text-[10.5px] border-collapse font-mono">
+                                              <thead>
+                                                <tr className="bg-gray-100/80 dark:bg-gray-800/80 text-[9.5px] font-bold uppercase text-gray-600 dark:text-gray-300 border-b border-gray-200 dark:border-gray-700">
+                                                  <th className="py-1.5 px-2 text-center w-6 font-sans">#</th>
+                                                  <th className="py-1.5 px-2 font-sans">Nama Toko / Kantin</th>
+                                                  <th className="py-1.5 px-2 text-right">Order</th>
+                                                  <th className="py-1.5 px-2 text-right">Omzet Produk</th>
+                                                  <th className="py-1.5 px-2 text-right text-amber-700 dark:text-amber-400 font-bold">
+                                                    Modal Toko (HPP)
+                                                  </th>
+                                                  <th className="py-1.5 px-2 text-right text-emerald-700 dark:text-emerald-400 font-bold">
+                                                    Laba Toko
+                                                  </th>
+                                                  <th className="py-1.5 px-2 text-right text-sky-700 dark:text-sky-400 font-bold">
+                                                    Ongkir
+                                                  </th>
+                                                  <th className="py-1.5 px-2 text-right text-green-700 dark:text-green-400 font-bold">
+                                                    Biaya Admin
+                                                  </th>
+                                                  <th className="py-1.5 px-2 text-right font-black">
+                                                    Subtotal Nilai
+                                                  </th>
+                                                </tr>
+                                              </thead>
+                                              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                                                {(d.canteens || []).map((c, cIdx) => (
+                                                  <tr key={c.canteen_id || cIdx} className="hover:bg-gray-50 dark:hover:bg-gray-800/30">
+                                                    <td className="py-1.5 px-2 text-center text-gray-400 font-sans">{cIdx + 1}</td>
+                                                    <td className="py-1.5 px-2 font-sans font-bold text-gray-800 dark:text-gray-200">
+                                                      {c.canteen_name}
+                                                    </td>
+                                                    <td className="py-1.5 px-2 text-right text-gray-700 dark:text-gray-300">
+                                                      {c.order_count}x
+                                                    </td>
+                                                    <td className="py-1.5 px-2 text-right text-gray-700 dark:text-gray-300">
+                                                      {formatRp(c.total_products)}
+                                                    </td>
+                                                    <td className="py-1.5 px-2 text-right font-bold text-amber-700 dark:text-amber-400">
+                                                      {formatRp(c.total_hpp)}
+                                                    </td>
+                                                    <td className="py-1.5 px-2 text-right font-bold text-emerald-700 dark:text-emerald-400">
+                                                      {formatRp(c.total_profit)}
+                                                    </td>
+                                                    <td className="py-1.5 px-2 text-right font-bold text-sky-700 dark:text-sky-400">
+                                                      {formatRp(c.total_delivery_fee)}
+                                                    </td>
+                                                    <td className="py-1.5 px-2 text-right font-bold text-green-700 dark:text-green-400">
+                                                      {formatRp(c.total_admin_fee)}
+                                                    </td>
+                                                    <td className="py-1.5 px-2 text-right font-black text-gray-900 dark:text-white">
+                                                      {formatRp(c.grand_total)}
+                                                    </td>
+                                                  </tr>
+                                                ))}
+                                              </tbody>
+                                            </table>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                              </React.Fragment>
+                            );
+                          })
+                        )}
+                      </tbody>
+                      {dailyRecap.length > 0 && (
+                        <tfoot>
+                          <tr className="bg-gray-50 dark:bg-gray-800/90 border-t-2 border-gray-300 dark:border-gray-700 font-mono font-black text-[11px]">
+                            <td colSpan="2" className="py-2.5 px-2.5 font-sans uppercase text-right text-gray-700 dark:text-gray-300">
+                              TOTAL PERIODE ({dailyRecap.length} HARI):
+                            </td>
+                            <td className="py-2.5 px-2 text-right">{summary.total_orders || 0}x</td>
+                            <td className="py-2.5 px-2.5 text-right">{formatRp(summary.total_products_omzet)}</td>
+                            <td className="py-2.5 px-2.5 text-right text-amber-700 dark:text-amber-400 bg-amber-50/50 dark:bg-amber-950/20 border-x border-amber-200/50 dark:border-amber-900/40">
+                              {formatRp(summary.total_hpp)}
+                            </td>
+                            <td className="py-2.5 px-2.5 text-right text-emerald-700 dark:text-emerald-400">
+                              {formatRp(summary.total_canteen_profit)}
+                            </td>
+
+                            {/* Total Kurir 1 (Faris) */}
+                            <td className="py-2.5 px-2 text-right text-sky-800 dark:text-sky-300 bg-sky-50/40 dark:bg-sky-950/20 border-l border-sky-200/50 dark:border-sky-900/40">
+                              <div>{formatRp(courier1Total?.net_delivery_fee || 0)}</div>
+                              <span className="text-[9.5px] font-normal text-gray-400">{courier1Total?.order_count || 0}x</span>
+                            </td>
+
+                            {/* Total Kurir 2 (Feri) */}
+                            <td className="py-2.5 px-2 text-right text-sky-800 dark:text-sky-300 bg-sky-50/40 dark:bg-sky-950/20 border-x border-sky-200/50 dark:border-sky-900/40">
+                              <div>{formatRp(courier2Total?.net_delivery_fee || 0)}</div>
+                              <span className="text-[9.5px] font-normal text-gray-400">{courier2Total?.order_count || 0}x</span>
+                            </td>
+
+                            {/* Total Ongkir Kurir */}
+                            <td className="py-2.5 px-2.5 text-right text-sky-900 dark:text-sky-200 bg-sky-50/60 dark:bg-sky-950/30 border-r border-sky-200/50 dark:border-sky-900/40 font-black">
+                              {formatRp(summary.courier_net_delivery_fee)}
+                            </td>
+
+                            <td className="py-2.5 px-2.5 text-right text-green-700 dark:text-green-400">
+                              {formatRp(summary.gross_admin_income)}
+                            </td>
+                            <td className="py-2.5 px-2.5 text-right text-gray-900 dark:text-white">
+                              {formatRp(summary.grand_total_transactions)}
+                            </td>
+                            <td className="py-2.5 px-2 text-center text-[10px] font-sans text-gray-400">
+                              -
+                            </td>
+                          </tr>
+                        </tfoot>
+                      )}
+                    </table>
+                  </div>
+                </div>
+              )}
 
               {/* ================= SUB-TAB 1: DAFTAR & KELOLA PENGELUARAN HIGO ================= */}
               {activeSubTab === 'expenses' && (
