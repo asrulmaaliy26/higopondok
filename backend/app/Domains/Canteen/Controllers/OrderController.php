@@ -550,11 +550,7 @@ class OrderController extends Controller
         if ($startDate && $endDate) {
             $start = \Illuminate\Support\Carbon::parse($startDate, 'Asia/Jakarta')->startOfDay();
             $end = \Illuminate\Support\Carbon::parse($endDate, 'Asia/Jakarta')->endOfDay();
-            // Pesanan aktif yang belum selesai (pending & processing) selalu disertakan agar tidak hilang saat berganti hari
-            $query->where(function ($dateQ) use ($start, $end) {
-                $dateQ->whereBetween('created_at', [$start, $end])
-                      ->orWhereIn('status', ['pending', 'processing']);
-            });
+            $query->whereBetween('created_at', [$start, $end]);
         } elseif ($period && $period !== 'all') {
             $query->filterPeriod($period);
         }
@@ -1081,6 +1077,7 @@ class OrderController extends Controller
         $canteenId = $request->query('canteen_id');
         $startDate = $request->query('start_date');
         $endDate = $request->query('end_date');
+        $period = $request->query('period');
         $allStores = $request->boolean('all_stores') || $request->query('all_stores') === '1';
 
         // Hanya muat relasi yang benar-benar dipakai di UI kurir
@@ -1136,11 +1133,9 @@ class OrderController extends Controller
         if ($startDate && $endDate) {
             $start = \Illuminate\Support\Carbon::parse($startDate, 'Asia/Jakarta')->startOfDay();
             $end = \Illuminate\Support\Carbon::parse($endDate, 'Asia/Jakarta')->endOfDay();
-            // Pesanan aktif yang belum selesai (pending & processing) selalu disertakan agar tidak hilang saat berganti hari
-            $query->where(function ($dateQ) use ($start, $end) {
-                $dateQ->whereBetween('created_at', [$start, $end])
-                      ->orWhereIn('status', ['pending', 'processing']);
-            });
+            $query->whereBetween('created_at', [$start, $end]);
+        } elseif ($period && $period !== 'all') {
+            $query->filterPeriod($period);
         }
 
         if ($search) {

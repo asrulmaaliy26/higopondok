@@ -830,6 +830,8 @@ export default function TugasKurir() {
         if (order.status !== 'processing') return false;
       } else if (statusTab === 'completed') {
         if (order.status !== 'completed') return false;
+      } else if (statusTab === 'pindahan') {
+        if (!isOrderPindahan(order)) return false;
       }
 
       // 1b. Recipient Type Filter (Semua / Guru / Santri)
@@ -918,10 +920,10 @@ export default function TugasKurir() {
 
       // Kunci grouping kurir: checkout_id jika ada, fallback ke user_id + santri + asrama + tanggal
       const groupKey = order.checkout_id
-        ? `chk_${order.checkout_id}`
+        ? `chk_${order.checkout_id}_${dateKey}`
         : (order.user_id && (sName || sRoom))
           ? `usr_${order.user_id}_${sName}_${sRoom}_${dateKey}`
-          : `ord_${order.id}`;
+          : `ord_${order.id}_${dateKey}`;
 
       if (!map.has(groupKey)) {
         map.set(groupKey, {
@@ -1265,6 +1267,7 @@ export default function TugasKurir() {
       pending: baseOrders.filter(o => o.status === 'pending').length,
       processing: baseOrders.filter(o => o.status === 'processing').length,
       completed: baseOrders.filter(o => o.status === 'completed').length,
+      pindahan: baseOrders.filter(o => isOrderPindahan(o)).length,
     };
   }, [orders, currentUser?.id, recipientFilter]);
 
@@ -1280,6 +1283,7 @@ export default function TugasKurir() {
       if (statusTab === 'pending' && order.status !== 'pending') return false;
       if (statusTab === 'processing' && order.status !== 'processing') return false;
       if (statusTab === 'completed' && order.status !== 'completed') return false;
+      if (statusTab === 'pindahan' && !isOrderPindahan(order)) return false;
       if (selectedCanteenFilter !== 'all' && order.canteen_id?.toString() !== selectedCanteenFilter.toString()) return false;
       const isTeacher = checkIsTeacherOrder(order);
       if (recipientFilter === 'guru' && !isTeacher) return false;
@@ -1316,23 +1320,52 @@ export default function TugasKurir() {
     return filteredOrders.filter(o => o.status !== 'cancelled').length;
   }, [filteredOrders]);
 
-  // Financial summary for filtered orders (modal belanja & ongkir)
+  // Financial summary for filtered orders (modal belanja & ongkir, dengan deteksi pindahan terpisah)
   const filteredSummary = useMemo(() => {
     let totalProducts = 0;
     let totalDeliveryFee = 0;
+    let todayProducts = 0;
+    let todayDeliveryFee = 0;
+    let pindahanProducts = 0;
+    let pindahanDeliveryFee = 0;
+    let todayOrdersCount = 0;
+    let pindahanOrdersCount = 0;
 
     filteredOrders.forEach(order => {
       const deliveryFee = parseFloat(order.delivery_fee || 0);
+      const modalBelanja = getOrderModalBelanja(order);
+      const isPind = isOrderPindahan(order);
+
       totalDeliveryFee += deliveryFee;
-      totalProducts += getOrderModalBelanja(order);
+      totalProducts += modalBelanja;
+
+      if (isPind) {
+        pindahanOrdersCount++;
+        pindahanProducts += modalBelanja;
+        pindahanDeliveryFee += deliveryFee;
+      } else {
+        todayOrdersCount++;
+        todayProducts += modalBelanja;
+        todayDeliveryFee += deliveryFee;
+      }
     });
 
     const grandTotal = totalProducts + totalDeliveryFee;
+    const hasPindahan = pindahanOrdersCount > 0;
 
     return {
       totalProducts,
       totalDeliveryFee,
       grandTotal,
+      todayProducts,
+      todayDeliveryFee,
+      todayGrandTotal: todayProducts + todayDeliveryFee,
+      pindahanProducts,
+      pindahanDeliveryFee,
+      pindahanGrandTotal: pindahanProducts + pindahanDeliveryFee,
+      todayOrdersCount,
+      pindahanOrdersCount,
+      hasPindahan,
       totalOrders: filteredOrders.length
     };
   }, [filteredOrders]);
@@ -1583,6 +1616,9 @@ export default function TugasKurir() {
                 <option value="my_tasks">🙋 Tugas Saya ({tabCounts.my_tasks})</option>
                 <option value="pending">⏳ Menunggu ({tabCounts.pending})</option>
                 <option value="processing">🚴 Sedang Diantar ({tabCounts.processing})</option>
+                {tabCounts.pindahan > 0 && (
+                  <option value="pindahan">📅 Pindahan ({tabCounts.pindahan})</option>
+                )}
                 <option value="completed">✅ Selesai ({tabCounts.completed})</option>
               </select>
             </div>
@@ -1625,6 +1661,11 @@ export default function TugasKurir() {
               <span className="font-black font-mono text-[11px] sm:text-xs md:text-sm text-gray-900 dark:text-white leading-tight whitespace-nowrap">
                 Rp {formatRupiah(filteredSummary.totalProducts)}
               </span>
+              {filteredSummary.hasPindahan && (
+                <span className="text-[8px] text-gray-500 dark:text-gray-400 font-mono block leading-none mt-0.5">
+                  Reg: {formatRupiah(filteredSummary.todayProducts)} • Pind: {formatRupiah(filteredSummary.pindahanProducts)}
+                </span>
+              )}
             </div>
             <div className="px-1.5 py-1 sm:px-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 rounded-none text-center flex flex-col justify-center shadow-2xs">
               <span className="text-[9px] sm:text-[10px] text-emerald-700 dark:text-emerald-300 font-bold uppercase tracking-wider leading-none mb-0.5">
@@ -1633,6 +1674,11 @@ export default function TugasKurir() {
               <span className="font-black font-mono text-[11px] sm:text-xs md:text-sm text-emerald-700 dark:text-emerald-300 leading-tight whitespace-nowrap">
                 Rp {formatRupiah(filteredSummary.totalDeliveryFee)}
               </span>
+              {filteredSummary.hasPindahan && (
+                <span className="text-[8px] text-emerald-600 dark:text-emerald-400 font-mono block leading-none mt-0.5">
+                  Reg: {formatRupiah(filteredSummary.todayDeliveryFee)} • Pind: {formatRupiah(filteredSummary.pindahanDeliveryFee)}
+                </span>
+              )}
             </div>
             <div className="px-1.5 py-1 sm:px-2 bg-green-100 dark:bg-green-950/60 border border-green-400 dark:border-green-800 rounded-none text-center flex flex-col justify-center shadow-2xs">
               <span className="text-[9px] sm:text-[10px] text-green-800 dark:text-green-300 font-bold uppercase tracking-wider leading-none mb-0.5">
@@ -1643,6 +1689,23 @@ export default function TugasKurir() {
               </span>
             </div>
           </div>
+
+          {/* Banner Ramping Pesanan Pindahan (Jika Ada) */}
+          {filteredSummary.hasPindahan && (
+            <div className="flex items-center justify-between px-2 py-1 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/80 text-[10px] font-bold text-amber-900 dark:text-amber-200">
+              <span className="flex items-center gap-1 truncate">
+                <span>📅</span>
+                <span className="truncate">Ada {filteredSummary.pindahanOrdersCount} pesanan pindahan tgl lain (Modal: Rp {formatRupiah(filteredSummary.pindahanProducts)})</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setStatusTab(statusTab === 'pindahan' ? 'all' : 'pindahan')}
+                className="px-1.5 py-0.2 bg-amber-200 dark:bg-amber-900 text-amber-950 dark:text-amber-100 border border-amber-400 dark:border-amber-700 text-[9px] font-black cursor-pointer uppercase shrink-0 hover:bg-amber-300 transition-colors"
+              >
+                {statusTab === 'pindahan' ? 'Semua' : 'Filter Pindahan'}
+              </button>
+            </div>
+          )}
         </div>
 
 
@@ -1780,6 +1843,12 @@ export default function TugasKurir() {
 
                             {/* Status Badges */}
                             <div className="flex items-center gap-1 shrink-0">
+                              {isOrderPindahan(primaryOrder) && (
+                                <span className="px-1.5 py-0.5 bg-amber-100 dark:bg-amber-950/80 text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-700 text-[10px] font-bold rounded-none flex items-center gap-0.5 shadow-2xs shrink-0">
+                                  <Calendar className="w-2.5 h-2.5 text-amber-600 dark:text-amber-400" />
+                                  <span>Pindahan ({getOrderOrigDate(primaryOrder) || 'Tgl Lain'})</span>
+                                </span>
+                              )}
                               {isAllPending && (
                                 <span className="px-1.5 py-0.5 bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 text-[10px] font-bold rounded-none flex items-center gap-0.5">
                                   <Clock className="w-2.5 h-2.5" /> Menunggu
@@ -1885,6 +1954,11 @@ export default function TugasKurir() {
                                     {order.canteen?.category && (
                                       <span className="text-[8.5px] font-black uppercase px-1 py-0.1 bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700">
                                         {order.canteen.category === 'kota' ? 'Kota' : 'Kauman'}
+                                      </span>
+                                    )}
+                                    {isOrderPindahan(order) && (
+                                      <span className="text-[8.5px] font-black uppercase px-1 py-0.1 bg-amber-100 dark:bg-amber-950/80 text-amber-900 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
+                                        📅 Pindahan ({getOrderOrigDate(order) || 'Tgl Lain'})
                                       </span>
                                     )}
                                   </div>
@@ -2173,6 +2247,12 @@ export default function TugasKurir() {
 
                           {/* Status Badges */}
                           <div className="flex items-center gap-1 shrink-0">
+                            {isOrderPindahan(order) && (
+                              <span className="px-1.5 py-0.5 bg-amber-100 dark:bg-amber-950/80 text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-700 text-[10px] font-bold rounded-none flex items-center gap-0.5 shadow-2xs shrink-0">
+                                <Calendar className="w-2.5 h-2.5 text-amber-600 dark:text-amber-400" />
+                                <span>Pindahan ({getOrderOrigDate(order) || 'Tgl Lain'})</span>
+                              </span>
+                            )}
                             {isPending && (
                               <span className="px-1.5 py-0.5 bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 text-[10px] font-bold rounded-none flex items-center gap-0.5">
                                 <Clock className="w-2.5 h-2.5" /> Menunggu

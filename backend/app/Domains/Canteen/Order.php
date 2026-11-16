@@ -96,6 +96,7 @@ class Order extends Model
     protected $appends = [
         'hpp',
         'canteen_profit',
+        'is_pindahan',
     ];
 
     public function voucher()
@@ -409,6 +410,14 @@ class Order extends Model
             return $orderDate && ($checkoutDate !== $orderDate);
         }
         return false;
+    }
+
+    /**
+     * Aksesor is_pindahan otomatis di JSON
+     */
+    public function getIsPindahanAttribute(): bool
+    {
+        return $this->isPindahan();
     }
 
     /**
