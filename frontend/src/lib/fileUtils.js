@@ -289,3 +289,108 @@ export const compressImageFiles = async (files, options = {}) => {
   if (!Array.isArray(files) || files.length === 0) return [];
   return Promise.all(files.map((file) => compressImageFile(file, options)));
 };
+
+/**
+ * Buka media/bukti dalam resolusi penuh di tab baru secara aman
+ * tanpa terintersep atau terblokir oleh Single Page Application (SPA) Router / PWA Service Worker.
+ */
+export const openFullResolutionMedia = (url, title = 'Bukti Transaksi') => {
+  if (!url) return;
+  const fileType = getFileType(url);
+  const win = window.open('', '_blank');
+  if (win) {
+    try {
+      win.document.write(`
+        <!DOCTYPE html>
+        <html lang="id">
+          <head>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+            <title>${title} - Resolusi Penuh</title>
+            <style>
+              * { box-sizing: border-box; }
+              body {
+                margin: 0;
+                padding: 12px;
+                background-color: #0b0f19;
+                color: #f3f4f6;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                min-height: 100vh;
+              }
+              .toolbar {
+                position: fixed;
+                top: 12px;
+                left: 50%;
+                transform: translateX(-50%);
+                background: rgba(17, 24, 39, 0.9);
+                backdrop-filter: blur(8px);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                padding: 6px 14px;
+                border-radius: 4px;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                z-index: 1000;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+              }
+              .toolbar a, .toolbar button {
+                color: #10b981;
+                text-decoration: none;
+                font-size: 12px;
+                font-weight: bold;
+                background: none;
+                border: none;
+                cursor: pointer;
+              }
+              .media-container {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                max-width: 100%;
+                margin-top: 36px;
+              }
+              img {
+                max-width: 100%;
+                max-height: 90vh;
+                object-fit: contain;
+                border: 1px solid #1f2937;
+                background: #000;
+                cursor: zoom-in;
+              }
+              iframe {
+                width: 95vw;
+                height: 90vh;
+                border: 1px solid #1f2937;
+                background: #fff;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="toolbar">
+              <span style="font-size: 11px; color: #9ca3af;">${title}</span>
+              <a href="${url}" download>⬇️ Unduh Berkas</a>
+              <button onclick="window.close()">✖ Tutup</button>
+            </div>
+            <div class="media-container">
+              ${
+                fileType === 'pdf'
+                  ? `<iframe src="${url}" title="${title}"></iframe>`
+                  : `<img src="${url}" alt="${title}" onclick="this.requestFullscreen ? this.requestFullscreen() : null" />`
+              }
+            </div>
+          </body>
+        </html>
+      `);
+      win.document.close();
+      return;
+    } catch (e) {
+      // Fallback direct open
+    }
+  }
+  // Fallback normal window.open
+  window.open(url, '_blank', 'noopener,noreferrer');
+};

@@ -115,4 +115,15 @@ return [
         'name' => env('MAIL_FROM_NAME', env('APP_NAME', 'Laravel')),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Notifikasi Email Pesanan Khusus (Titip Beli)
+    |--------------------------------------------------------------------------
+    |
+    | Alamat email tujuan yang akan menerima notifikasi setiap kali ada
+    | pesanan khusus (custom order) baru masuk ke sistem.
+    |
+    */
+    'special_order_notification_email' => env('SPECIAL_ORDER_NOTIFICATION_EMAIL', 'lostsaga06k@gmail.com'),
+
 ];

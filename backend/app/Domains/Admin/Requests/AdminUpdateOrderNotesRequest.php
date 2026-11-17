@@ -22,6 +22,8 @@ class AdminUpdateOrderNotesRequest extends FormRequest
         return [
             'recipient_santri_name' => 'nullable|string|max:255',
             'recipient_santri_room' => 'nullable|string|max:255',
+            'recipient_santri_class' => 'nullable|string|max:255',
+            'recipient_santri_level' => 'nullable|string|max:255',
             'delivery_location' => 'nullable|string|max:255',
             'admin_notes' => 'nullable|string|max:2000',
             'custom_notes' => 'nullable|string|max:2000',

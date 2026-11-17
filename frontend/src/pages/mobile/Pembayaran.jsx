@@ -10,7 +10,7 @@ import {
 import toast from 'react-hot-toast';
 import api, { getStorageUrl, getPublicUrl } from '../../lib/axios';
 import { useAuthStore } from '../../store/authStore';
-import { getFileType, isImageFile, isHeifFile, isPdfFile, formatFileSize, getFileNameFromPath, compressImageFiles } from '../../lib/fileUtils';
+import { getFileType, isImageFile, isHeifFile, isPdfFile, formatFileSize, getFileNameFromPath, compressImageFiles, openFullResolutionMedia } from '../../lib/fileUtils';
 import santriData from '../../data/santri.json';
 import { buildDefaultGreetingWaText } from '../../lib/phoneUtils';
 import ThermalReceiptModal from '../../components/receipt/ThermalReceiptModal';
@@ -1860,14 +1860,13 @@ export default function Pembayaran() {
                       className="w-full h-[55vh] rounded-none bg-white border border-gray-700" 
                     />
                     <div className="w-full flex gap-2">
-                      <a
-                        href={displayUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex-1 py-2.5 px-4 bg-green-600 hover:bg-green-700 active:scale-98 text-white rounded-none text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-md"
+                      <button
+                        type="button"
+                        onClick={() => openFullResolutionMedia(displayUrl, 'Dokumen PDF Bukti Transfer')}
+                        className="flex-1 py-2.5 px-4 bg-green-600 hover:bg-green-700 active:scale-98 text-white rounded-none text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer border-0"
                       >
                         <ExternalLink className="w-4 h-4" /> Buka / Unduh Dokumen PDF
-                      </a>
+                      </button>
                       <button
                         type="button"
                         onClick={() => setSelectedProofs([])}
@@ -1895,15 +1894,14 @@ export default function Pembayaran() {
                           <Eye className="w-3.5 h-3.5" />
                           <span>Buka Gambar Penuh</span>
                         </button>
-                        <a 
-                          href={displayUrl} 
-                          target="_blank" 
-                          rel="noopener noreferrer" 
-                          className="p-1 text-gray-400 hover:text-white rounded-none hover:bg-white/10 transition-colors"
-                          title="Buka di Tab Baru"
+                        <button 
+                          type="button"
+                          onClick={() => openFullResolutionMedia(displayUrl, `Bukti ${idx + 1}`)} 
+                          className="p-1 text-gray-400 hover:text-white rounded-none hover:bg-white/10 transition-colors cursor-pointer bg-transparent border-0"
+                          title="Buka di Tab Baru (Resolusi Penuh)"
                         >
                           <ExternalLink className="w-3.5 h-3.5" />
-                        </a>
+                        </button>
                         <button 
                           type="button"
                           onClick={() => setSelectedProofs([])}

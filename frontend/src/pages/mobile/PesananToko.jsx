@@ -7,7 +7,7 @@ import toast from 'react-hot-toast';
 import api, { getStorageUrl } from '../../lib/axios';
 import { useCanteenStore } from '../../store/canteenStore';
 import { useAuthStore } from '../../store/authStore';
-import { getFileType, isImageFile, isHeifFile, isPdfFile, formatFileSize, getFileNameFromPath, compressImageFiles } from '../../lib/fileUtils';
+import { getFileType, isImageFile, isHeifFile, isPdfFile, formatFileSize, getFileNameFromPath, compressImageFiles, openFullResolutionMedia } from '../../lib/fileUtils';
 import ThermalReceiptModal, { cleanItemNotes } from '../../components/receipt/ThermalReceiptModal';
 import AdminAccountingModal from '../../components/modals/AdminAccountingModal';
 import santriData from '../../data/santri.json';
@@ -4279,15 +4279,14 @@ ${itemsListText}
                           <Eye className="w-3 h-3" />
                           <span>Layar Penuh</span>
                         </button>
-                        <a 
-                          href={displayUrl} 
-                          target="_blank" 
-                          rel="noopener noreferrer" 
-                          className="p-1 text-gray-400 hover:text-white rounded-none hover:bg-white/10 transition-colors"
-                          title="Buka di Tab Baru"
+                        <button 
+                          type="button"
+                          onClick={() => openFullResolutionMedia(displayUrl, `Bukti ${idx + 1}`)} 
+                          className="p-1 text-gray-400 hover:text-white rounded-none hover:bg-white/10 transition-colors cursor-pointer bg-transparent border-0"
+                          title="Buka Resolusi Penuh di Tab Baru"
                         >
                           <ExternalLink className="w-3.5 h-3.5" />
-                        </a>
+                        </button>
                       </div>
                     </div>
                     <img 

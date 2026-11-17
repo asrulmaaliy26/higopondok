@@ -11,7 +11,7 @@ import {
 import toast from 'react-hot-toast';
 import api, { getStorageUrl } from '../../lib/axios';
 import { useAuthStore } from '../../store/authStore';
-import { getFileType, isImageFile, isHeifFile, isPdfFile, formatFileSize, getFileNameFromPath, compressImageFiles } from '../../lib/fileUtils';
+import { getFileType, isImageFile, isHeifFile, isPdfFile, formatFileSize, getFileNameFromPath, compressImageFiles, openFullResolutionMedia } from '../../lib/fileUtils';
 import ThermalReceiptModal, { cleanItemNotes } from '../../components/receipt/ThermalReceiptModal';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { renderOrderDateTime, isOrderPindahan, getOrderOrigDate } from '../../lib/orderUtils';
@@ -3722,14 +3722,13 @@ export default function TugasKurir() {
                   <div key={idx} className="w-full max-w-lg bg-gray-900 border border-gray-800 rounded-none p-2 flex flex-col items-center gap-1.5">
                     <div className="w-full flex items-center justify-between px-1 text-xs text-gray-400">
                       <span className="font-medium">Bukti {idx + 1} dari {selectedProofs.length}</span>
-                      <a 
-                        href={displayUrl} 
-                        target="_blank" 
-                        rel="noreferrer" 
-                        className="text-green-400 hover:text-green-300 flex items-center gap-1 text-[11px]"
+                      <button 
+                        type="button"
+                        onClick={() => openFullResolutionMedia(displayUrl, `Bukti ${idx + 1}`)} 
+                        className="text-green-400 hover:text-green-300 flex items-center gap-1 text-[11px] cursor-pointer bg-transparent border-0 p-0 font-medium"
                       >
                         Buka Penuh <ExternalLink className="w-3 h-3" />
-                      </a>
+                      </button>
                     </div>
                     <img 
                       src={displayUrl}

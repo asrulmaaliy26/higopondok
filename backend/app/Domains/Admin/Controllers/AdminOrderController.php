@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Domains\Canteen\Order;
 use App\Domains\Canteen\OrderItem;
+use App\Domains\Canteen\Canteen;
 use App\Domains\Auth\User;
 use App\Domains\Admin\ActivityLog;
 use App\Domains\Admin\Requests\AdminUploadPaymentProofRequest;
@@ -1370,7 +1371,7 @@ class AdminOrderController extends Controller
                 }
             }
 
-            // 1b. Update Nama Santri & Kamar/Lokasi Penerima jika dikirim (Hanya untuk pesanan ini/wadah ini, profil user tetap aman)
+            // 1b. Update Nama Santri, Kamar/Lokasi, Kelas & Jenjang Penerima jika dikirim (Hanya untuk pesanan ini/wadah ini, profil user tetap aman)
             if ($request->has('recipient_santri_name')) {
                 $order->recipient_santri_name = !empty($request->input('recipient_santri_name')) ? trim($request->input('recipient_santri_name')) : null;
             }
@@ -1382,6 +1383,12 @@ class AdminOrderController extends Controller
                 $newLoc = !empty($request->input('delivery_location')) ? trim($request->input('delivery_location')) : null;
                 $order->delivery_location = $newLoc;
                 $order->recipient_santri_room = $newLoc;
+            }
+            if ($request->has('recipient_santri_class')) {
+                $order->recipient_santri_class = !empty($request->input('recipient_santri_class')) ? trim($request->input('recipient_santri_class')) : null;
+            }
+            if ($request->has('recipient_santri_level')) {
+                $order->recipient_santri_level = !empty($request->input('recipient_santri_level')) ? trim($request->input('recipient_santri_level')) : null;
             }
 
             // 2. Update Catatan Kurir / Custom Notes jika dikirim
@@ -1411,6 +1418,12 @@ class AdminOrderController extends Controller
                     $syncData['recipient_santri_room'] = $order->recipient_santri_room;
                     $syncData['delivery_location'] = $order->delivery_location;
                 }
+                if ($request->has('recipient_santri_class')) {
+                    $syncData['recipient_santri_class'] = $order->recipient_santri_class;
+                }
+                if ($request->has('recipient_santri_level')) {
+                    $syncData['recipient_santri_level'] = $order->recipient_santri_level;
+                }
                 if ($request->has('admin_notes')) {
                     $syncData['admin_notes'] = $order->admin_notes;
                 }
@@ -1434,6 +1447,12 @@ class AdminOrderController extends Controller
             }
             if ($request->has('recipient_santri_room') || $request->has('delivery_location')) {
                 $descParts[] = 'Kamar: ' . ($order->recipient_santri_room ?: '(dikosongkan)');
+            }
+            if ($request->has('recipient_santri_class')) {
+                $descParts[] = 'Kelas: ' . ($order->recipient_santri_class ?: '-');
+            }
+            if ($request->has('recipient_santri_level')) {
+                $descParts[] = 'Jenjang: ' . ($order->recipient_santri_level ?: '-');
             }
             if (!empty($itemNotesUpdated)) {
                 $descParts[] = 'Produk: ' . implode(', ', $itemNotesUpdated);
@@ -1459,6 +1478,64 @@ class AdminOrderController extends Controller
             return response()->json([
                 'message' => 'Catatan produk & pesanan kurir berhasil diperbarui!',
                 'order' => $order->fresh()->load(['user', 'canteen', 'courier', 'items.product']),
+            ]);
+        });
+    }
+
+    /**
+     * Superadmin set / update harga barang pesanan khusus
+     */
+    public function setCustomOrderPrice(Request $request, $id)
+    {
+        return DB::transaction(function () use ($request, $id) {
+            $order = Order::with(['canteen', 'user', 'items.product', 'courier'])->lockForUpdate()->findOrFail($id);
+
+            if ($order->payment_status === 'paid') {
+                return response()->json(['message' => 'Pesanan sudah berstatus Lunas, harga tidak dapat diubah lagi.'], 400);
+            }
+
+            $request->validate([
+                'total_price' => 'required|numeric|min:0',
+                'canteen_id' => 'nullable|exists:canteens,id',
+            ]);
+
+            $productPrice = (float) $request->total_price;
+            $canteen = $request->filled('canteen_id')
+                ? Canteen::find($request->canteen_id)
+                : $order->canteen;
+
+            // Gunakan getPricingConfig() dengan prioritas tarif pesanan khusus (Ongkir 3.500, Admin 2.500)
+            $pricing = Order::getPricingConfig();
+            $defaultAdminFee = $order->is_custom ? $pricing['custom_admin_fee'] : $pricing['base_admin_fee'];
+            $defaultDeliveryFee = $order->is_custom ? $pricing['custom_delivery_fee'] : $pricing['base_delivery_fee'];
+            $admin_fee = ((float) $order->admin_fee > 0) ? (float) $order->admin_fee : $defaultAdminFee;
+            $delivery_fee = ((float) $order->delivery_fee > 0) ? (float) $order->delivery_fee : $defaultDeliveryFee;
+
+            $total_price = $productPrice > 0 ? ($productPrice + $admin_fee + $delivery_fee) : 0;
+
+            $updateData = [
+                'total_price' => $total_price,
+                'admin_fee' => $admin_fee,
+                'delivery_fee' => $delivery_fee,
+            ];
+
+            if ($request->filled('canteen_id')) {
+                $updateData['canteen_id'] = $request->canteen_id;
+            }
+
+            $order->update($updateData);
+
+            ActivityLog::create([
+                'user_id' => $request->user()->id,
+                'action' => 'set_custom_order_price',
+                'model_type' => Order::class,
+                'model_id' => $order->id,
+                'description' => "Superadmin {$request->user()->name} menetapkan harga pesanan khusus #{$order->id}: Produk Rp " . number_format($productPrice, 0, ',', '.') . ", Grand Total Rp " . number_format($total_price, 0, ',', '.'),
+            ]);
+
+            return response()->json([
+                'message' => 'Harga pesanan khusus berhasil diperbarui oleh Superadmin!',
+                'order' => $order->fresh()->load(['canteen', 'user', 'items.product', 'courier'])
             ]);
         });
     }

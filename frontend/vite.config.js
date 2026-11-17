@@ -80,7 +80,11 @@ export default defineConfig(({ command }) => ({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         globIgnores: ['**/heic2any*'],
         navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/api/],
+        navigateFallbackDenylist: [
+          /^\/api/,
+          /^\/storage/,
+          /\.(jpg|jpeg|png|gif|webp|svg|pdf|heic|bmp|ico)$/i,
+        ],
         runtimeCaching: [
           {
             urlPattern: /.*heic2any.*\.js$/,

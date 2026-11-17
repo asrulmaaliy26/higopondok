@@ -99,6 +99,15 @@ class Order extends Model
         'is_pindahan',
     ];
 
+    protected static function booted()
+    {
+        static::created(function (Order $order) {
+            if ($order->is_custom) {
+                $order->dispatchSpecialOrderNotification();
+            }
+        });
+    }
+
     public function voucher()
     {
         return $this->belongsTo(Voucher::class);
@@ -130,6 +139,14 @@ class Order extends Model
     public function dispatchCompletedNotifications(): void
     {
         \App\Domains\Canteen\Jobs\SendOrderCompletedNotificationJob::dispatchAfterResponse($this->id);
+    }
+
+    /**
+     * Kirim notifikasi email latar belakang saat pesanan khusus baru masuk (created)
+     */
+    public function dispatchSpecialOrderNotification(): void
+    {
+        \App\Domains\Canteen\Jobs\SendSpecialOrderNotificationJob::dispatchAfterResponse($this->id);
     }
 
     // ==========================================

@@ -161,8 +161,8 @@ class AiSmartOrderingService
 
         $userLocation = $user ? ($user->santri_room ?: ($user->delivery_location ?: 'Kamar Santri')) : 'Kamar Santri';
 
-        // 0. Deteksi apakah santri/wali bertanya tentang status pesanan terkini (sudah diterima / sampai mana)
-        $isCheckOrderIntent = preg_match('/(?:cek\s*(?:status\s*)?pesanan|status\s*pesanan|bagaimana\s*pesanan|pesanan\s*(?:saya|saat\s*ini|sampai\s*mana)|apakah\s*(?:sudah\s*)?(?:diterima|sampai|diantar)|sudah\s*(?:sampai|diterima|diantar)\s*(?:belum|santri)?|makanan\s*(?:saya\s*)?(?:sampai\s*mana|sudah\s*sampai)|lacak\s*pesanan)/i', $normalizedMessage);
+        // 0. Deteksi apakah santri/wali bertanya tentang status pesanan terkini (sudah diterima / sampai mana / kenapa belum sampai)
+        $isCheckOrderIntent = preg_match('/(?:cek\s*(?:status\s*)?pesanan|status\s*pesanan|bagaimana\s*pesanan|pesanan\s*(?:saya|saat\s*ini|sampai\s*mana)|apakah\s*(?:sudah\s*)?(?:diterima|sampai|diantar)|sudah\s*(?:sampai|diterima|diantar)\s*(?:belum|santri)?|makanan\s*(?:saya\s*)?(?:sampai\s*mana|sudah\s*sampai)|lacak\s*pesanan|kenapa\s*(?:belum|blm)\s*(?:sampai|dikirim|diantar|selesai)|kapan\s*(?:dikirim|diantar|sampai)|(?:kok|padahal)\s*(?:belum|blm)\s*(?:sampai|dikirim|diantar)|(?:mana\s*ya|kok\s*belum|kok\s*blm))/i', $normalizedMessage);
         if ($isCheckOrderIntent) {
             return $this->checkRecentOrderStatus($user, $normalizedMessage);
         }
@@ -252,10 +252,11 @@ class AiSmartOrderingService
         $currentTimeStr = $nowWib->format('H:i') . ' WIB';
         $isPast8PM = $currentHour >= 20; // Pukul 20:00 (jam 8 malam) ke atas
 
-        $scheduleBanner = "ℹ️ **Ketentuan Pengantaran & Pengambilan Pesanan Pondok**:\n"
-            . "• 🛵 **Jadwal Antar Kurir**: Mulai pukul **17:00 s/d 21:00 WIB** (jam 5 sore - 9 malam).\n"
-            . "• 📦 **Waktu Pengambilan Santri**: Santri dapat mulai mengambil pesanan mulai **pukul 20:00 WIB** (jam 8 malam).\n"
-            . "• ✉️ **Notifikasi Email**: Begitu pesanan selesai diantar oleh kurir, bukti foto serah terima dan status selesai otomatis terkirim ke email akun Kakak.";
+        $scheduleBanner = "ℹ️ **Alur & Jadwal Pengantaran Pesanan Pondok**:\n"
+            . "• 🛵 **Kurir Bergerak**: Kurir mulai bergerak mengambil & mengantarkan pesanan **setelah waktu Maghrib**.\n"
+            . "• 📦 **Tiba di Tangan Santri**: Pesanan sampai dan dibagikan di asrama di kisaran pukul **20:00 – 21:00 WIB (jam 8 – 9 malam)**, menyesuaikan waktu **selesainya aktivitas/kegiatan wajib pondok**.\n"
+            . "• 📸 **Update Status & Bukti Foto**: Perubahan status menjadi *Selesai* di aplikasi kadang sedikit berjarak/bertahap, karena kurir mendahulukan pembagian paket ke santri terlebih dahulu, lalu mengunggah foto bukti fisik serah terima satu per satu ke sistem.\n"
+            . "• ✉️ **Notifikasi Otomatis**: Begitu kurir selesai input bukti, status selesai dan foto serah terima otomatis tampil di menu Riwayat serta terkirim ke email Kakak.";
 
         if (!$user) {
             return [
@@ -364,19 +365,21 @@ class AiSmartOrderingService
             $statusLabel = 'Sedang Diproses & Diantar Kurir';
 
             if ($isPast8PM) {
-                // Santri cek saat sudah jam 8 malam ke atas dan pesanan masih processing
-                $replyText = "🕒 *Waktu Pengecekan: {$currentTimeStr} (Sudah melewati pukul 20:00 WIB)*\n\n"
-                    . "⏳ **HASIL PENGECEKAN: PESANAN BELUM SELESAI (Sedang Diantar Kurir)** 🛵💨\n\n"
-                    . "Kami telah mengecek ke sistem kurir: pesanan **#ORD-{$order->id}** ({$canteenName}) saat ini **SEDANG DALAM PERJALANAN / PROSES PENGANTARAN OLEH KURIR** (" . ($courierName ? "**{$courierName}**" : "Kurir Pondok") . ") menuju tujuan (**{$room}**).\n\n"
+                // Santri / Wali cek saat sudah jam 8 malam ke atas dan pesanan masih processing
+                $replyText = "🕒 *Waktu Pengecekan: {$currentTimeStr}*\n\n"
+                    . "⏳ **INFORMASI STATUS PESANAN (Sedang Proses Pengantaran / Pembagian)** 🛵💨\n\n"
+                    . "Alhamdulillah, pesanan **#ORD-{$order->id}** ({$canteenName}) saat ini **SEDANG DALAM TAHAP PENGANTARAN & PEMBAGIAN ASRAMA** oleh kurir (" . ($courierName ? "**{$courierName}**" : "Kurir Pondok") . ") menuju lokasi (**{$room}**).\n\n"
                     . "📋 **Status Terkini**:\n"
                     . "• **Penerima**: {$recipient} ({$room})\n"
                     . "• **Menu**: {$itemsList}\n"
                     . "• **Status Bayar**: " . ($order->payment_status === 'paid' ? 'Lunas / Terverifikasi ✅' : 'Menunggu Verifikasi') . "\n\n"
-                    . "Jadwal pengantaran kurir berlangsung mulai pukul 17:00 hingga pukul 21:00 WIB (jam 9 malam). Mohon ditunggu sebentar ya kak, kurir sedang bergegas.\n\n"
-                    . "✉️ **Begitu kurir selesai mengantarkan pesanan, foto bukti serah terima dan notifikasi otomatis akan langsung terkirim ke email akun Kakak!**";
+                    . "ℹ️ **Catatan Waktu Tiba & Update Status**:\n"
+                    . "• Kurir mulai bergerak mengantarkan paket **setelah waktu Maghrib** dan pembagian ke santri berlangsung di kisaran pukul **20:00 – 21:00 WIB (jam 8 – 9 malam)** menyesuaikan selesainya kegiatan asrama.\n"
+                    . "• Perubahan status menjadi *Selesai* di aplikasi mungkin sedikit berjarak/tertunda karena kurir mendahulukan pembagian paket secara langsung ke tangan santri di asrama, lalu mengunggah foto bukti serah terima satu per satu ke sistem.\n\n"
+                    . "Mohon ditunggu sebentar ya kak, kurir sedang merampungkan pembagian paket di asrama. Begitu foto bukti diunggah, notifikasi otomatis langsung masuk ke email Kakak! 😊";
             } else {
-                // Santri cek sebelum jam 8 malam (misal sore jam 17.00 - 19.59)
-                $replyText = "Pesanan **#ORD-{$order->id}** ({$canteenName}) saat ini **SEDANG DALAM PROSES PENYIAPAN & PENGANTARAN** oleh kurir! 🛵💨\n\n"
+                // Santri / Wali cek sebelum jam 8 malam (misal sore setelah ashar / maghrib)
+                $replyText = "Pesanan **#ORD-{$order->id}** ({$canteenName}) saat ini **SEDANG DALAM PROSES PENYIAPAN & ANTARAN KURIR**! 🛵💨\n\n"
                     . "🕒 *Waktu saat ini: {$currentTimeStr}*\n\n"
                     . "{$scheduleBanner}\n\n"
                     . "📋 **Status Terkini**:\n"
@@ -384,7 +387,7 @@ class AiSmartOrderingService
                     . "• **Menu**: {$itemsList}\n"
                     . "• **Kurir yang Bertugas**: " . ($courierName ? "**{$courierName}**" : "Kurir Pondok") . "\n"
                     . "• **Status Bayar**: " . ($order->payment_status === 'paid' ? 'Lunas / Terverifikasi ✅' : 'Menunggu Verifikasi') . "\n\n"
-                    . "Santri dapat mulai mengambil pesanan mulai **pukul 20:00 WIB (jam 8 malam)** nanti ya kak. Begitu pengantaran selesai, notifikasi otomatis akan langsung terkirim ke email Kakak. Mohon ditunggu! 😊";
+                    . "Santri akan menerima pesanan di asrama di kisaran pukul **20:00 – 21:00 WIB (jam 8 – 9 malam)** setelah aktivitas pondok selesai. Mohon ditunggu ya kak! 😊";
             }
         } elseif ($order->status === 'pending') {
             $statusLabel = 'Menunggu Konfirmasi / Pembayaran';
@@ -665,11 +668,12 @@ class AiSmartOrderingService
         // KATEGORI 6: JADWAL OPERASIONAL, JAM ANTAR KURIR & PENGAMBILAN SANTRI
         // =========================================================================
         if (preg_match('/(?:jadwal\s*(?:antar|kurir|pengantaran|buka|kantin)|jam\s*berapa.*?(?:antar|mengantar|diantar|kurir|sampai|ambil|diambil|buka|tutup)|kapan.*?(?:diantar|mengantar|sampai|ambil|diambil)|waktu\s*(?:antar|pengantaran|pengambilan))/i', $lower)) {
-            $reply = "🕒 **Jadwal Operasional Kantin, Pengantaran Kurir & Pengambilan Santri**:\n\n"
-                . "• 🏪 **Jam Buka Toko Reguler**: Pukul **07:00 – 17:00 WIB** *(Khusus fitur **Pesanan Khusus / Titip Beli** dapat diajukan 24 jam)*.\n"
-                . "• 🛵 **Jadwal Pengantaran Kurir**: Kurir mengantarkan pesanan ke gedung asrama mulai pukul **17:00 s/d 21:00 WIB** (5 sore – 9 malam).\n"
-                . "• 📦 **Waktu Pengambilan Santri**: Santri dapat mengambil pesanannya mulai **pukul 20:00 WIB (jam 8 malam)** di titik pengantaran gedung asrama.\n"
-                . "• 📸 **Bukti Serah Terima & Email**: Begitu pesanan selesai diantar kurir, foto bukti pengantaran langsung tampil di menu **Riwayat** dan terkirim otomatis ke **Email** akun Kakak.";
+            $reply = "🕒 **Jadwal Operasional Kantin & Pengantaran Kurir Pondok**:\n\n"
+                . "• 🏪 **Jam Operasional Toko**: Buka pukul **07:00 – 17:00 WIB** *(Layanan **Pesanan Khusus / Titip Beli** dapat diajukan 24 jam)*.\n"
+                . "• 🛵 **Pergerakan Kurir**: Kurir mulai bergerak mengambil & mengantarkan paket pesanan **setelah waktu Maghrib**.\n"
+                . "• 📦 **Waktu Tiba di Tangan Santri**: Pesanan sampai dan dibagikan di asrama santri di kisaran pukul **20:00 – 21:00 WIB (jam 8 – 9 malam)** menyesuaikan **selesainya kegiatan wajib pondok**.\n"
+                . "• 📸 **Update Status di Aplikasi**: Status pesanan berubah menjadi *Selesai* secara bertahap setelah pembagian di asrama tuntas, karena kurir mengunggah foto bukti fisik serah terima satu per satu ke sistem.\n"
+                . "• ✉️ **Notifikasi Email**: Begitu bukti foto diunggah kurir, notifikasi selesai dan foto serah terima otomatis terkirim ke email Kakak.";
 
             return array_merge($baseResponse, [
                 'reply_text' => $reply,
