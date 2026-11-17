@@ -39,7 +39,8 @@ import {
   HardDrive,
   Crown,
   Sparkles,
-  Users
+  Users,
+  Edit2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api, { getStorageUrl } from '../../lib/axios';
@@ -259,6 +260,8 @@ export default function AdminPesanan() {
 
   // Admin Notes Modal States
   const [orderToEditNotes, setOrderToEditNotes] = useState(null);
+  const [recipientSantriNameText, setRecipientSantriNameText] = useState('');
+  const [recipientSantriRoomText, setRecipientSantriRoomText] = useState('');
   const [adminNotesText, setAdminNotesText] = useState('');
   const [customNotesText, setCustomNotesText] = useState('');
   const [orderNotesText, setOrderNotesText] = useState('');
@@ -271,6 +274,8 @@ export default function AdminPesanan() {
       ...order,
       _groupOrders: ordersList,
     });
+    setRecipientSantriNameText(order.recipient_santri_name || order.user?.santri_name || order.user?.name || '');
+    setRecipientSantriRoomText(order.delivery_location || order.recipient_santri_room || order.user?.santri_room || '');
     setAdminNotesText(order.admin_notes || ordersList.find(o => o.admin_notes)?.admin_notes || '');
     setCustomNotesText(order.custom_notes || ordersList.find(o => o.custom_notes)?.custom_notes || '');
     setOrderNotesText(order.order_notes || ordersList.find(o => o.order_notes)?.order_notes || '');
@@ -986,8 +991,11 @@ export default function AdminPesanan() {
 
   // Mutation Update Admin & Product & Courier Notes
   const updateAdminNotesMutation = useMutation({
-    mutationFn: async ({ id, admin_notes, custom_notes, order_notes, items, sync_checkout }) => {
+    mutationFn: async ({ id, recipient_santri_name, recipient_santri_room, delivery_location, admin_notes, custom_notes, order_notes, items, sync_checkout }) => {
       const res = await api.put(`/admin/orders/${id}/notes`, {
+        recipient_santri_name,
+        recipient_santri_room,
+        delivery_location,
         admin_notes,
         custom_notes,
         order_notes,
@@ -1000,7 +1008,7 @@ export default function AdminPesanan() {
       toast.error(err.response?.data?.message || 'Gagal menyimpan catatan pesanan');
     },
     onSuccess: (data) => {
-      toast.success(data.message || 'Catatan produk & kurir berhasil diperbarui');
+      toast.success(data.message || 'Catatan & data santri berhasil diperbarui');
       setOrderToEditNotes(null);
     },
     onSettled: () => {
@@ -1701,9 +1709,17 @@ export default function AdminPesanan() {
                         {/* Customer / Santri Info Box (Tampil 1 kali di atas wadah) */}
                         <div className="mt-1.5 pt-1 border-t border-dashed border-gray-100 dark:border-gray-800 text-xs space-y-0.5">
                           <div className="flex items-center justify-between gap-1">
-                            <span className="font-bold text-gray-900 dark:text-white truncate flex items-center gap-1">
+                            <span className="font-bold text-gray-900 dark:text-white truncate flex items-center gap-1 min-w-0">
                               <User className="w-3.5 h-3.5 text-gray-400 shrink-0" />
                               <span className="truncate">{santriName}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditNotesModal(firstOrder, group.orders)}
+                                className="text-gray-400 hover:text-green-600 dark:hover:text-green-400 p-0.5 rounded-none cursor-pointer transition-colors shrink-0"
+                                title="Edit nama santri / kamar untuk pesanan ini"
+                              >
+                                <Edit2 className="w-3 h-3" />
+                              </button>
                             </span>
                             <span className="text-[11px] font-bold text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.2 border border-gray-300 dark:border-gray-700 shrink-0">
                               📍 {santriRoom || '-'}
@@ -4472,13 +4488,13 @@ export default function AdminPesanan() {
                 </div>
                 <div>
                   <h3 className="text-sm font-black text-gray-900 dark:text-white leading-tight flex items-center gap-1.5">
-                    <span>Catatan Produk & Kurir</span>
+                    <span>Penerima & Catatan Pesanan</span>
                     <span className="text-[9px] bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 px-1 py-0.2 border border-amber-300 dark:border-amber-800 uppercase font-bold">
                       Bantuan Admin
                     </span>
                   </h3>
                   <p className="text-[10.5px] text-gray-500 dark:text-gray-400 mt-0.5">
-                    Pesanan #{orderToEditNotes.id} • {orderToEditNotes.canteen?.name || 'Toko'} • Santri: {orderToEditNotes.recipient_santri_name || orderToEditNotes.user?.santri_name || orderToEditNotes.user?.name} ({orderToEditNotes.delivery_location || orderToEditNotes.recipient_santri_room || 'Kamar Santri'})
+                    Pesanan #{orderToEditNotes.id} • {orderToEditNotes.canteen?.name || 'Toko'} • Santri: {recipientSantriNameText || orderToEditNotes.recipient_santri_name || orderToEditNotes.user?.santri_name || orderToEditNotes.user?.name} ({recipientSantriRoomText || orderToEditNotes.delivery_location || orderToEditNotes.recipient_santri_room || 'Kamar Santri'})
                   </p>
                 </div>
               </div>
@@ -4493,6 +4509,48 @@ export default function AdminPesanan() {
 
             {/* Body Scrollable */}
             <div className="overflow-y-auto space-y-3.5 pr-1 text-left flex-1 min-h-0">
+              {/* 0. SEKSI EDIT NAMA SANTRI & KAMAR (KHUSUS PESANAN INI) */}
+              <div className="space-y-1.5 p-2 bg-blue-50/70 dark:bg-blue-950/30 border border-blue-300 dark:border-blue-700/80 rounded-none">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-black uppercase tracking-wider text-blue-950 dark:text-blue-200 flex items-center gap-1.5">
+                    <User className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                    <span>Data Santri Penerima (Khusus Pesanan Ini)</span>
+                  </label>
+                  <span className="text-[9.5px] bg-blue-200 dark:bg-blue-900 text-blue-950 dark:text-blue-200 font-bold px-1.5 py-0.2 rounded-none">
+                    Profil Akun Tetap Aman
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                  <div>
+                    <span className="block text-[10px] font-bold text-gray-700 dark:text-gray-300 mb-0.5">
+                      Nama Santri:
+                    </span>
+                    <input
+                      type="text"
+                      value={recipientSantriNameText}
+                      onChange={(e) => setRecipientSantriNameText(e.target.value)}
+                      placeholder="Nama ananda santri..."
+                      className="w-full px-2.5 py-1 rounded-none border border-blue-300 dark:border-blue-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-xs font-bold focus:ring-1 focus:ring-blue-500 focus:outline-hidden"
+                    />
+                  </div>
+                  <div>
+                    <span className="block text-[10px] font-bold text-gray-700 dark:text-gray-300 mb-0.5">
+                      Kamar / Asrama / Lokasi:
+                    </span>
+                    <input
+                      type="text"
+                      value={recipientSantriRoomText}
+                      onChange={(e) => setRecipientSantriRoomText(e.target.value)}
+                      placeholder="Contoh: Asmah G5 / Al Majid 2..."
+                      className="w-full px-2.5 py-1 rounded-none border border-blue-300 dark:border-blue-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-xs font-semibold focus:ring-1 focus:ring-blue-500 focus:outline-hidden"
+                    />
+                  </div>
+                </div>
+                <p className="text-[9.5px] text-blue-800 dark:text-blue-300 leading-tight">
+                  💡 Mengubah nama/kamar di sini hanya memperbarui pesanan ini (tercetak di struk, toko, & tugas kurir). Profil akun wali ({orderToEditNotes.user?.name || 'Wali'}) tetap menggunakan nama asli di akunnya.
+                </p>
+              </div>
+
               {/* 1. SEKSI PESAN & DOA UNTUK SANTRI (TERCETAK DI STRUK) */}
               <div className="space-y-1.5 p-2 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-300 dark:border-emerald-700/80 rounded-none">
                 <div className="flex items-center justify-between">
@@ -4704,7 +4762,7 @@ export default function AdminPesanan() {
                     className="w-3.5 h-3.5 text-green-600 rounded-none focus:ring-0 cursor-pointer"
                   />
                   <span className="text-[11px] font-semibold text-gray-700 dark:text-gray-300">
-                    Terapkan catatan kurir ini ke seluruh toko dalam wadah ({orderToEditNotes.checkout_id})
+                    Terapkan perubahan nama santri, kamar, dan catatan ini ke seluruh toko dalam wadah ({orderToEditNotes.checkout_id})
                   </span>
                 </label>
               )}
@@ -4725,6 +4783,9 @@ export default function AdminPesanan() {
                 onClick={() => {
                   updateAdminNotesMutation.mutate({
                     id: orderToEditNotes.id,
+                    recipient_santri_name: recipientSantriNameText,
+                    recipient_santri_room: recipientSantriRoomText,
+                    delivery_location: recipientSantriRoomText,
                     admin_notes: adminNotesText,
                     custom_notes: customNotesText,
                     order_notes: orderNotesText,

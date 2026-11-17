@@ -1370,6 +1370,20 @@ class AdminOrderController extends Controller
                 }
             }
 
+            // 1b. Update Nama Santri & Kamar/Lokasi Penerima jika dikirim (Hanya untuk pesanan ini/wadah ini, profil user tetap aman)
+            if ($request->has('recipient_santri_name')) {
+                $order->recipient_santri_name = !empty($request->input('recipient_santri_name')) ? trim($request->input('recipient_santri_name')) : null;
+            }
+            if ($request->has('recipient_santri_room')) {
+                $newRoom = !empty($request->input('recipient_santri_room')) ? trim($request->input('recipient_santri_room')) : null;
+                $order->recipient_santri_room = $newRoom;
+                $order->delivery_location = $newRoom;
+            } elseif ($request->has('delivery_location')) {
+                $newLoc = !empty($request->input('delivery_location')) ? trim($request->input('delivery_location')) : null;
+                $order->delivery_location = $newLoc;
+                $order->recipient_santri_room = $newLoc;
+            }
+
             // 2. Update Catatan Kurir / Custom Notes jika dikirim
             if ($request->has('custom_notes')) {
                 $order->custom_notes = !empty($request->input('custom_notes')) ? trim($request->input('custom_notes')) : null;
@@ -1390,6 +1404,13 @@ class AdminOrderController extends Controller
             // 4. Sinkronisasi wadah gabungan (checkout_id) jika dipilih
             if ($request->boolean('sync_checkout') && !empty($order->checkout_id)) {
                 $syncData = [];
+                if ($request->has('recipient_santri_name')) {
+                    $syncData['recipient_santri_name'] = $order->recipient_santri_name;
+                }
+                if ($request->has('recipient_santri_room') || $request->has('delivery_location')) {
+                    $syncData['recipient_santri_room'] = $order->recipient_santri_room;
+                    $syncData['delivery_location'] = $order->delivery_location;
+                }
                 if ($request->has('admin_notes')) {
                     $syncData['admin_notes'] = $order->admin_notes;
                 }
@@ -1408,6 +1429,12 @@ class AdminOrderController extends Controller
             }
 
             $descParts = [];
+            if ($request->has('recipient_santri_name')) {
+                $descParts[] = 'Nama Santri: ' . ($order->recipient_santri_name ?: '(dikosongkan)');
+            }
+            if ($request->has('recipient_santri_room') || $request->has('delivery_location')) {
+                $descParts[] = 'Kamar: ' . ($order->recipient_santri_room ?: '(dikosongkan)');
+            }
             if (!empty($itemNotesUpdated)) {
                 $descParts[] = 'Produk: ' . implode(', ', $itemNotesUpdated);
             }

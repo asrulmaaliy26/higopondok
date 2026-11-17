@@ -20,6 +20,9 @@ class AdminUpdateOrderNotesRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'recipient_santri_name' => 'nullable|string|max:255',
+            'recipient_santri_room' => 'nullable|string|max:255',
+            'delivery_location' => 'nullable|string|max:255',
             'admin_notes' => 'nullable|string|max:2000',
             'custom_notes' => 'nullable|string|max:2000',
             'order_notes' => 'nullable|string|max:2000',
