@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   ShoppingBag, ChevronLeft, CheckCircle, Clock, Store, MessageCircle, 
   Image as ImageIcon, X, XCircle, FileText, Download, ExternalLink, 
-  Trash2, Camera, Receipt, Eye, Sparkles, Filter, Calendar, ChevronDown, RefreshCw, Lock, Copy, QrCode, Search, Edit3 
+  Trash2, Camera, Receipt, Eye, Sparkles, Filter, Calendar, ChevronDown, RefreshCw, Lock, Copy, QrCode, Search, Edit3, Wallet, Bike, PackageCheck 
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api, { getStorageUrl, getPublicUrl } from '../../lib/axios';
@@ -263,6 +263,35 @@ export default function Pembayaran() {
   };
 
   const queryClient = useQueryClient();
+
+  const { data: walletInfo } = useQuery({
+    queryKey: ['my_wallet'],
+    queryFn: async () => {
+      const res = await api.get('/wallet');
+      return res.data;
+    },
+    enabled: !!user,
+  });
+  const walletBalance = Number(walletInfo?.balance ?? user?.balance ?? 0);
+
+  const payWithWalletMutation = useMutation({
+    mutationFn: async ({ checkoutId, orderId }) => {
+      if (checkoutId) {
+        const res = await api.post(`/orders/checkout/${checkoutId}/pay-wallet`);
+        return res.data;
+      }
+      const res = await api.post(`/orders/${orderId}/pay-wallet`);
+      return res.data;
+    },
+    onSuccess: (data) => {
+      toast.success(data.message || 'Pembayaran via Higo Wallet berhasil!');
+      queryClient.invalidateQueries({ queryKey: ['user_orders'] });
+      queryClient.invalidateQueries({ queryKey: ['my_wallet'] });
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.message || 'Gagal membayar dengan Higo Wallet');
+    },
+  });
 
   const toggleOrderDetails = (orderId) => {
     setExpandedOrders(prev => ({ ...prev, [orderId]: !prev[orderId] }));
@@ -1084,6 +1113,57 @@ export default function Pembayaran() {
                     </div>
                   </div>
 
+                  {/* VISUAL DELIVERY TIMELINE & INFO JADWAL KURIR PONDOK */}
+                  {group.overallStatus !== 'cancelled' && (() => {
+                    const st = group.overallStatus;
+                    const isPaid = group.payment_status === 'paid';
+                    const step2Done = st === 'processing' || st === 'delivering' || st === 'completed' || isPaid;
+                    const step3Active = st === 'processing' || st === 'delivering';
+                    const step3Done = st === 'completed';
+                    const step4Done = st === 'completed';
+                    return (
+                      <div className="bg-gray-50/90 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-800 p-2 rounded-none space-y-1.5">
+                        <div className="grid grid-cols-4 gap-1 text-center text-[9.5px] font-bold">
+                          <div className="flex flex-col items-center gap-0.5">
+                            <div className="w-5 h-5 flex items-center justify-center bg-green-600 text-white rounded-none">
+                              <CheckCircle className="w-3 h-3" />
+                            </div>
+                            <span className="text-green-700 dark:text-green-400 leading-tight">Diterima</span>
+                          </div>
+                          <div className="flex flex-col items-center gap-0.5">
+                            <div className={`w-5 h-5 flex items-center justify-center rounded-none ${step2Done ? 'bg-green-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-500'}`}>
+                              <Store className="w-3 h-3" />
+                            </div>
+                            <span className={`${step2Done ? 'text-green-700 dark:text-green-400' : 'text-gray-400'} leading-tight`}>Disiapkan</span>
+                          </div>
+                          <div className="flex flex-col items-center gap-0.5">
+                            <div className={`w-5 h-5 flex items-center justify-center rounded-none ${step3Done ? 'bg-green-600 text-white' : step3Active ? 'bg-amber-500 text-white animate-pulse' : 'bg-gray-200 dark:bg-gray-700 text-gray-500'}`}>
+                              <Bike className="w-3 h-3" />
+                            </div>
+                            <span className={`${step3Done ? 'text-green-700 dark:text-green-400' : step3Active ? 'text-amber-700 dark:text-amber-400' : 'text-gray-400'} leading-tight`}>
+                              Antar Malam
+                            </span>
+                          </div>
+                          <div className="flex flex-col items-center gap-0.5">
+                            <div className={`w-5 h-5 flex items-center justify-center rounded-none ${step4Done ? 'bg-green-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-500'}`}>
+                              <PackageCheck className="w-3 h-3" />
+                            </div>
+                            <span className={`${step4Done ? 'text-green-700 dark:text-green-400' : 'text-gray-400'} leading-tight`}>Sampai</span>
+                          </div>
+                        </div>
+
+                        {st !== 'completed' && (
+                          <div className="text-[10px] text-amber-800 dark:text-amber-300 bg-amber-50/90 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-900/50 px-2 py-1 leading-snug flex items-start gap-1.5">
+                            <Clock className="w-3 h-3 shrink-0 mt-0.5 text-amber-600" />
+                            <span>
+                              <strong>Jadwal Pengantaran Asrama:</strong> Kurir bergerak setelah Maghrib &amp; membagikan paket ke kamar santri kisaran pukul <strong>20.00 – 21.00 WIB</strong> setelah kegiatan belajar malam selesai.
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
                   {/* Items List (Compact & Clean) */}
                   <div className="py-1 space-y-1">
                     {isMulti ? (
@@ -1459,20 +1539,21 @@ export default function Pembayaran() {
                           return (
                             <div className="space-y-1.5 pt-1">
                               {isAllOpen ? (
-                                <button 
-                                  type="button"
-                                  onClick={() => {
-                                    setActiveOrderForPaymentProof({
-                                      id: singleOrder.id,
-                                      checkoutId: group.checkoutId,
-                                      total_price: group.grandTotal,
-                                      displayId: group.checkoutId || `#${singleOrder.id}`,
-                                      canteenCount: group.orders.length
-                                    });
-                                    setShowPaymentProofModal(true);
-                                  }}
-                                  className="w-full flex items-center justify-between py-2 px-2.5 bg-green-600 hover:bg-green-700 text-white rounded-none transition-all font-bold text-xs shadow-xs active:scale-[0.99] cursor-pointer"
-                                >
+                                <div className="space-y-1.5">
+                                  <button 
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveOrderForPaymentProof({
+                                        id: singleOrder.id,
+                                        checkoutId: group.checkoutId,
+                                        total_price: group.grandTotal,
+                                        displayId: group.checkoutId || `#${singleOrder.id}`,
+                                        canteenCount: group.orders.length
+                                      });
+                                      setShowPaymentProofModal(true);
+                                    }}
+                                    className="w-full flex items-center justify-between py-2 px-2.5 bg-green-600 hover:bg-green-700 text-white rounded-none transition-all font-bold text-xs shadow-xs active:scale-[0.99] cursor-pointer"
+                                  >
                                   <span className="flex items-center gap-1.5 truncate">
                                     <Camera className="w-3.5 h-3.5 shrink-0" />
                                     <span className="truncate">
@@ -1483,6 +1564,23 @@ export default function Pembayaran() {
                                     Rp {Math.round(group.grandTotal).toLocaleString('id-ID')} ➔
                                   </span>
                                 </button>
+                                  {walletBalance >= group.grandTotal && (
+                                    <button
+                                      type="button"
+                                      disabled={payWithWalletMutation.isPending}
+                                      onClick={() => payWithWalletMutation.mutate({ checkoutId: group.checkoutId, orderId: singleOrder.id })}
+                                      className="w-full flex items-center justify-between py-2 px-2.5 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-400 dark:border-emerald-700 rounded-none font-bold text-xs cursor-pointer disabled:opacity-50"
+                                    >
+                                      <div className="flex items-center gap-1.5">
+                                        <Wallet className="w-3.5 h-3.5 text-emerald-600" />
+                                        <span>{payWithWalletMutation.isPending ? 'Memproses...' : 'Bayar Instan Pakai Higo Wallet'}</span>
+                                      </div>
+                                      <span className="font-mono text-[10px]">
+                                        Saldo: Rp {Math.round(walletBalance).toLocaleString('id-ID')}
+                                      </span>
+                                    </button>
+                                  )}
+                                </div>
                               ) : (
                                 <div className="p-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800/80 rounded-none text-left space-y-1.5">
                                   <div className="flex items-center gap-1.5 text-amber-800 dark:text-amber-300 font-bold text-xs">

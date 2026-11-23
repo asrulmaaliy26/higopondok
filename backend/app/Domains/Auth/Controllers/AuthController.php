@@ -147,7 +147,7 @@ class AuthController extends Controller
         }
         
         // Field profil umum — boleh diubah sendiri oleh user
-        $regularFields = ['santri_name', 'santri_room', 'santri_class', 'santri_level'];
+        $regularFields = ['santri_name', 'santri_room', 'santri_class', 'santri_level', 'santri_dietary_notes', 'santri_daily_limit'];
         foreach ($regularFields as $field) {
             if ($request->has($field)) {
                 $user->$field = $request->$field;

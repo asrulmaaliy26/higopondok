@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
@@ -6,12 +6,13 @@ import {
   FileText, Image as ImageIcon, Search, Store, User, MapPin, 
   ChevronDown, ChevronRight, Layers, Clock, Truck, RefreshCw, 
   Phone, CheckSquare, AlertCircle, ShoppingBag, Filter, Calendar,
-  Download, ExternalLink, Printer, Flame
+  Download, ExternalLink, Printer, Flame, Wifi, WifiOff, AlertTriangle
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api, { getStorageUrl } from '../../lib/axios';
 import { useAuthStore } from '../../store/authStore';
 import { getFileType, isImageFile, isHeifFile, isPdfFile, formatFileSize, getFileNameFromPath, compressImageFiles, openFullResolutionMedia } from '../../lib/fileUtils';
+import { enqueueOfflineProof, getOfflineProofQueue, removeOfflineProof } from '../../lib/offlineProofQueue';
 import ThermalReceiptModal, { cleanItemNotes } from '../../components/receipt/ThermalReceiptModal';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { renderOrderDateTime, isOrderPindahan, getOrderOrigDate } from '../../lib/orderUtils';
@@ -556,9 +557,93 @@ export default function TugasKurir() {
     }
   });
 
-  // Upload Proof (Receipt / Delivery) Mutation (Single-Request Batch Sync)
+  // Offline / Batch Queue States (IndexedDB)
+  const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
+  const [batchOfflineMode, setBatchOfflineMode] = useState(false);
+  const [offlineQueue, setOfflineQueue] = useState([]);
+  const [isSyncingOffline, setIsSyncingOffline] = useState(false);
+
+  const refreshOfflineQueue = async () => {
+    try {
+      const items = await getOfflineProofQueue();
+      setOfflineQueue(items);
+    } catch {
+      // Ignore IndexedDB unsupported errors
+    }
+  };
+
+  useEffect(() => {
+    refreshOfflineQueue();
+    const onOnline = () => setIsOnline(true);
+    const onOffline = () => setIsOnline(false);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
+  }, []);
+
+  const handleSyncOfflineQueue = async () => {
+    if (!navigator.onLine) {
+      toast.error('Masih offline. Cari sinyal / WiFi terlebih dahulu.');
+      return;
+    }
+    const items = await getOfflineProofQueue();
+    if (!items.length) {
+      toast.success('Semua bukti sudah tersinkron!');
+      return;
+    }
+    setIsSyncingOffline(true);
+    let successCount = 0;
+    let failCount = 0;
+    for (const item of items) {
+      try {
+        const fd = new FormData();
+        const fileObj = new File([item.fileBlob], item.fileName || 'proof.jpg', { type: item.fileBlob.type || 'image/jpeg' });
+        fd.append('proof_of_delivery[]', fileObj);
+        if (item.extraOrderIds?.length > 0) {
+          item.extraOrderIds.forEach(oid => fd.append('order_ids[]', oid));
+        }
+        await api.post(`/courier/orders/${item.orderId}/upload-delivery`, fd, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          timeout: 30000,
+        });
+        await removeOfflineProof(item.id);
+        successCount++;
+      } catch {
+        failCount++;
+      }
+    }
+    await refreshOfflineQueue();
+    setIsSyncingOffline(false);
+    queryClient.invalidateQueries({ queryKey: ['courier_orders'] });
+    if (successCount > 0) {
+      toast.success(`Berhasil sinkron ${successCount} bukti foto pengantaran!`);
+    }
+    if (failCount > 0) {
+      toast.error(`${failCount} bukti gagal diunggah, coba lagi saat sinyal stabil.`);
+    }
+  };
+
+  // Upload Proof (Receipt / Delivery) Mutation (Single-Request Batch Sync + Offline Queue Support)
   const uploadProofMutation = useMutation({
     mutationFn: async ({ id, orderIds, files, type }) => {
+      if (type === 'delivery' && (!navigator.onLine || batchOfflineMode)) {
+        for (const f of files) {
+          await enqueueOfflineProof({
+            orderId: id,
+            extraOrderIds: orderIds || [],
+            santriName: selectedOrder?.recipient_santri_name || selectedOrder?.user?.santri_name || `#${id}`,
+            canteenName: selectedOrder?.canteen?.name || 'Kantin',
+            fileBlob: f,
+            fileName: f.name,
+          });
+        }
+        await refreshOfflineQueue();
+        return { offlineQueued: true };
+      }
+
       const fieldName = type === 'delivery' ? 'proof_of_delivery[]' : 'proof_of_purchase[]';
       const formData = new FormData();
       
@@ -586,6 +671,11 @@ export default function TugasKurir() {
       return res.data;
     },
     onSuccess: (data, variables) => {
+      if (data?.offlineQueued) {
+        toast.success('📸 Disimpan di antrean offline! Tekan "Sinkronkan" saat sinyal stabil.');
+        handleCloseModal();
+        return;
+      }
       queryClient.invalidateQueries({ queryKey: ['courier_orders'] });
       toast.success(variables.type === 'delivery' ? 'Bukti serah terima berhasil ditambahkan!' : 'Struk pembelian berhasil ditambahkan!');
       handleCloseModal();
@@ -1392,6 +1482,19 @@ export default function TugasKurir() {
 
           <div className="flex items-center gap-2">
             <button
+              type="button"
+              onClick={() => setBatchOfflineMode(v => !v)}
+              className={`px-2 py-1 text-[10.5px] font-bold border rounded-none cursor-pointer flex items-center gap-1 ${
+                batchOfflineMode
+                  ? 'bg-amber-500 text-white border-amber-600'
+                  : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-700'
+              }`}
+              title="Simpan foto di HP dulu saat sinyal susah di asrama, upload barengan nanti"
+            >
+              {isOnline ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5 text-red-500" />}
+              <span>{batchOfflineMode ? 'Antre Offline: ON' : 'Antre Offline'}</span>
+            </button>
+            <button
               onClick={handleManualRefresh}
               className="p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors"
               title="Refresh Data"
@@ -1407,6 +1510,29 @@ export default function TugasKurir() {
             </div>
           </div>
         </div>
+        {(offlineQueue.length > 0 || !isOnline) && (
+          <div className="max-w-7xl mx-auto mt-2 p-2 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-none flex items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-1.5 text-amber-900 dark:text-amber-200 font-bold">
+              {isOnline ? <Upload className="w-3.5 h-3.5 text-amber-600 shrink-0" /> : <WifiOff className="w-3.5 h-3.5 text-red-600 shrink-0" />}
+              <span>
+                {!isOnline ? 'Koneksi Offline • ' : ''}
+                {offlineQueue.length > 0
+                  ? `${offlineQueue.length} foto bukti antar tersimpan di antrean HP.`
+                  : 'Foto baru akan otomatis masuk antrean sampai sinyal kembali.'}
+              </span>
+            </div>
+            {offlineQueue.length > 0 && isOnline && (
+              <button
+                type="button"
+                disabled={isSyncingOffline}
+                onClick={handleSyncOfflineQueue}
+                className="px-2.5 py-1 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-[11px] font-black rounded-none cursor-pointer shrink-0"
+              >
+                {isSyncingOffline ? 'Mengunggah...' : `Sinkronkan (${offlineQueue.length})`}
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="p-2 sm:p-3 max-w-7xl mx-auto space-y-2">
@@ -1938,6 +2064,12 @@ export default function TugasKurir() {
                                   </span>
                                 )}
                               </div>
+                              {primaryOrder?.user?.santri_dietary_notes && (
+                                <div className="mt-1 px-2 py-1 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-[10.5px] font-bold text-amber-900 dark:text-amber-200 flex items-start gap-1">
+                                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                                  <span>Pantangan: {primaryOrder.user.santri_dietary_notes}</span>
+                                </div>
+                              )}
                             </div>
                           )}
 

@@ -13,6 +13,7 @@ Route::middleware('throttle:15,1')->group(function () {
 });
 
 use App\Domains\Auth\Controllers\AdminController;
+use App\Domains\Auth\Controllers\WalletController;
 use App\Domains\Admin\Controllers\GoogleDriveStorageController;
 use App\Domains\Admin\Controllers\AdminFinanceController;
 
@@ -24,6 +25,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::match(['put', 'post'], '/me', [AuthController::class, 'updateProfile']);
     Route::put('/me/working-status', [AuthController::class, 'toggleWorkingStatus']);
+
+    // Higo Wallet (Dompet Uang Saku Santri)
+    Route::get('/wallet', [WalletController::class, 'index']);
+    Route::post('/wallet/topup', [WalletController::class, 'requestTopup']);
     
     // User & Store destruction management & Google Drive Storage strictly for super_admin
     Route::middleware('role:super_admin')->group(function () {
@@ -63,6 +68,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/admin/canteens/{id}/toggle-direct-close', [AdminController::class, 'toggleDirectClose']);
         Route::get('/admin/stats', [AdminController::class, 'dashboardStats']);
         Route::put('/admin/canteens/{id}/fees', [AdminController::class, 'updateFees']);
+
+        // Admin Higo Wallet Management
+        Route::get('/admin/wallet/topups', [WalletController::class, 'adminIndex']);
+        Route::post('/admin/wallet/topups/{id}/approve', [WalletController::class, 'approveTopup']);
+        Route::post('/admin/wallet/topups/{id}/reject', [WalletController::class, 'rejectTopup']);
+        Route::post('/admin/wallet/adjust', [WalletController::class, 'adminAdjust']);
         Route::put('/admin/canteens/{id}/couriers', [AdminController::class, 'updateCouriers']);
         Route::get('/admin/couriers-list', [AdminController::class, 'couriersList']);
         Route::put('/admin/canteens/{id}/hours', [AdminController::class, 'updateHours']);

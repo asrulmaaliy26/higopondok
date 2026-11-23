@@ -846,6 +846,12 @@ class AiSmartOrderingService
                 if ($user->santri_room) {
                     $details[] = "Kamar: {$user->santri_room}";
                 }
+                if (!empty($user->santri_dietary_notes)) {
+                    $details[] = "PENTING - Pantangan/Alergi: {$user->santri_dietary_notes}";
+                }
+                if (!empty($user->santri_daily_limit) && (float) $user->santri_daily_limit > 0) {
+                    $details[] = "Batas Jajan Harian: Rp " . number_format((float) $user->santri_daily_limit, 0, ',', '.');
+                }
 
                 $detailStr = !empty($details) ? ' (' . implode(', ', $details) . ')' : '';
                 $text .= "Nama Santri: {$santriName}{$detailStr}\n";

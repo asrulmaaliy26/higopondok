@@ -140,6 +140,187 @@ class AdminFinanceController extends Controller
             ->map(fn($d) => \Carbon\Carbon::parse($d)->toDateString())
             ->max() ?: now('Asia/Jakarta')->toDateString();
 
+        // 6. Rekap Pembagian Hasil / Gajian per Tanggal:
+        // - Laba Toko dibagi: 70% Asrul, 15% Anma, 5% Qori, 10% Satpam
+        // - Kurir (Kurir 1 Pak Faris, Kurir 2 Pak Feri, Total Ongkir)
+        // - Kas Admin Higo setelah dikurangi pengeluaran kas Higo pada tanggal tersebut
+        $expensesByDate = [];
+        foreach ($allPeriodExpenses as $exp) {
+            $dateKey = \Carbon\Carbon::parse($exp->expense_date)->toDateString();
+            if (!isset($expensesByDate[$dateKey])) {
+                $expensesByDate[$dateKey] = [
+                    'total_amount' => 0,
+                    'count' => 0,
+                    'items' => [],
+                ];
+            }
+            $expensesByDate[$dateKey]['total_amount'] += (float) $exp->amount;
+            $expensesByDate[$dateKey]['count'] += 1;
+            $expensesByDate[$dateKey]['items'][] = [
+                'id' => $exp->id,
+                'title' => $exp->title,
+                'category' => $exp->category,
+                'category_label' => $categoriesMeta[$exp->category] ?? $exp->category,
+                'amount' => (float) $exp->amount,
+                'recipient' => $exp->recipient,
+                'notes' => $exp->notes,
+                'payment_method' => $exp->payment_method,
+            ];
+        }
+
+        $dailyRecapByDate = [];
+        foreach (($recap['daily_recap'] ?? []) as $dItem) {
+            $dailyRecapByDate[$dItem['date']] = $dItem;
+        }
+
+        $allPayrollDates = array_unique(array_merge(
+            array_keys($dailyRecapByDate),
+            array_keys($expensesByDate)
+        ));
+        rsort($allPayrollDates);
+
+        $payrollDailyList = [];
+        $payrollTotalProfit = 0;
+        $payrollTotalAsrul = 0;
+        $payrollTotalAnma = 0;
+        $payrollTotalQori = 0;
+        $payrollTotalSatpam = 0;
+        $payrollTotalCourier1 = 0;
+        $payrollTotalCourier2 = 0;
+        $payrollTotalCouriers = 0;
+        $payrollTotalAdminGross = 0;
+        $payrollTotalAdminNet = 0;
+        $payrollTotalExpenses = 0;
+        $payrollTotalAdminBalance = 0;
+
+        foreach ($allPayrollDates as $pDate) {
+            $dItem = $dailyRecapByDate[$pDate] ?? null;
+            $expData = $expensesByDate[$pDate] ?? ['total_amount' => 0, 'count' => 0, 'items' => []];
+
+            $cDate = \Carbon\Carbon::parse($pDate, 'Asia/Jakarta');
+            $cDate->locale('id');
+
+            $orderCount = (int) ($dItem['order_count'] ?? 0);
+            $totalProducts = (float) ($dItem['total_products'] ?? 0);
+            $totalHpp = (float) ($dItem['total_hpp'] ?? 0);
+            $totalProfit = (float) ($dItem['total_profit'] ?? 0); // Laba Toko
+
+            // Pembagian Laba Toko: 70% Asrul, 15% Anma, 5% Qori, 10% Satpam
+            $shareAsrul = round($totalProfit * 0.70);
+            $shareAnma = round($totalProfit * 0.15);
+            $shareQori = round($totalProfit * 0.05);
+            $shareSatpam = round($totalProfit * 0.10);
+
+            // Kurir
+            $c1Data = $dItem['courier_1'] ?? [
+                'courier_id' => 12,
+                'courier_name' => 'Kurir pak faris',
+                'order_count' => 0,
+                'delivery_fee' => 0,
+                'courier_cut_to_admin' => 0,
+                'gross_delivery_fee' => 0,
+                'grand_total' => 0,
+            ];
+            $c2Data = $dItem['courier_2'] ?? [
+                'courier_id' => 794,
+                'courier_name' => 'kurir pak feri',
+                'order_count' => 0,
+                'delivery_fee' => 0,
+                'courier_cut_to_admin' => 0,
+                'gross_delivery_fee' => 0,
+                'grand_total' => 0,
+            ];
+            $c1Fee = (float) ($c1Data['delivery_fee'] ?? 0);
+            $c2Fee = (float) ($c2Data['delivery_fee'] ?? 0);
+            $dayTotalDeliveryFee = (float) ($dItem['total_delivery_fee'] ?? 0);
+
+            // Admin Higo
+            $adminGrossFee = (float) ($dItem['total_admin_fee'] ?? 0);
+            $adminVoucher = (float) ($dItem['total_voucher_discount'] ?? 0);
+            $adminNetIncome = (float) ($dItem['net_admin_fee'] ?? max(0, $adminGrossFee - $adminVoucher));
+            $dayExpenses = (float) ($expData['total_amount'] ?? 0);
+            $adminNetBalance = $adminNetIncome - $dayExpenses; // Laba admin setelah pengeluaran higo
+
+            // Akumulasi periode
+            $payrollTotalProfit += $totalProfit;
+            $payrollTotalAsrul += $shareAsrul;
+            $payrollTotalAnma += $shareAnma;
+            $payrollTotalQori += $shareQori;
+            $payrollTotalSatpam += $shareSatpam;
+            $payrollTotalCourier1 += $c1Fee;
+            $payrollTotalCourier2 += $c2Fee;
+            $payrollTotalCouriers += $dayTotalDeliveryFee;
+            $payrollTotalAdminGross += $adminGrossFee;
+            $payrollTotalAdminNet += $adminNetIncome;
+            $payrollTotalExpenses += $dayExpenses;
+            $payrollTotalAdminBalance += $adminNetBalance;
+
+            $payrollDailyList[] = [
+                'date' => $pDate,
+                'date_formatted' => $cDate->translatedFormat('d M Y'),
+                'day_name' => $cDate->translatedFormat('l'),
+                'order_count' => $orderCount,
+                'total_products' => $totalProducts,
+                'total_hpp' => $totalHpp,
+                'total_profit' => $totalProfit,
+                'sharing' => [
+                    'asrul' => [
+                        'name' => 'Asrul',
+                        'percentage' => 70,
+                        'amount' => $shareAsrul,
+                    ],
+                    'anma' => [
+                        'name' => 'Anma',
+                        'percentage' => 15,
+                        'amount' => $shareAnma,
+                    ],
+                    'qori' => [
+                        'name' => 'Qori',
+                        'percentage' => 5,
+                        'amount' => $shareQori,
+                    ],
+                    'satpam' => [
+                        'name' => 'Satpam',
+                        'percentage' => 10,
+                        'amount' => $shareSatpam,
+                    ],
+                ],
+                'courier' => [
+                    'courier_1' => $c1Data,
+                    'courier_2' => $c2Data,
+                    'total_delivery_fee' => $dayTotalDeliveryFee,
+                    'couriers_list' => $dItem['couriers'] ?? [],
+                ],
+                'admin' => [
+                    'gross_admin_fee' => $adminGrossFee,
+                    'net_admin_income' => $adminNetIncome,
+                    'expenses_amount' => $dayExpenses,
+                    'expenses_count' => $expData['count'] ?? 0,
+                    'expenses_items' => $expData['items'] ?? [],
+                    'net_balance' => $adminNetBalance,
+                ],
+                'canteens' => $dItem['canteens'] ?? [],
+            ];
+        }
+
+        $payrollRecap = [
+            'summary' => [
+                'total_profit' => $payrollTotalProfit,
+                'total_asrul' => $payrollTotalAsrul,
+                'total_anma' => $payrollTotalAnma,
+                'total_qori' => $payrollTotalQori,
+                'total_satpam' => $payrollTotalSatpam,
+                'total_courier_1' => $payrollTotalCourier1,
+                'total_courier_2' => $payrollTotalCourier2,
+                'total_couriers' => $payrollTotalCouriers,
+                'total_admin_gross' => $payrollTotalAdminGross,
+                'total_admin_net' => $payrollTotalAdminNet,
+                'total_expenses' => $payrollTotalExpenses,
+                'total_admin_balance' => $payrollTotalAdminBalance,
+            ],
+            'daily_list' => $payrollDailyList,
+        ];
+
         return response()->json([
             'period' => $period,
             'date_bounds' => [
@@ -178,6 +359,7 @@ class AdminFinanceController extends Controller
             ],
             'canteen_recap' => $recap['canteen_recap'] ?? [],
             'daily_recap' => $recap['daily_recap'] ?? [],
+            'payroll_recap' => $payrollRecap,
             'courier_recap' => $recap['courier_recap'] ?? [],
             'expense_categories' => $categoriesMeta,
             'expense_category_breakdown' => $expenseCategoryBreakdown,

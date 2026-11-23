@@ -31,6 +31,8 @@ class UpdateProfileRequest extends FormRequest
             'santri_room' => 'nullable|string|max:255',
             'santri_class' => 'nullable|string|max:255',
             'santri_level' => 'nullable|string|max:255',
+            'santri_dietary_notes' => 'nullable|string|max:500',
+            'santri_daily_limit' => 'nullable|numeric|min:0|max:10000000',
             'is_teacher' => 'nullable|boolean',
             'niy' => 'nullable|string|max:100',
             'teacher_unit' => 'nullable|string|in:RA,MI,SMP,MA,Kampus',

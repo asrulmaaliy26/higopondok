@@ -80,6 +80,8 @@ Route::middleware(['auth:sanctum', 'impersonate'])->group(function () {
     Route::put('/orders/checkout/{checkoutId}/order-notes', [\App\Domains\Canteen\Controllers\OrderController::class, 'updateUserOrderNotes']);
     Route::post('/orders/{id}/payment-proof', [\App\Domains\Canteen\Controllers\OrderController::class, 'uploadPaymentProof']);
     Route::post('/orders/checkout/{checkoutId}/payment-proof', [\App\Domains\Canteen\Controllers\OrderController::class, 'uploadPaymentProofByCheckout']);
+    Route::post('/orders/{id}/pay-wallet', [\App\Domains\Canteen\Controllers\OrderController::class, 'payWithWallet']);
+    Route::post('/orders/checkout/{checkoutId}/pay-wallet', [\App\Domains\Canteen\Controllers\OrderController::class, 'payCheckoutWithWallet']);
     Route::put('/orders/{id}/custom-items', [\App\Domains\Canteen\Controllers\OrderController::class, 'updateCustomItems']);
     Route::post('/orders/{id}/parse-custom', [\App\Domains\Canteen\Controllers\OrderController::class, 'parseCustomOrderNotes']);
     Route::post('/ai/chat-order', [\App\Domains\Canteen\Controllers\AiChatOrderController::class, 'chat']);

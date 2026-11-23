@@ -1377,6 +1377,11 @@ ${itemsListText}
                         🎓 {santriLevel ? `${santriLevel} ` : ''}{santriClass ? `Kelas ${santriClass}` : ''}
                       </span>
                     )}
+                    {order.user?.santri_dietary_notes && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-none bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-300 border border-amber-300 dark:border-amber-700 text-[9.5px] font-black">
+                        ⚠️ Pantangan: {order.user.santri_dietary_notes}
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0 text-[10px]">
                     <span className="text-gray-600 dark:text-gray-300 font-semibold">

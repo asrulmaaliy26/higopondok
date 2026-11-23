@@ -15,7 +15,7 @@ use App\Traits\LogsActivity;
 
 use Illuminate\Database\Eloquent\Casts\Attribute;
 
-#[Fillable(['name', 'email', 'phone', 'password', 'santri_name', 'santri_room', 'santri_class', 'santri_level', 'penalty_points', 'google_id', 'avatar', 'balance', 'is_working', 'is_teacher', 'niy', 'teacher_unit'])]
+#[Fillable(['name', 'email', 'phone', 'password', 'santri_name', 'santri_room', 'santri_class', 'santri_level', 'santri_dietary_notes', 'santri_daily_limit', 'penalty_points', 'google_id', 'avatar', 'balance', 'is_working', 'is_teacher', 'niy', 'teacher_unit'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -59,6 +59,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'balance' => 'float',
+            'santri_daily_limit' => 'float',
             'penalty_points' => 'integer',
             'is_working' => 'boolean',
             'is_teacher' => 'boolean',

@@ -34,7 +34,15 @@ class UserSeeder extends Seeder
         // Create Santri
         $santri = User::firstOrCreate(
             ['email' => 'santri@higopondok.id'],
-            ['name' => 'Santri Dummy', 'password' => $password]
+            [
+                'name' => 'Santri Dummy',
+                'password' => $password,
+                'santri_name' => 'Ahmad Santri',
+                'santri_room' => 'Asmah/G1',
+                'santri_dietary_notes' => 'Jangan diberi es batu',
+                'santri_daily_limit' => 25000,
+                'balance' => 100000,
+            ]
         );
         $santri->syncRoles(['user']);
 

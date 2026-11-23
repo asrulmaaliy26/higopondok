@@ -32,7 +32,11 @@ import {
   Layers,
   Tag,
   User,
-  FileText
+  FileText,
+  Coins,
+  Users,
+  ShieldCheck,
+  Percent
 } from 'lucide-react';
 import api from '../../lib/axios';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
@@ -63,12 +67,21 @@ export default function AdminKeuangan() {
   const [selectedCourier, setSelectedCourier] = useState('all');
   const [selectedExpenseCategory, setSelectedExpenseCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeSubTab, setActiveSubTab] = useState('daily'); // 'daily' | 'rekap_laba_admin_ongkir' | 'expenses'
+  const [activeSubTab, setActiveSubTab] = useState('daily'); // 'daily' | 'payroll' | 'rekap_laba_admin_ongkir' | 'expenses'
   const [expandedDates, setExpandedDates] = useState({});
   const [expandAllDays, setExpandAllDays] = useState(false);
+  const [expandedPayrollDates, setExpandedPayrollDates] = useState({});
+  const [expandAllPayroll, setExpandAllPayroll] = useState(false);
 
   const toggleExpandDate = (dateStr) => {
     setExpandedDates((prev) => ({
+      ...prev,
+      [dateStr]: !prev[dateStr],
+    }));
+  };
+
+  const toggleExpandPayrollDate = (dateStr) => {
+    setExpandedPayrollDates((prev) => ({
       ...prev,
       [dateStr]: !prev[dateStr],
     }));
@@ -161,6 +174,9 @@ export default function AdminKeuangan() {
   const canteenRecap = financeData?.canteen_recap || [];
   const courierRecap = financeData?.courier_recap || [];
   const dailyRecap = financeData?.daily_recap || [];
+  const payrollRecap = financeData?.payroll_recap || {};
+  const payrollDaily = payrollRecap.daily_list || [];
+  const payrollSummary = payrollRecap.summary || {};
 
   const courier1Total = useMemo(() => {
     return courierRecap.find((c) => c.courier_id === 12 || c.courier_name?.toLowerCase().includes('faris'));
@@ -169,6 +185,249 @@ export default function AdminKeuangan() {
   const courier2Total = useMemo(() => {
     return courierRecap.find((c) => c.courier_id === 794 || c.courier_name?.toLowerCase().includes('feri'));
   }, [courierRecap]);
+
+  // Wallet Topup Management States & Queries
+  const [walletStatusFilter, setWalletStatusFilter] = useState('pending');
+  const [previewWalletProof, setPreviewWalletProof] = useState(null);
+
+  const { data: walletData, isLoading: isLoadingWallet } = useQuery({
+    queryKey: ['admin_wallet_topups', walletStatusFilter],
+    queryFn: async () => {
+      const res = await api.get('/admin/wallet/topups', { params: { status: walletStatusFilter } });
+      return res.data;
+    },
+  });
+
+  const walletTransactions = walletData?.transactions?.data || [];
+  const walletPendingCount = walletData?.pending_count || 0;
+  const totalWalletBalance = walletData?.total_wallet_balance || 0;
+
+  const approveTopupMutation = useMutation({
+    mutationFn: async (id) => {
+      const res = await api.post(`/admin/wallet/topups/${id}/approve`);
+      return res.data;
+    },
+    onSuccess: (data) => {
+      toast.success(data.message || 'Top-up disetujui!');
+      queryClient.invalidateQueries({ queryKey: ['admin_wallet_topups'] });
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.message || 'Gagal menyetujui top-up');
+    },
+  });
+
+  const rejectTopupMutation = useMutation({
+    mutationFn: async ({ id, admin_notes }) => {
+      const res = await api.post(`/admin/wallet/topups/${id}/reject`, { admin_notes });
+      return res.data;
+    },
+    onSuccess: (data) => {
+      toast.success(data.message || 'Top-up ditolak.');
+      queryClient.invalidateQueries({ queryKey: ['admin_wallet_topups'] });
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.message || 'Gagal menolak top-up');
+    },
+  });
+
+  // Export Rekap Gajian ke CSV (Excel Compatible UTF-8 BOM)
+  const handleExportPayrollCsv = () => {
+    if (!payrollDaily.length) {
+      toast.error('Tidak ada data rekap gajian untuk diekspor.');
+      return;
+    }
+    const headers = [
+      'No',
+      'Tanggal',
+      'Hari',
+      'Jumlah Order',
+      'Laba Toko (100%)',
+      'Asrul (70%)',
+      'Anma (15%)',
+      'Qori (5%)',
+      'Satpam (10%)',
+      'Kurir 1 Faris',
+      'Kurir 2 Feri',
+      'Total Ongkir Kurir',
+      'Pendapatan Admin',
+      'Pengeluaran Higo',
+      'Bersih Kas Admin',
+    ];
+    const rows = payrollDaily.map((r, i) => [
+      i + 1,
+      r.date,
+      r.day_name,
+      r.order_count || 0,
+      Math.round(r.total_profit || 0),
+      Math.round(r.sharing?.asrul?.amount || 0),
+      Math.round(r.sharing?.anma?.amount || 0),
+      Math.round(r.sharing?.qori?.amount || 0),
+      Math.round(r.sharing?.satpam?.amount || 0),
+      Math.round(r.courier?.courier_1?.delivery_fee || 0),
+      Math.round(r.courier?.courier_2?.delivery_fee || 0),
+      Math.round(r.courier?.total_delivery_fee || 0),
+      Math.round(r.admin?.net_admin_income || 0),
+      Math.round(r.admin?.expenses_amount || 0),
+      Math.round(r.admin?.net_balance || 0),
+    ]);
+    rows.push([
+      '',
+      'TOTAL PERIODE',
+      '',
+      summary.total_orders || 0,
+      Math.round(payrollSummary.total_profit || 0),
+      Math.round(payrollSummary.total_asrul || 0),
+      Math.round(payrollSummary.total_anma || 0),
+      Math.round(payrollSummary.total_qori || 0),
+      Math.round(payrollSummary.total_satpam || 0),
+      Math.round(payrollSummary.total_courier_1 || 0),
+      Math.round(payrollSummary.total_courier_2 || 0),
+      Math.round(payrollSummary.total_couriers || 0),
+      Math.round(payrollSummary.total_admin_net || 0),
+      Math.round(payrollSummary.total_expenses || 0),
+      Math.round(payrollSummary.total_admin_balance || 0),
+    ]);
+
+    const csvContent =
+      '\uFEFF' +
+      [headers, ...rows]
+        .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+        .join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `rekap_gajian_higopondok_${startDate || 'all'}_${endDate || 'all'}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast.success('File Excel (CSV) Rekap Gajian berhasil diunduh!');
+  };
+
+  // Cetak Slip / Laporan Rekap Gajian PDF
+  const handlePrintPayrollPdf = () => {
+    if (!payrollDaily.length) {
+      toast.error('Tidak ada data rekap gajian untuk dicetak.');
+      return;
+    }
+    const win = window.open('', '_blank', 'width=1100,height=800');
+    if (!win) {
+      toast.error('Popup diblokir browser. Izinkan popup untuk mencetak PDF.');
+      return;
+    }
+    const rowsHtml = payrollDaily
+      .map(
+        (r, i) => `
+      <tr>
+        <td style="text-align:center;">${i + 1}</td>
+        <td><strong>${r.date_formatted}</strong><br/><small>${r.day_name}</small></td>
+        <td style="text-align:right;">${r.order_count || 0}x</td>
+        <td style="text-align:right;font-weight:bold;">${formatRp(r.total_profit)}</td>
+        <td style="text-align:right;">${formatRp(r.sharing?.asrul?.amount || 0)}</td>
+        <td style="text-align:right;">${formatRp(r.sharing?.anma?.amount || 0)}</td>
+        <td style="text-align:right;">${formatRp(r.sharing?.qori?.amount || 0)}</td>
+        <td style="text-align:right;">${formatRp(r.sharing?.satpam?.amount || 0)}</td>
+        <td style="text-align:right;">${formatRp(r.courier?.courier_1?.delivery_fee || 0)}</td>
+        <td style="text-align:right;">${formatRp(r.courier?.courier_2?.delivery_fee || 0)}</td>
+        <td style="text-align:right;font-weight:bold;">${formatRp(r.courier?.total_delivery_fee || 0)}</td>
+        <td style="text-align:right;">${formatRp(r.admin?.net_admin_income || 0)}</td>
+        <td style="text-align:right;color:#dc2626;">-${formatRp(r.admin?.expenses_amount || 0)}</td>
+        <td style="text-align:right;font-weight:bold;">${formatRp(r.admin?.net_balance || 0)}</td>
+      </tr>`
+      )
+      .join('');
+
+    win.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Slip Rekap Gajian - Higo Pondok</title>
+        <style>
+          body { font-family: Arial, sans-serif; font-size: 11px; color: #111; margin: 20px; }
+          h2 { margin: 0 0 4px 0; font-size: 16px; text-transform: uppercase; }
+          .meta { color: #555; margin-bottom: 14px; font-size: 11px; }
+          .cards { display: flex; gap: 10px; margin-bottom: 14px; }
+          .card { flex: 1; border: 1px solid #ccc; padding: 8px 10px; background: #fafafa; }
+          .card h4 { margin: 0 0 6px 0; font-size: 11px; text-transform: uppercase; border-bottom: 1px solid #ddd; padding-bottom: 4px; }
+          .card-row { display: flex; justify-content: space-between; margin-bottom: 3px; }
+          table { width: 100%; border-collapse: collapse; font-size: 10px; }
+          th, td { border: 1px solid #bbb; padding: 5px 6px; }
+          th { background: #f0f0f0; font-weight: bold; text-transform: uppercase; }
+          tfoot td { background: #e8f5e9; font-weight: bold; border-top: 2px solid #2e7d32; }
+          @media print { @page { size: landscape; margin: 10mm; } }
+        </style>
+      </head>
+      <body>
+        <h2>LAPORAN REKAP GAJIAN & PEMBAGIAN HASIL — HIGO PONDOK</h2>
+        <div class="meta">Periode: <strong>${getPeriodLabel()}</strong> • Dicetak pada: ${new Date().toLocaleString('id-ID')}</div>
+        <div class="cards">
+          <div class="card">
+            <h4>Pembagian Laba Toko (${formatRp(payrollSummary.total_profit)})</h4>
+            <div class="card-row"><span>Asrul (70%)</span><strong>${formatRp(payrollSummary.total_asrul)}</strong></div>
+            <div class="card-row"><span>Anma (15%)</span><strong>${formatRp(payrollSummary.total_anma)}</strong></div>
+            <div class="card-row"><span>Qori (5%)</span><strong>${formatRp(payrollSummary.total_qori)}</strong></div>
+            <div class="card-row"><span>Satpam (10%)</span><strong>${formatRp(payrollSummary.total_satpam)}</strong></div>
+          </div>
+          <div class="card">
+            <h4>Ongkir Pengantaran Kurir</h4>
+            <div class="card-row"><span>Kurir 1 (Faris)</span><strong>${formatRp(payrollSummary.total_courier_1)}</strong></div>
+            <div class="card-row"><span>Kurir 2 (Feri)</span><strong>${formatRp(payrollSummary.total_courier_2)}</strong></div>
+            <div class="card-row" style="border-top:1px solid #ddd;padding-top:3px;margin-top:4px;"><span>Total Ongkir</span><strong>${formatRp(payrollSummary.total_couriers)}</strong></div>
+          </div>
+          <div class="card">
+            <h4>Kas Bersih Admin Higo</h4>
+            <div class="card-row"><span>Pendapatan Admin</span><strong>${formatRp(payrollSummary.total_admin_net)}</strong></div>
+            <div class="card-row"><span>Pengeluaran Higo</span><strong style="color:#dc2626;">-${formatRp(payrollSummary.total_expenses)}</strong></div>
+            <div class="card-row" style="border-top:1px solid #ddd;padding-top:3px;margin-top:4px;"><span>Bersih Admin</span><strong>${formatRp(payrollSummary.total_admin_balance)}</strong></div>
+          </div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>No</th>
+              <th>Tanggal</th>
+              <th>Order</th>
+              <th>Laba Toko</th>
+              <th>Asrul (70%)</th>
+              <th>Anma (15%)</th>
+              <th>Qori (5%)</th>
+              <th>Satpam (10%)</th>
+              <th>Faris</th>
+              <th>Feri</th>
+              <th>Total Ongkir</th>
+              <th>Admin</th>
+              <th>Keluar</th>
+              <th>Bersih Admin</th>
+            </tr>
+          </thead>
+          <tbody>${rowsHtml}</tbody>
+          <tfoot>
+            <tr>
+              <td colspan="2">TOTAL PERIODE</td>
+              <td style="text-align:right;">${summary.total_orders || 0}x</td>
+              <td style="text-align:right;">${formatRp(payrollSummary.total_profit)}</td>
+              <td style="text-align:right;">${formatRp(payrollSummary.total_asrul)}</td>
+              <td style="text-align:right;">${formatRp(payrollSummary.total_anma)}</td>
+              <td style="text-align:right;">${formatRp(payrollSummary.total_qori)}</td>
+              <td style="text-align:right;">${formatRp(payrollSummary.total_satpam)}</td>
+              <td style="text-align:right;">${formatRp(payrollSummary.total_courier_1)}</td>
+              <td style="text-align:right;">${formatRp(payrollSummary.total_courier_2)}</td>
+              <td style="text-align:right;">${formatRp(payrollSummary.total_couriers)}</td>
+              <td style="text-align:right;">${formatRp(payrollSummary.total_admin_net)}</td>
+              <td style="text-align:right;color:#dc2626;">-${formatRp(payrollSummary.total_expenses)}</td>
+              <td style="text-align:right;">${formatRp(payrollSummary.total_admin_balance)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </body>
+      </html>
+    `);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 300);
+  };
 
   // Buka Modal Tambah / Edit
   const handleOpenAddModal = () => {
@@ -764,6 +1023,19 @@ export default function AdminKeuangan() {
 
                   <button
                     type="button"
+                    onClick={() => setActiveSubTab('payroll')}
+                    className={`pb-2 px-2 text-xs font-black border-b-2 rounded-none cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                      activeSubTab === 'payroll'
+                        ? 'border-green-600 text-green-700 dark:text-green-400'
+                        : 'border-transparent text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'
+                    }`}
+                  >
+                    <Coins className="w-3.5 h-3.5" />
+                    <span>Rekap Gajian ({payrollDaily.length} Hari)</span>
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={() => setActiveSubTab('rekap_laba_admin_ongkir')}
                     className={`pb-2 px-2 text-xs font-black border-b-2 rounded-none cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
                       activeSubTab === 'rekap_laba_admin_ongkir'
@@ -786,6 +1058,24 @@ export default function AdminKeuangan() {
                   >
                     <Receipt className="w-3.5 h-3.5" />
                     <span>Daftar Pengeluaran Kas Higo ({expenses.length})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveSubTab('wallet_topups')}
+                    className={`pb-2 px-2 text-xs font-black border-b-2 rounded-none cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                      activeSubTab === 'wallet_topups'
+                        ? 'border-green-600 text-green-700 dark:text-green-400'
+                        : 'border-transparent text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'
+                    }`}
+                  >
+                    <Wallet className="w-3.5 h-3.5" />
+                    <span>Top Up Wallet</span>
+                    {walletPendingCount > 0 && (
+                      <span className="px-1.5 py-0.5 text-[9.5px] font-black bg-amber-500 text-white rounded-none">
+                        {walletPendingCount}
+                      </span>
+                    )}
                   </button>
                 </div>
 
@@ -1136,6 +1426,536 @@ export default function AdminKeuangan() {
                 </div>
               )}
 
+              {/* ================= SUB-TAB: REKAP GAJIAN & PEMBAGIAN HASIL PER TANGGAL ================= */}
+              {activeSubTab === 'payroll' && (
+                <div className="p-2.5 sm:p-3 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div>
+                      <h3 className="text-xs font-black uppercase tracking-wider text-gray-900 dark:text-white flex items-center gap-1.5">
+                        <Coins className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Tabel Rekapitulasi Pembagian Hasil &amp; Gajian Per Tanggal</span>
+                      </h3>
+                      <p className="text-[10px] text-gray-500 dark:text-gray-400">
+                        Pembagian laba toko (Asrul 70%, Anma 15%, Qori 5%, Satpam 10%), hak ongkir kurir, dan kas bersih admin Higo setelah dikurangi pengeluaran di periode <span className="font-bold text-gray-700 dark:text-gray-300">{getPeriodLabel()}</span>
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {payrollDaily.length > 0 && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={handleExportPayrollCsv}
+                            className="px-2.5 py-1 text-[10.5px] font-bold bg-green-600 hover:bg-green-700 text-white rounded-none cursor-pointer flex items-center gap-1"
+                          >
+                            <Download className="w-3 h-3" />
+                            <span>Export Excel (CSV)</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handlePrintPayrollPdf}
+                            className="px-2.5 py-1 text-[10.5px] font-bold bg-gray-800 hover:bg-gray-900 dark:bg-gray-700 dark:hover:bg-gray-600 text-white rounded-none cursor-pointer flex items-center gap-1"
+                          >
+                            <FileText className="w-3 h-3" />
+                            <span>Cetak Slip PDF</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (expandAllPayroll) {
+                                setExpandedPayrollDates({});
+                                setExpandAllPayroll(false);
+                              } else {
+                                const all = {};
+                                payrollDaily.forEach((d) => { all[d.date] = true; });
+                                setExpandedPayrollDates(all);
+                                setExpandAllPayroll(true);
+                              }
+                            }}
+                            className="px-2 py-1 text-[10.5px] font-bold bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-700 rounded-none cursor-pointer flex items-center gap-1"
+                          >
+                            {expandAllPayroll ? (
+                              <>
+                                <ChevronUp className="w-3 h-3 text-green-600" />
+                                <span>Tutup Semua Rincian</span>
+                              </>
+                            ) : (
+                              <>
+                                <ChevronDown className="w-3 h-3 text-gray-500" />
+                                <span>Buka Semua Rincian</span>
+                              </>
+                            )}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Ringkasan Akumulasi Periode (Summary Cards 3 Kolom) */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2 sm:gap-2.5">
+                    {/* 1. Laba Toko & Pembagian */}
+                    <div className="bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-900/40 p-2.5 rounded-none">
+                      <div className="flex items-center justify-between border-b border-emerald-200/60 dark:border-emerald-900/30 pb-1.5 mb-2">
+                        <div className="flex items-center gap-1 text-[11px] font-black uppercase text-emerald-900 dark:text-emerald-300">
+                          <Users className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Laba Toko (100%)</span>
+                        </div>
+                        <div className="text-xs font-black font-mono text-emerald-800 dark:text-emerald-300">
+                          {formatRp(payrollSummary.total_profit)}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1.5 text-[11px] font-mono">
+                        <div className="p-1.5 bg-white dark:bg-gray-900 border border-emerald-100 dark:border-emerald-900/30">
+                          <div className="text-[10px] font-sans font-bold text-gray-500 flex items-center justify-between">
+                            <span>Asrul</span>
+                            <span className="text-emerald-600 font-black">70%</span>
+                          </div>
+                          <div className="text-xs font-black text-gray-900 dark:text-white mt-0.5">
+                            {formatRp(payrollSummary.total_asrul)}
+                          </div>
+                        </div>
+                        <div className="p-1.5 bg-white dark:bg-gray-900 border border-emerald-100 dark:border-emerald-900/30">
+                          <div className="text-[10px] font-sans font-bold text-gray-500 flex items-center justify-between">
+                            <span>Anma</span>
+                            <span className="text-emerald-600 font-black">15%</span>
+                          </div>
+                          <div className="text-xs font-black text-gray-900 dark:text-white mt-0.5">
+                            {formatRp(payrollSummary.total_anma)}
+                          </div>
+                        </div>
+                        <div className="p-1.5 bg-white dark:bg-gray-900 border border-emerald-100 dark:border-emerald-900/30">
+                          <div className="text-[10px] font-sans font-bold text-gray-500 flex items-center justify-between">
+                            <span>Qori</span>
+                            <span className="text-emerald-600 font-black">5%</span>
+                          </div>
+                          <div className="text-xs font-black text-gray-900 dark:text-white mt-0.5">
+                            {formatRp(payrollSummary.total_qori)}
+                          </div>
+                        </div>
+                        <div className="p-1.5 bg-white dark:bg-gray-900 border border-emerald-100 dark:border-emerald-900/30">
+                          <div className="text-[10px] font-sans font-bold text-gray-500 flex items-center justify-between">
+                            <span>Satpam</span>
+                            <span className="text-emerald-600 font-black">10%</span>
+                          </div>
+                          <div className="text-xs font-black text-gray-900 dark:text-white mt-0.5">
+                            {formatRp(payrollSummary.total_satpam)}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 2. Ongkir Pengantaran Kurir */}
+                    <div className="bg-sky-50/50 dark:bg-sky-950/20 border border-sky-200/80 dark:border-sky-900/40 p-2.5 rounded-none">
+                      <div className="flex items-center justify-between border-b border-sky-200/60 dark:border-sky-900/30 pb-1.5 mb-2">
+                        <div className="flex items-center gap-1 text-[11px] font-black uppercase text-sky-900 dark:text-sky-300">
+                          <Bike className="w-3.5 h-3.5 text-sky-600" />
+                          <span>Ongkir Kurir</span>
+                        </div>
+                        <div className="text-xs font-black font-mono text-sky-800 dark:text-sky-300">
+                          {formatRp(payrollSummary.total_couriers)}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1.5 text-[11px] font-mono">
+                        <div className="p-1.5 bg-white dark:bg-gray-900 border border-sky-100 dark:border-sky-900/30">
+                          <div className="text-[10px] font-sans font-bold text-gray-500 flex items-center justify-between">
+                            <span>🛵 Kurir 1 (Faris)</span>
+                          </div>
+                          <div className="text-xs font-black text-sky-900 dark:text-sky-200 mt-0.5">
+                            {formatRp(payrollSummary.total_courier_1)}
+                          </div>
+                        </div>
+                        <div className="p-1.5 bg-white dark:bg-gray-900 border border-sky-100 dark:border-sky-900/30">
+                          <div className="text-[10px] font-sans font-bold text-gray-500 flex items-center justify-between">
+                            <span>🛵 Kurir 2 (Feri)</span>
+                          </div>
+                          <div className="text-xs font-black text-sky-900 dark:text-sky-200 mt-0.5">
+                            {formatRp(payrollSummary.total_courier_2)}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-1.5 text-[9.5px] text-sky-700 dark:text-sky-400 font-sans flex items-center justify-between">
+                        <span>Hak bersih pengantaran santri</span>
+                        <span className="font-bold font-mono">{summary.total_orders || 0} pengantaran</span>
+                      </div>
+                    </div>
+
+                    {/* 3. Kas Bersih Admin Higo (Setelah Pengeluaran) */}
+                    <div className="bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-900/40 p-2.5 rounded-none">
+                      <div className="flex items-center justify-between border-b border-amber-200/60 dark:border-amber-900/30 pb-1.5 mb-2">
+                        <div className="flex items-center gap-1 text-[11px] font-black uppercase text-amber-900 dark:text-amber-300">
+                          <Wallet className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Bersih Admin Higo</span>
+                        </div>
+                        <div className={`text-xs font-black font-mono ${Number(payrollSummary.total_admin_balance || 0) >= 0 ? 'text-green-700 dark:text-green-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                          {formatRp(payrollSummary.total_admin_balance)}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1.5 text-[11px] font-mono">
+                        <div className="p-1.5 bg-white dark:bg-gray-900 border border-amber-100 dark:border-amber-900/30">
+                          <div className="text-[10px] font-sans font-bold text-gray-500">
+                            Pendapatan Admin
+                          </div>
+                          <div className="text-xs font-black text-green-700 dark:text-green-400 mt-0.5">
+                            {formatRp(payrollSummary.total_admin_net)}
+                          </div>
+                        </div>
+                        <div className="p-1.5 bg-white dark:bg-gray-900 border border-amber-100 dark:border-amber-900/30">
+                          <div className="text-[10px] font-sans font-bold text-gray-500">
+                            Pengeluaran Higo
+                          </div>
+                          <div className="text-xs font-black text-rose-600 dark:text-rose-400 mt-0.5">
+                            -{formatRp(payrollSummary.total_expenses)}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-1.5 text-[9.5px] text-amber-800 dark:text-amber-400 font-sans flex items-center justify-between">
+                        <span>Rumus: Admin - Pengeluaran</span>
+                        <span className="font-bold">{expenses.length} transaksi keluar</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Tabel Rekapitulasi List Per Tanggal */}
+                  <div className="overflow-x-auto border border-gray-200 dark:border-gray-800 rounded-none">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-gray-100 dark:bg-gray-800 text-[10px] font-bold uppercase text-gray-600 dark:text-gray-300 border-b border-gray-200 dark:border-gray-700">
+                          <th rowSpan="2" className="py-2 px-2 text-center w-8 align-middle">No</th>
+                          <th rowSpan="2" className="py-2 px-2.5 align-middle">Tanggal Transaksi</th>
+                          <th rowSpan="2" className="py-2 px-2 text-right align-middle">Order</th>
+                          <th rowSpan="2" className="py-2 px-2.5 text-right bg-emerald-50/70 dark:bg-emerald-950/30 text-emerald-900 dark:text-emerald-300 border-x border-emerald-200/50 dark:border-emerald-900/40 align-middle">
+                            Laba Toko
+                          </th>
+                          <th colSpan="4" className="py-1 px-2 text-center bg-emerald-100/60 dark:bg-emerald-950/50 text-emerald-950 dark:text-emerald-200 border-r border-emerald-300 dark:border-emerald-800 font-black">
+                            PEMBAGIAN LABA TOKO
+                          </th>
+                          <th colSpan="3" className="py-1 px-2 text-center bg-sky-50 dark:bg-sky-950/40 text-sky-900 dark:text-sky-300 border-r border-sky-200 dark:border-sky-800 font-black">
+                            ONGKIR KURIR
+                          </th>
+                          <th colSpan="3" className="py-1 px-2 text-center bg-amber-50 dark:bg-amber-950/40 text-amber-950 dark:text-amber-200 border-r border-amber-200 dark:border-amber-800 font-black">
+                            KAS ADMIN HIGO
+                          </th>
+                          <th rowSpan="2" className="py-2 px-2 text-center w-24 align-middle">Rincian</th>
+                        </tr>
+                        <tr className="text-[9.5px] font-bold uppercase border-b border-gray-200 dark:border-gray-700">
+                          {/* Pembagian Laba Toko */}
+                          <th className="py-1 px-2 text-right bg-emerald-50/50 dark:bg-emerald-950/20 text-emerald-900 dark:text-emerald-300 border-l border-emerald-200/40">
+                            Asrul (70%)
+                          </th>
+                          <th className="py-1 px-2 text-right bg-emerald-50/50 dark:bg-emerald-950/20 text-emerald-900 dark:text-emerald-300 border-l border-emerald-200/40">
+                            Anma (15%)
+                          </th>
+                          <th className="py-1 px-2 text-right bg-emerald-50/50 dark:bg-emerald-950/20 text-emerald-900 dark:text-emerald-300 border-l border-emerald-200/40">
+                            Qori (5%)
+                          </th>
+                          <th className="py-1 px-2 text-right bg-emerald-50/50 dark:bg-emerald-950/20 text-emerald-900 dark:text-emerald-300 border-r border-emerald-300/60">
+                            Satpam (10%)
+                          </th>
+
+                          {/* Ongkir Kurir */}
+                          <th className="py-1 px-2 text-right bg-sky-50/70 dark:bg-sky-950/30 text-sky-900 dark:text-sky-300 border-l border-sky-200/40">
+                            🛵 Faris
+                          </th>
+                          <th className="py-1 px-2 text-right bg-sky-50/70 dark:bg-sky-950/30 text-sky-900 dark:text-sky-300 border-l border-sky-200/40">
+                            🛵 Feri
+                          </th>
+                          <th className="py-1 px-2 text-right bg-sky-50/70 dark:bg-sky-950/30 text-sky-900 dark:text-sky-300 border-r border-sky-200/40 font-black">
+                            Total Ongkir
+                          </th>
+
+                          {/* Kas Admin */}
+                          <th className="py-1 px-2 text-right bg-amber-50/60 dark:bg-amber-950/30 text-green-700 dark:text-green-400 border-l border-amber-200/40">
+                            Biaya Admin
+                          </th>
+                          <th className="py-1 px-2 text-right bg-amber-50/60 dark:bg-amber-950/30 text-rose-600 dark:text-rose-400 border-l border-amber-200/40">
+                            Pengeluaran
+                          </th>
+                          <th className="py-1 px-2 text-right bg-amber-50/60 dark:bg-amber-950/30 text-amber-950 dark:text-amber-200 border-r border-amber-200/40 font-black">
+                            Bersih Admin
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 dark:divide-gray-800 font-mono text-[11px]">
+                        {payrollDaily.length === 0 ? (
+                          <tr>
+                            <td colSpan="15" className="py-8 text-center font-sans text-gray-500">
+                              Tidak ada riwayat transaksi atau pengeluaran pada periode tanggal ini.
+                            </td>
+                          </tr>
+                        ) : (
+                          payrollDaily.map((row, idx) => {
+                            const isExpanded = !!expandedPayrollDates[row.date];
+                            const hasExpenses = Number(row.admin?.expenses_amount || 0) > 0;
+                            const netAdminBalance = Number(row.admin?.net_balance || 0);
+
+                            return (
+                              <React.Fragment key={row.date || idx}>
+                                <tr className={`hover:bg-gray-50/80 dark:hover:bg-gray-800/40 transition-colors ${isExpanded ? 'bg-emerald-50/20 dark:bg-emerald-950/20' : ''}`}>
+                                  <td className="py-2 px-2 text-center text-gray-400">{idx + 1}</td>
+                                  <td className="py-2 px-2.5 font-sans">
+                                    <div className="font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
+                                      <span>{row.date_formatted}</span>
+                                    </div>
+                                    <span className="text-[10px] text-gray-500 dark:text-gray-400 font-medium">
+                                      {row.day_name} • {row.date}
+                                    </span>
+                                  </td>
+                                  <td className="py-2 px-2 text-right font-bold text-gray-800 dark:text-gray-200">
+                                    {row.order_count}x
+                                  </td>
+
+                                  {/* Laba Toko Total */}
+                                  <td className="py-2 px-2.5 text-right font-black text-emerald-700 dark:text-emerald-400 bg-emerald-50/30 dark:bg-emerald-950/10 border-x border-emerald-200/40 dark:border-emerald-900/30">
+                                    {formatRp(row.total_profit)}
+                                  </td>
+
+                                  {/* Asrul 70% */}
+                                  <td className="py-2 px-2 text-right font-bold text-gray-900 dark:text-white bg-emerald-50/10 dark:bg-emerald-950/5 border-l border-emerald-100 dark:border-emerald-900/20">
+                                    {formatRp(row.sharing?.asrul?.amount || 0)}
+                                  </td>
+
+                                  {/* Anma 15% */}
+                                  <td className="py-2 px-2 text-right text-gray-800 dark:text-gray-200 border-l border-emerald-100 dark:border-emerald-900/20">
+                                    {formatRp(row.sharing?.anma?.amount || 0)}
+                                  </td>
+
+                                  {/* Qori 5% */}
+                                  <td className="py-2 px-2 text-right text-gray-800 dark:text-gray-200 border-l border-emerald-100 dark:border-emerald-900/20">
+                                    {formatRp(row.sharing?.qori?.amount || 0)}
+                                  </td>
+
+                                  {/* Satpam 10% */}
+                                  <td className="py-2 px-2 text-right text-gray-800 dark:text-gray-200 border-r border-emerald-300/40 dark:border-emerald-800/30">
+                                    {formatRp(row.sharing?.satpam?.amount || 0)}
+                                  </td>
+
+                                  {/* Kurir 1 (Faris) */}
+                                  <td className="py-2 px-2 text-right font-bold text-sky-800 dark:text-sky-300 bg-sky-50/20 dark:bg-sky-950/10 border-l border-sky-200/40 dark:border-sky-900/30">
+                                    <div>{formatRp(row.courier?.courier_1?.delivery_fee || 0)}</div>
+                                    <span className="text-[9.5px] font-normal text-gray-400">
+                                      {row.courier?.courier_1?.order_count || 0}x
+                                    </span>
+                                  </td>
+
+                                  {/* Kurir 2 (Feri) */}
+                                  <td className="py-2 px-2 text-right font-bold text-sky-800 dark:text-sky-300 bg-sky-50/20 dark:bg-sky-950/10 border-l border-sky-200/40 dark:border-sky-900/30">
+                                    <div>{formatRp(row.courier?.courier_2?.delivery_fee || 0)}</div>
+                                    <span className="text-[9.5px] font-normal text-gray-400">
+                                      {row.courier?.courier_2?.order_count || 0}x
+                                    </span>
+                                  </td>
+
+                                  {/* Total Ongkir Kurir */}
+                                  <td className="py-2 px-2.5 text-right font-black text-sky-900 dark:text-sky-200 bg-sky-50/30 dark:bg-sky-950/20 border-r border-sky-200/40 dark:border-sky-900/30">
+                                    {formatRp(row.courier?.total_delivery_fee || 0)}
+                                  </td>
+
+                                  {/* Pendapatan Biaya Admin */}
+                                  <td className="py-2 px-2 text-right font-bold text-green-700 dark:text-green-400 border-l border-amber-200/30">
+                                    {formatRp(row.admin?.net_admin_income || 0)}
+                                  </td>
+
+                                  {/* Pengeluaran Higo */}
+                                  <td className="py-2 px-2 text-right font-bold text-rose-600 dark:text-rose-400 border-l border-amber-200/30">
+                                    {hasExpenses ? (
+                                      <div>
+                                        <div>-{formatRp(row.admin?.expenses_amount || 0)}</div>
+                                        <span className="text-[9px] font-normal text-rose-400 dark:text-rose-300 font-sans">
+                                          {row.admin?.expenses_count || 0} pengeluaran
+                                        </span>
+                                      </div>
+                                    ) : (
+                                      <span className="text-gray-400 font-normal">Rp 0</span>
+                                    )}
+                                  </td>
+
+                                  {/* Bersih Kas Admin (Admin - Pengeluaran) */}
+                                  <td className={`py-2 px-2.5 text-right font-black border-r border-amber-200/40 ${
+                                    netAdminBalance >= 0 ? 'text-green-800 dark:text-green-300 bg-green-50/20 dark:bg-green-950/10' : 'text-rose-600 dark:text-rose-400 bg-rose-50/20 dark:bg-rose-950/10'
+                                  }`}>
+                                    {formatRp(netAdminBalance)}
+                                  </td>
+
+                                  {/* Tombol Rincian */}
+                                  <td className="py-2 px-2 text-center">
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleExpandPayrollDate(row.date)}
+                                      className="px-1.5 py-1 text-[10px] font-sans font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-none cursor-pointer flex items-center justify-center gap-1 mx-auto"
+                                      title="Lihat rincian toko &amp; pengeluaran di hari ini"
+                                    >
+                                      <span>Rincian</span>
+                                      {isExpanded ? <ChevronUp className="w-3 h-3 text-green-600" /> : <ChevronDown className="w-3 h-3 text-gray-400" />}
+                                    </button>
+                                  </td>
+                                </tr>
+
+                                {/* Rincian Accordion per Tanggal */}
+                                {isExpanded && (
+                                  <tr className="bg-gray-50/70 dark:bg-gray-800/30 border-b border-gray-200 dark:border-gray-700 font-sans">
+                                    <td colSpan="15" className="py-2.5 px-3">
+                                      <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+                                        {/* A. Kontribusi Toko */}
+                                        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-2.5 rounded-none shadow-2xs">
+                                          <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-800 pb-1 mb-2">
+                                            <span className="text-[11px] font-black uppercase text-gray-800 dark:text-gray-200 flex items-center gap-1">
+                                              <Store className="w-3.5 h-3.5 text-emerald-600" />
+                                              <span>Kontribusi Toko ({row.canteens?.length || 0})</span>
+                                            </span>
+                                            <span className="text-[10px] font-bold font-mono text-emerald-600">
+                                              Laba: {formatRp(row.total_profit)}
+                                            </span>
+                                          </div>
+                                          {(!row.canteens || row.canteens.length === 0) ? (
+                                            <div className="text-[10.5px] text-gray-400 py-1">Tidak ada transaksi toko pada tanggal ini.</div>
+                                          ) : (
+                                            <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                                              {row.canteens.map((ct) => (
+                                                <div key={ct.canteen_id} className="flex items-center justify-between text-[10.5px] border-b border-gray-100 dark:border-gray-800/60 pb-1">
+                                                  <div>
+                                                    <span className="font-bold text-gray-800 dark:text-gray-200">{ct.canteen_name}</span>
+                                                    <div className="text-[9.5px] text-gray-400 font-mono">{ct.order_count} order • Omzet {formatRp(ct.total_products)}</div>
+                                                  </div>
+                                                  <div className="text-right font-mono">
+                                                    <div className="font-bold text-emerald-700 dark:text-emerald-400">{formatRp(ct.total_profit)}</div>
+                                                    <span className="text-[9px] text-gray-400 font-sans">Modal {formatRp(ct.total_hpp)}</span>
+                                                  </div>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
+
+                                        {/* B. Pengantaran Kurir */}
+                                        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-2.5 rounded-none shadow-2xs">
+                                          <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-800 pb-1 mb-2">
+                                            <span className="text-[11px] font-black uppercase text-gray-800 dark:text-gray-200 flex items-center gap-1">
+                                              <Bike className="w-3.5 h-3.5 text-sky-600" />
+                                              <span>Pengantaran Kurir</span>
+                                            </span>
+                                            <span className="text-[10px] font-bold font-mono text-sky-700 dark:text-sky-300">
+                                              Total: {formatRp(row.courier?.total_delivery_fee || 0)}
+                                            </span>
+                                          </div>
+                                          <div className="space-y-2">
+                                            <div className="p-1.5 bg-sky-50/50 dark:bg-sky-950/20 border border-sky-100 dark:border-sky-900/30 flex items-center justify-between">
+                                              <div>
+                                                <div className="text-[11px] font-bold text-sky-950 dark:text-sky-200">🛵 Kurir 1 (Pak Faris)</div>
+                                                <div className="text-[9.5px] text-gray-500 font-mono">{row.courier?.courier_1?.order_count || 0} pesanan diantar</div>
+                                              </div>
+                                              <div className="text-right font-mono font-black text-sky-900 dark:text-sky-200 text-xs">
+                                                {formatRp(row.courier?.courier_1?.delivery_fee || 0)}
+                                              </div>
+                                            </div>
+                                            <div className="p-1.5 bg-sky-50/50 dark:bg-sky-950/20 border border-sky-100 dark:border-sky-900/30 flex items-center justify-between">
+                                              <div>
+                                                <div className="text-[11px] font-bold text-sky-950 dark:text-sky-200">🛵 Kurir 2 (Pak Feri)</div>
+                                                <div className="text-[9.5px] text-gray-500 font-mono">{row.courier?.courier_2?.order_count || 0} pesanan diantar</div>
+                                              </div>
+                                              <div className="text-right font-mono font-black text-sky-900 dark:text-sky-200 text-xs">
+                                                {formatRp(row.courier?.courier_2?.delivery_fee || 0)}
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </div>
+
+                                        {/* C. Pengeluaran Kas Higo Hari Ini */}
+                                        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-2.5 rounded-none shadow-2xs">
+                                          <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-800 pb-1 mb-2">
+                                            <span className="text-[11px] font-black uppercase text-gray-800 dark:text-gray-200 flex items-center gap-1">
+                                              <Receipt className="w-3.5 h-3.5 text-rose-600" />
+                                              <span>Pengeluaran Higo ({row.admin?.expenses_count || 0})</span>
+                                            </span>
+                                            <span className="text-[10px] font-bold font-mono text-rose-600">
+                                              Total: {formatRp(row.admin?.expenses_amount || 0)}
+                                            </span>
+                                          </div>
+                                          {(!row.admin?.expenses_items || row.admin.expenses_items.length === 0) ? (
+                                            <div className="text-[10.5px] text-gray-400 py-2">
+                                              Tidak ada pengeluaran kas Higo pada tanggal ini.
+                                            </div>
+                                          ) : (
+                                            <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                                              {row.admin.expenses_items.map((exp) => (
+                                                <div key={exp.id} className="flex items-start justify-between text-[10.5px] border-b border-gray-100 dark:border-gray-800/60 pb-1">
+                                                  <div>
+                                                    <span className="font-bold text-gray-800 dark:text-gray-200">{exp.title}</span>
+                                                    <div className="text-[9.5px] text-gray-400">
+                                                      {exp.category_label || exp.category} {exp.recipient ? `• Untuk: ${exp.recipient}` : ''}
+                                                    </div>
+                                                  </div>
+                                                  <div className="text-right font-mono font-bold text-rose-600 dark:text-rose-400 whitespace-nowrap pl-2">
+                                                    -{formatRp(exp.amount)}
+                                                  </div>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                              </React.Fragment>
+                            );
+                          })
+                        )}
+                      </tbody>
+                      {payrollDaily.length > 0 && (
+                        <tfoot className="bg-gray-100 dark:bg-gray-800/90 font-mono text-[11px] font-black border-t-2 border-gray-300 dark:border-gray-700">
+                          <tr>
+                            <td colSpan="2" className="py-2.5 px-2.5 font-sans uppercase text-gray-800 dark:text-gray-200">
+                              TOTAL PERIODE
+                            </td>
+                            <td className="py-2.5 px-2 text-right text-gray-900 dark:text-white">
+                              {summary.total_orders || 0}x
+                            </td>
+                            <td className="py-2.5 px-2.5 text-right text-emerald-700 dark:text-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/20 border-x border-emerald-300 dark:border-emerald-800">
+                              {formatRp(payrollSummary.total_profit)}
+                            </td>
+                            <td className="py-2.5 px-2 text-right text-gray-900 dark:text-white border-l border-emerald-200">
+                              {formatRp(payrollSummary.total_asrul)}
+                            </td>
+                            <td className="py-2.5 px-2 text-right text-gray-800 dark:text-gray-200 border-l border-emerald-200">
+                              {formatRp(payrollSummary.total_anma)}
+                            </td>
+                            <td className="py-2.5 px-2 text-right text-gray-800 dark:text-gray-200 border-l border-emerald-200">
+                              {formatRp(payrollSummary.total_qori)}
+                            </td>
+                            <td className="py-2.5 px-2 text-right text-gray-800 dark:text-gray-200 border-r border-emerald-300">
+                              {formatRp(payrollSummary.total_satpam)}
+                            </td>
+                            <td className="py-2.5 px-2 text-right text-sky-800 dark:text-sky-300 border-l border-sky-300">
+                              {formatRp(payrollSummary.total_courier_1)}
+                            </td>
+                            <td className="py-2.5 px-2 text-right text-sky-800 dark:text-sky-300 border-l border-sky-300">
+                              {formatRp(payrollSummary.total_courier_2)}
+                            </td>
+                            <td className="py-2.5 px-2.5 text-right text-sky-900 dark:text-sky-200 bg-sky-50/50 dark:bg-sky-950/20 border-r border-sky-300">
+                              {formatRp(payrollSummary.total_couriers)}
+                            </td>
+                            <td className="py-2.5 px-2 text-right text-green-700 dark:text-green-400 border-l border-amber-300">
+                              {formatRp(payrollSummary.total_admin_net)}
+                            </td>
+                            <td className="py-2.5 px-2 text-right text-rose-600 dark:text-rose-400 border-l border-amber-300">
+                              -{formatRp(payrollSummary.total_expenses)}
+                            </td>
+                            <td className={`py-2.5 px-2.5 text-right border-r border-amber-300 ${
+                              Number(payrollSummary.total_admin_balance || 0) >= 0 ? 'text-green-800 dark:text-green-300 bg-green-50/30' : 'text-rose-600 dark:text-rose-400 bg-rose-50/30'
+                            }`}>
+                              {formatRp(payrollSummary.total_admin_balance)}
+                            </td>
+                            <td className="py-2.5 px-2 text-center text-[10px] font-sans text-gray-400">
+                              -
+                            </td>
+                          </tr>
+                        </tfoot>
+                      )}
+                    </table>
+                  </div>
+                </div>
+              )}
+
               {/* ================= SUB-TAB 1: DAFTAR & KELOLA PENGELUARAN HIGO ================= */}
               {activeSubTab === 'expenses' && (
                 <div className="p-2.5 sm:p-3 space-y-3">
@@ -1467,6 +2287,172 @@ export default function AdminKeuangan() {
                       </table>
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* ================= SUB-TAB 3: MANAJEMEN TOP-UP HIGO WALLET ================= */}
+              {activeSubTab === 'wallet_topups' && (
+                <div className="p-2.5 sm:p-3 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div>
+                      <h3 className="text-xs font-black uppercase tracking-wider text-gray-900 dark:text-white flex items-center gap-1.5">
+                        <Wallet className="w-3.5 h-3.5 text-green-600" />
+                        <span>Persetujuan Top Up Saldo Higo Wallet</span>
+                      </h3>
+                      <p className="text-[10px] text-gray-500 dark:text-gray-400">
+                        Total seluruh saldo aktif dompet santri saat ini: <strong className="font-mono text-green-700 dark:text-green-400">{formatRp(totalWalletBalance)}</strong>
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {[
+                        { id: 'pending', label: 'Menunggu' },
+                        { id: 'completed', label: 'Disetujui' },
+                        { id: 'rejected', label: 'Ditolak' },
+                        { id: 'all', label: 'Semua' },
+                      ].map((st) => (
+                        <button
+                          key={st.id}
+                          type="button"
+                          onClick={() => setWalletStatusFilter(st.id)}
+                          className={`px-2 py-1 text-[10.5px] font-bold border rounded-none cursor-pointer ${
+                            walletStatusFilter === st.id
+                              ? 'bg-green-600 text-white border-green-600'
+                              : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-700'
+                          }`}
+                        >
+                          {st.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {isLoadingWallet ? (
+                    <div className="py-8 text-center text-xs text-gray-500">Memuat data pengajuan top-up...</div>
+                  ) : (
+                    <div className="overflow-x-auto border border-gray-200 dark:border-gray-800 rounded-none">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="bg-gray-100 dark:bg-gray-800 text-[10px] font-bold uppercase text-gray-600 dark:text-gray-300 border-b border-gray-200 dark:border-gray-700">
+                            <th className="py-2 px-2.5">Tanggal</th>
+                            <th className="py-2 px-2.5">Wali / Santri</th>
+                            <th className="py-2 px-2.5">Keterangan</th>
+                            <th className="py-2 px-2.5 text-right">Nominal</th>
+                            <th className="py-2 px-2.5 text-center">Bukti</th>
+                            <th className="py-2 px-2.5 text-center">Status</th>
+                            <th className="py-2 px-2.5 text-right">Aksi</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 dark:divide-gray-800 text-[11px]">
+                          {walletTransactions.length === 0 ? (
+                            <tr>
+                              <td colSpan="7" className="py-8 text-center text-gray-500">
+                                Tidak ada data transaksi wallet pada filter ini.
+                              </td>
+                            </tr>
+                          ) : (
+                            walletTransactions.map((tx) => (
+                              <tr key={tx.id} className="hover:bg-gray-50/70 dark:hover:bg-gray-800/40">
+                                <td className="py-2 px-2.5 font-mono text-[10px] text-gray-500 whitespace-nowrap">
+                                  {tx.created_at_formatted}
+                                </td>
+                                <td className="py-2 px-2.5">
+                                  <div className="font-bold text-gray-900 dark:text-white">{tx.user?.santri_name || tx.user?.name || '-'}</div>
+                                  <div className="text-[10px] text-gray-500">Wali: {tx.user?.name} • {tx.user?.santri_room || '-'}</div>
+                                </td>
+                                <td className="py-2 px-2.5 text-gray-700 dark:text-gray-300">
+                                  <div>{tx.description}</div>
+                                  {tx.admin_notes && (
+                                    <div className="text-[10px] text-rose-600">Catatan: {tx.admin_notes}</div>
+                                  )}
+                                </td>
+                                <td className="py-2 px-2.5 text-right font-mono font-black text-green-700 dark:text-green-400">
+                                  {formatRp(tx.amount)}
+                                </td>
+                                <td className="py-2 px-2.5 text-center">
+                                  {tx.proof_image_url ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => setPreviewWalletProof(tx)}
+                                      className="px-2 py-0.5 text-[10px] font-bold bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-none cursor-pointer inline-flex items-center gap-1"
+                                    >
+                                      <Eye className="w-3 h-3" />
+                                      <span>Lihat</span>
+                                    </button>
+                                  ) : (
+                                    <span className="text-gray-400">-</span>
+                                  )}
+                                </td>
+                                <td className="py-2 px-2.5 text-center">
+                                  <span
+                                    className={`px-1.5 py-0.5 text-[10px] font-bold uppercase rounded-none border ${
+                                      tx.status === 'completed'
+                                        ? 'bg-green-50 text-green-700 border-green-300'
+                                        : tx.status === 'rejected'
+                                          ? 'bg-red-50 text-red-700 border-red-300'
+                                          : 'bg-amber-50 text-amber-700 border-amber-300'
+                                    }`}
+                                  >
+                                    {tx.status === 'completed' ? 'Lunas' : tx.status === 'rejected' ? 'Ditolak' : 'Menunggu'}
+                                  </span>
+                                </td>
+                                <td className="py-2 px-2.5 text-right whitespace-nowrap">
+                                  {tx.status === 'pending' && tx.type === 'topup' ? (
+                                    <div className="inline-flex items-center gap-1">
+                                      <button
+                                        type="button"
+                                        disabled={approveTopupMutation.isPending || rejectTopupMutation.isPending}
+                                        onClick={() => approveTopupMutation.mutate(tx.id)}
+                                        className="px-2 py-1 text-[10px] font-black bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white rounded-none cursor-pointer"
+                                      >
+                                        Setujui
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={approveTopupMutation.isPending || rejectTopupMutation.isPending}
+                                        onClick={() => rejectTopupMutation.mutate({ id: tx.id, admin_notes: 'Bukti transfer tidak sesuai / ditolak Admin.' })}
+                                        className="px-2 py-1 text-[10px] font-black bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-none cursor-pointer"
+                                      >
+                                        Tolak
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <span className="text-[10px] text-gray-400">{tx.approver_name || '-'}</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {previewWalletProof &&
+                    createPortal(
+                      <div className="fixed inset-0 z-[120] bg-black/80 flex items-center justify-center p-3">
+                        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-none w-full max-w-md overflow-hidden">
+                          <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                            <div>
+                              <h4 className="text-xs font-bold text-gray-900 dark:text-white">
+                                Bukti Top Up • {previewWalletProof.user?.santri_name || previewWalletProof.user?.name}
+                              </h4>
+                              <p className="text-[10px] font-mono text-gray-500">{formatRp(previewWalletProof.amount)}</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setPreviewWalletProof(null)}
+                              className="p-1 text-gray-500 hover:text-gray-900 border border-gray-300 rounded-none cursor-pointer"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                          <div className="p-3 bg-gray-950 flex justify-center max-h-[75vh] overflow-auto">
+                            <AppImage src={previewWalletProof.proof_image_url} alt="Bukti Top Up" className="max-w-full max-h-[70vh] object-contain" />
+                          </div>
+                        </div>
+                      </div>,
+                      document.body
+                    )}
                 </div>
               )}
             </div>

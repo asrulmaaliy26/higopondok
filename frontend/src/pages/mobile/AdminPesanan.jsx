@@ -1864,6 +1864,11 @@ export default function AdminPesanan() {
                               📍 {santriRoom || '-'}
                             </span>
                           </div>
+                          {group.user?.santri_dietary_notes && (
+                            <div className="mt-1 px-2 py-0.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-[10px] font-bold text-amber-900 dark:text-amber-200">
+                              ⚠️ Pantangan Santri: {group.user.santri_dietary_notes}
+                            </div>
+                          )}
                           <div className="flex items-center justify-between text-[10px] text-gray-500 dark:text-gray-400 pt-0.5 flex-wrap gap-1">
                             <div className="flex items-center gap-1.5 flex-wrap min-w-0">
                               <span className="truncate">Wali: {waliName}</span>

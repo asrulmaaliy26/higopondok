@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, Link } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ShoppingCart, Trash2, Plus, Minus, Store, ChevronRight, ChevronLeft, MapPin, AlertCircle, LogIn, X, Ticket, Check, Sparkles, Search, ChevronDown, User, Phone, Home, GraduationCap, Loader2 } from 'lucide-react';
+import { ShoppingCart, Trash2, Plus, Minus, Store, ChevronRight, ChevronLeft, MapPin, AlertCircle, LogIn, X, Ticket, Check, Sparkles, Search, ChevronDown, User, Phone, Home, GraduationCap, Loader2, Wallet, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../lib/axios';
 import { getStorageUrl } from '../../lib/axios';
@@ -24,6 +24,19 @@ export default function Keranjang() {
   const { cart, addItem, removeItem, incrementItem, clearCanteen, clearAll, updateItemNote } = useCartStore();
 
   const [orderFor, setOrderFor] = useState(user?.is_teacher ? 'guru' : 'santri');
+  const [paymentMethod, setPaymentMethod] = useState('manual'); // 'manual' | 'wallet'
+
+  const { data: walletInfo } = useQuery({
+    queryKey: ['my_wallet'],
+    queryFn: async () => {
+      const res = await api.get('/wallet');
+      return res.data;
+    },
+    enabled: !!token && !!user,
+  });
+  const walletBalance = Number(walletInfo?.balance ?? user?.balance ?? 0);
+  const todaySpent = Number(walletInfo?.today_spent ?? 0);
+  const dailyLimit = Number(user?.santri_daily_limit ?? walletInfo?.santri_daily_limit ?? 0);
   const deliveryLocation = React.useMemo(() => {
     if (orderFor === 'guru') {
       return `Ruang Guru / Kantor ${user?.teacher_unit || 'Yayasan'}`;
@@ -344,6 +357,7 @@ export default function Keranjang() {
         order_for: orderFor,
         voucher_id: selectedVoucher ? selectedVoucher.id : null,
         order_notes: orderNotes.trim() || null,
+        payment_method: paymentMethod,
         canteens: canteenSummaries.map(({ canteen, itemList }) => ({
           canteen_id: canteen.id,
           order_notes: orderNotes.trim() || null,
@@ -376,6 +390,7 @@ export default function Keranjang() {
 
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       queryClient.invalidateQueries({ queryKey: ['user_orders'] });
+      queryClient.invalidateQueries({ queryKey: ['my_wallet'] });
       toast.success(res.data?.message || 'Pesanan berhasil dibuat!');
       navigate({ to: '/dashboard/pembayaran' });
     } catch (err) {
@@ -932,6 +947,83 @@ export default function Keranjang() {
             </div>
           </div>
         </div>
+
+        {/* Peringatan Pantangan Santri & Batas Limit Harian */}
+        {token && user && (user?.santri_dietary_notes || (dailyLimit > 0 && (todaySpent + grandTotal) > dailyLimit)) && (
+          <div className="space-y-2">
+            {user?.santri_dietary_notes && (
+              <div className="p-2.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-none flex items-start gap-2 text-xs text-amber-900 dark:text-amber-200">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-black uppercase text-[10px] block">Pengingat Pantangan Santri:</span>
+                  <span>{user.santri_dietary_notes}</span>
+                </div>
+              </div>
+            )}
+            {dailyLimit > 0 && (todaySpent + grandTotal) > dailyLimit && (
+              <div className="p-2.5 bg-red-50 dark:bg-red-950/30 border border-red-300 dark:border-red-800 rounded-none flex items-start gap-2 text-xs text-red-900 dark:text-red-200">
+                <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-black uppercase text-[10px] block">Melebihi Batas Limit Harian Santri!</span>
+                  <span>
+                    Limit harian Anda <strong className="font-mono">Rp {dailyLimit.toLocaleString('id-ID')}</strong>, terpakai hari ini <strong className="font-mono">Rp {todaySpent.toLocaleString('id-ID')}</strong>.
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Pilihan Metode Pembayaran (Manual Transfer vs Higo Wallet) */}
+        {token && user && (
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-none p-3 space-y-2">
+            <h4 className="text-[11px] font-black uppercase tracking-wider text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+              <Wallet className="w-3.5 h-3.5 text-green-600" />
+              <span>Pilih Metode Pembayaran</span>
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setPaymentMethod('manual')}
+                className={`p-2.5 text-left border rounded-none cursor-pointer transition-colors ${
+                  paymentMethod === 'manual'
+                    ? 'border-green-600 bg-green-50/70 dark:bg-green-950/30'
+                    : 'border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/40'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-gray-900 dark:text-white">Transfer / Bukti Manual</span>
+                  {paymentMethod === 'manual' && <Check className="w-3.5 h-3.5 text-green-600" />}
+                </div>
+                <p className="text-[10px] text-gray-500 mt-0.5">Upload bukti transfer setelah checkout</p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (walletBalance < grandTotal) {
+                    toast.error('Saldo Higo Wallet tidak mencukupi. Silakan Top Up di Profil.');
+                    return;
+                  }
+                  setPaymentMethod('wallet');
+                }}
+                className={`p-2.5 text-left border rounded-none cursor-pointer transition-colors ${
+                  paymentMethod === 'wallet'
+                    ? 'border-green-600 bg-green-50/70 dark:bg-green-950/30'
+                    : 'border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/40'
+                } ${walletBalance < grandTotal ? 'opacity-65' : ''}`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-gray-900 dark:text-white">Saldo Higo Wallet</span>
+                  {paymentMethod === 'wallet' && <Check className="w-3.5 h-3.5 text-green-600" />}
+                </div>
+                <p className="text-[10px] font-mono text-green-700 dark:text-green-400 mt-0.5 font-bold">
+                  Saldo: Rp {walletBalance.toLocaleString('id-ID')} {walletBalance < grandTotal ? '(Kurang)' : '• Langsung Lunas'}
+                </p>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Fixed bottom checkout button */}

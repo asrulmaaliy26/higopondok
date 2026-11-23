@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { ArrowLeft, Edit2, ShieldCheck, PlusCircle, CreditCard, Users, Bookmark, Activity, Ticket, Shield, LogOut, ChevronRight, ChevronDown, Store, Camera, Save, X, Plus, BookOpen, Calculator, Coins, Smartphone, MapPin, GraduationCap, Search, Check } from 'lucide-react';
+import { ArrowLeft, Edit2, ShieldCheck, PlusCircle, CreditCard, Users, Bookmark, Activity, Ticket, Shield, LogOut, ChevronRight, ChevronDown, Store, Camera, Save, X, Plus, BookOpen, Calculator, Coins, Smartphone, MapPin, GraduationCap, Search, Check, Wallet, AlertTriangle } from 'lucide-react';
 import { ROLES, getUserRole, isAdminLevel } from '../../config/roles';
 import { useAuthStore } from '../../store/authStore';
 import { usePwaStore } from '../../store/pwaStore';
@@ -64,6 +64,8 @@ export default function Profile() {
     santri_room: user?.santri_room || '',
     santri_class: user?.santri_class || '',
     santri_level: user?.santri_level || '',
+    santri_dietary_notes: user?.santri_dietary_notes || '',
+    santri_daily_limit: user?.santri_daily_limit || '',
     is_teacher: !!user?.is_teacher,
     niy: user?.niy || '',
     teacher_unit: user?.teacher_unit || ''
@@ -80,6 +82,8 @@ export default function Profile() {
         santri_room: user?.santri_room || '',
         santri_class: user?.santri_class || '',
         santri_level: user?.santri_level || '',
+        santri_dietary_notes: user?.santri_dietary_notes || '',
+        santri_daily_limit: user?.santri_daily_limit || '',
         is_teacher: !!user?.is_teacher,
         niy: user?.niy || '',
         teacher_unit: user?.teacher_unit || ''
@@ -156,6 +160,46 @@ export default function Profile() {
     });
   }, [userData.santri_level, userData.santri_class, filterGender, santriSearch]);
 
+  // Higo Wallet States & Queries
+  const [showWalletModal, setShowWalletModal] = useState(false);
+  const [topupAmount, setTopupAmount] = useState('50000');
+  const [topupNotes, setTopupNotes] = useState('');
+  const [topupProofFile, setTopupProofFile] = useState(null);
+
+  const { data: walletInfo } = useQuery({
+    queryKey: ['my_wallet'],
+    queryFn: async () => {
+      const res = await api.get('/wallet');
+      return res.data;
+    },
+    enabled: !!user,
+  });
+
+  const topupWalletMutation = useMutation({
+    mutationFn: async () => {
+      const fd = new FormData();
+      fd.append('amount', topupAmount);
+      fd.append('notes', topupNotes);
+      if (topupProofFile) {
+        const compressed = await compressImageFile(topupProofFile, { maxSizeMB: 1, maxWidthOrHeight: 1200 });
+        fd.append('proof_image', compressed);
+      }
+      const res = await api.post('/wallet/topup', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      return res.data;
+    },
+    onSuccess: (data) => {
+      toast.success(data.message || 'Pengajuan top-up dikirim!');
+      setTopupNotes('');
+      setTopupProofFile(null);
+      queryClient.invalidateQueries({ queryKey: ['my_wallet'] });
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.message || 'Gagal mengajukan top-up');
+    },
+  });
+
   // Fetch multiple canteens
   const { data: canteens = [], isLoading: isLoadingCanteens } = useQuery({
     queryKey: ['my_canteens_list'],
@@ -201,6 +245,8 @@ export default function Profile() {
     if (userData.santri_room !== user?.santri_room) formData.append('santri_room', userData.santri_room);
     if (userData.santri_class !== user?.santri_class) formData.append('santri_class', userData.santri_class);
     if (userData.santri_level !== user?.santri_level) formData.append('santri_level', userData.santri_level);
+    if ((userData.santri_dietary_notes || '') !== (user?.santri_dietary_notes || '')) formData.append('santri_dietary_notes', userData.santri_dietary_notes || '');
+    if (String(userData.santri_daily_limit || 0) !== String(user?.santri_daily_limit || 0)) formData.append('santri_daily_limit', userData.santri_daily_limit || 0);
     if (isAdmin) {
       if (Boolean(userData.is_teacher) !== Boolean(user?.is_teacher)) formData.append('is_teacher', userData.is_teacher ? '1' : '0');
       if ((userData.niy || '') !== (user?.niy || '')) formData.append('niy', userData.niy || '');
@@ -487,6 +533,52 @@ export default function Profile() {
             </div>
           )}
 
+        </div>
+
+        {/* HIGO WALLET CARD (Dompet Uang Saku Digital Santri) */}
+        <div className="bg-white dark:bg-gray-900 rounded-none border border-gray-200 dark:border-gray-800 shadow-2xs p-3.5 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-green-600 text-white flex items-center justify-center rounded-none">
+                <Wallet className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                  Saldo Higo Wallet
+                </p>
+                <p className="text-base font-black font-mono text-gray-900 dark:text-white">
+                  {formatRupiah(walletInfo?.balance ?? user?.balance ?? 0)}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowWalletModal(true)}
+              className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-black rounded-none cursor-pointer flex items-center gap-1"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Top Up / Riwayat</span>
+            </button>
+          </div>
+
+          {(Number(user?.santri_daily_limit || 0) > 0 || user?.santri_dietary_notes) && (
+            <div className="pt-2 border-t border-gray-100 dark:border-gray-800 space-y-1 text-[11px]">
+              {Number(user?.santri_daily_limit || 0) > 0 && (
+                <div className="flex items-center justify-between text-gray-600 dark:text-gray-300">
+                  <span>Jajan Hari Ini / Limit Harian:</span>
+                  <span className="font-mono font-bold text-gray-900 dark:text-white">
+                    {formatRupiah(walletInfo?.today_spent || 0)} / {formatRupiah(user.santri_daily_limit)}
+                  </span>
+                </div>
+              )}
+              {user?.santri_dietary_notes && (
+                <div className="flex items-start gap-1.5 text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-2 py-1">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-600" />
+                  <span><strong>Pantangan:</strong> {user.santri_dietary_notes}</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Banner Jika Kantin Belum Memiliki Toko */}
@@ -1365,6 +1457,37 @@ export default function Profile() {
                   </div>
                   <p className="text-[10px] text-gray-400 mt-1">Nomor ini digunakan toko & kurir untuk mengonfirmasi pesanan Anda.</p>
                 </div>
+
+                <div className="pt-2 border-t border-gray-100 dark:border-gray-800 space-y-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      Pantangan / Alergi Santri (Opsional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Contoh: Jangan diberi es batu, alergi kacang/pedas"
+                      value={userData.santri_dietary_notes || ''}
+                      onChange={e => setUserData({ ...userData, santri_dietary_notes: e.target.value })}
+                      className="w-full rounded-none border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white p-2.5 text-sm focus:ring-2 focus:ring-green-500 outline-none"
+                    />
+                    <p className="text-[10px] text-gray-400 mt-1">Akan muncul sebagai peringatan ke Kantin, Kurir, dan AI Chat saat memesan.</p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      Batas Limit Jajan Harian (Rp) (0 = Tanpa Batas)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1000"
+                      placeholder="0"
+                      value={userData.santri_daily_limit || ''}
+                      onChange={e => setUserData({ ...userData, santri_daily_limit: e.target.value })}
+                      className="w-full rounded-none border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white p-2.5 text-sm font-mono focus:ring-2 focus:ring-green-500 outline-none"
+                    />
+                    <p className="text-[10px] text-gray-400 mt-1">Sistem akan otomatis menjaga agar total belanja harian santri tidak melebihi batas ini.</p>
+                  </div>
+                </div>
               </div>
 
               <div className="pt-6 mt-2 flex gap-3">
@@ -1381,6 +1504,123 @@ export default function Profile() {
         document.body
       )}
       {/* Modal Alur Kerja */}
+      {showWalletModal && createPortal(
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-3 bg-black/70 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-none shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col my-auto">
+            <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800">
+              <div className="flex items-center gap-2">
+                <Wallet className="w-4 h-4 text-green-600" />
+                <h3 className="text-sm font-black uppercase text-gray-900 dark:text-white">Higo Wallet Santri</h3>
+              </div>
+              <button onClick={() => setShowWalletModal(false)} className="p-1 text-gray-500 hover:text-gray-900 border border-gray-300 dark:border-gray-700 rounded-none cursor-pointer">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-3.5 space-y-4">
+              <div className="p-3 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800">
+                <div className="text-[10px] font-bold uppercase text-green-700 dark:text-green-400">Saldo Tersedia</div>
+                <div className="text-xl font-black font-mono text-green-900 dark:text-white">{formatRupiah(walletInfo?.balance ?? 0)}</div>
+              </div>
+
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!topupProofFile) {
+                    toast.error('Mohon unggah bukti transfer top-up.');
+                    return;
+                  }
+                  topupWalletMutation.mutate();
+                }}
+                className="space-y-2.5 border border-gray-200 dark:border-gray-800 p-3"
+              >
+                <h4 className="text-xs font-black uppercase text-gray-800 dark:text-gray-200">Ajukan Top Up Saldo</h4>
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-600 dark:text-gray-400 mb-1">Nominal Top Up (Rp)</label>
+                  <div className="flex gap-1.5 mb-1.5 flex-wrap">
+                    {[25000, 50000, 100000, 200000].map(preset => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setTopupAmount(String(preset))}
+                        className={`px-2 py-1 text-[10px] font-mono font-bold border rounded-none cursor-pointer ${
+                          topupAmount === String(preset)
+                            ? 'bg-green-600 text-white border-green-600'
+                            : 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-700'
+                        }`}
+                      >
+                        {formatRupiah(preset)}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    type="number"
+                    min="5000"
+                    required
+                    value={topupAmount}
+                    onChange={e => setTopupAmount(e.target.value)}
+                    className="w-full p-2 text-sm font-mono border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-600 dark:text-gray-400 mb-1">Upload Bukti Transfer</label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    required
+                    onChange={e => setTopupProofFile(e.target.files?.[0] || null)}
+                    className="w-full text-xs text-gray-600 dark:text-gray-300"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-600 dark:text-gray-400 mb-1">Catatan (Opsional)</label>
+                  <input
+                    type="text"
+                    placeholder="Misal: Transfer BCA a.n. Budi"
+                    value={topupNotes}
+                    onChange={e => setTopupNotes(e.target.value)}
+                    className="w-full p-2 text-xs border border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-none"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={topupWalletMutation.isPending}
+                  className="w-full py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-xs font-black rounded-none cursor-pointer"
+                >
+                  {topupWalletMutation.isPending ? 'Mengirim...' : 'Kirim Pengajuan Top Up'}
+                </button>
+              </form>
+
+              <div className="space-y-2">
+                <h4 className="text-xs font-black uppercase text-gray-800 dark:text-gray-200">Riwayat Transaksi Wallet</h4>
+                {(walletInfo?.transactions?.data || []).length === 0 ? (
+                  <p className="text-xs text-gray-400">Belum ada riwayat transaksi wallet.</p>
+                ) : (
+                  <div className="divide-y divide-gray-200 dark:divide-gray-800 border border-gray-200 dark:border-gray-800">
+                    {(walletInfo?.transactions?.data || []).map(tx => (
+                      <div key={tx.id} className="p-2 flex items-center justify-between text-xs">
+                        <div>
+                          <div className="font-bold text-gray-800 dark:text-gray-200">{tx.description}</div>
+                          <div className="text-[10px] text-gray-400 font-mono">
+                            {tx.created_at_formatted} •{' '}
+                            <span className={tx.status === 'completed' ? 'text-green-600' : tx.status === 'rejected' ? 'text-red-600' : 'text-amber-600'}>
+                              {tx.status === 'completed' ? 'Berhasil' : tx.status === 'rejected' ? 'Ditolak' : 'Menunggu Verifikasi'}
+                            </span>
+                          </div>
+                        </div>
+                        <div className={`font-mono font-black ${tx.type === 'topup' || tx.type === 'refund' ? 'text-green-600' : 'text-rose-600'}`}>
+                          {tx.type === 'topup' || tx.type === 'refund' ? '+' : '-'}{formatRupiah(tx.amount)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
       {showWorkflowModal && createPortal(
         <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in overflow-y-auto">
           <div className="bg-white dark:bg-gray-900 rounded-none shadow-xl w-full max-w-md max-h-[85vh] flex flex-col my-auto">

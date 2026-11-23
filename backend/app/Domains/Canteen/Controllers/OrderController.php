@@ -9,7 +9,9 @@ use App\Domains\Canteen\OrderItem;
 use App\Domains\Canteen\Canteen;
 use App\Domains\Canteen\Product;
 use App\Domains\Auth\User;
+use App\Domains\Auth\WalletTransaction;
 use App\Domains\Admin\ActivityLog;
+use App\Domains\Canteen\Services\WhatsAppNotificationService;
 use Illuminate\Support\Facades\DB;
 
 class OrderController extends Controller
@@ -419,10 +421,61 @@ class OrderController extends Controller
                 $createdOrders[] = $order->load(['canteen', 'items.product', 'voucher']);
             }
 
+            // Cek Batas Limit Belanja Harian Santri (jika diaktifkan oleh wali)
+            $dailyLimit = (float) ($user->santri_daily_limit ?? 0);
+            if ($dailyLimit > 0) {
+                $todayDateStr = now('Asia/Jakarta')->toDateString();
+                $alreadySpentToday = (float) Order::where('user_id', $user->id)
+                    ->whereDate('created_at', $todayDateStr)
+                    ->whereNotIn('status', ['cancelled'])
+                    ->where('checkout_id', '!=', $checkoutId)
+                    ->sum('total_price');
+                if (($alreadySpentToday + $grandTotal) > $dailyLimit) {
+                    $sisaLimit = max(0, $dailyLimit - $alreadySpentToday);
+                    throw new \Exception("Melebihi batas jajan harian santri (Limit: Rp " . number_format($dailyLimit, 0, ',', '.') . ", Sisa hari ini: Rp " . number_format($sisaLimit, 0, ',', '.') . ").");
+                }
+            }
+
+            // Jika memilih pembayaran langsung via Higo Wallet
+            if ($request->input('payment_method') === 'wallet' && $grandTotal > 0) {
+                $lockedUser = User::where('id', $user->id)->lockForUpdate()->firstOrFail();
+                if ((float) ($lockedUser->balance ?? 0) < $grandTotal) {
+                    throw new \Exception("Saldo Higo Wallet tidak mencukupi (Saldo: Rp " . number_format((float) $lockedUser->balance, 0, ',', '.') . ", Total: Rp " . number_format($grandTotal, 0, ',', '.') . ").");
+                }
+                $before = (float) $lockedUser->balance;
+                $after = $before - $grandTotal;
+                $lockedUser->balance = $after;
+                $lockedUser->save();
+
+                WalletTransaction::create([
+                    'user_id' => $lockedUser->id,
+                    'type' => 'payment',
+                    'amount' => $grandTotal,
+                    'balance_before' => $before,
+                    'balance_after' => $after,
+                    'status' => 'completed',
+                    'order_id' => $createdOrders[0]->id ?? null,
+                    'description' => "Pembayaran Pesanan Checkout {$checkoutId}",
+                ]);
+
+                Order::where('checkout_id', $checkoutId)->update([
+                    'payment_status' => 'paid',
+                ]);
+                foreach ($createdOrders as $co) {
+                    $co->payment_status = 'paid';
+                }
+            }
+
             DB::commit();
 
+            if (!empty($createdOrders)) {
+                WhatsAppNotificationService::notifyOrderCreated($createdOrders[0], $checkoutId, $grandTotal);
+            }
+
             return response()->json([
-                'message' => 'Pesanan berhasil dibuat untuk semua toko dalam 1 checkout!',
+                'message' => $request->input('payment_method') === 'wallet'
+                    ? 'Pesanan berhasil dibuat & langsung lunas via Saldo Higo Wallet!'
+                    : 'Pesanan berhasil dibuat untuk semua toko dalam 1 checkout!',
                 'checkout_id' => $checkoutId,
                 'grand_total' => $grandTotal,
                 'orders' => $createdOrders
@@ -510,7 +563,7 @@ class OrderController extends Controller
                 'updated_at',
             ])
             ->with([
-                'user:id,name,santri_name,santri_room,santri_class,santri_level,phone,is_teacher,niy,teacher_unit',
+                'user:id,name,santri_name,santri_room,santri_class,santri_level,santri_dietary_notes,santri_daily_limit,phone,is_teacher,niy,teacher_unit',
                 'items:id,order_id,product_id,quantity,price,subtotal,notes',
                 'items.product:id,name,price,discount_price,hpp,image',
                 'courier:id,name,phone',
@@ -834,6 +887,12 @@ class OrderController extends Controller
             $order->courier_id = $order->courier_id;
             $order->save();
 
+            if ($request->status === 'delivering' && $prevStatus !== 'delivering') {
+                WhatsAppNotificationService::notifyOrderDelivering($order->load(['user', 'courier']));
+            } elseif ($request->status === 'completed' && $prevStatus !== 'completed') {
+                WhatsAppNotificationService::notifyOrderCompleted($order->load(['user', 'courier']));
+            }
+
             return response()->json([
                 'message' => "Status pesanan berhasil diperbarui{$dateMsg}!",
                 'order' => $order->load(['canteen.couriers:users.id,users.name', 'user', 'items.product', 'courier'])
@@ -1081,7 +1140,7 @@ class OrderController extends Controller
         $allStores = $request->boolean('all_stores') || $request->query('all_stores') === '1';
 
         // Hanya muat relasi yang benar-benar dipakai di UI kurir
-        $query = Order::with(['canteen:id,name,category,whatsapp_number', 'user:id,name,santri_name,santri_room,santri_class,santri_level,phone,niy,teacher_unit,is_teacher', 'items.product:id,name,price,hpp,category,image', 'courier:id,name,phone'])
+        $query = Order::with(['canteen:id,name,category,whatsapp_number', 'user:id,name,santri_name,santri_room,santri_class,santri_level,santri_dietary_notes,phone,niy,teacher_unit,is_teacher', 'items.product:id,name,price,hpp,category,image', 'courier:id,name,phone'])
             ->orderByRaw("CASE 
                 WHEN status = 'processing' THEN 1 
                 WHEN status = 'pending' THEN 2 
@@ -1441,6 +1500,7 @@ class OrderController extends Controller
             }
             
             $order->dispatchCompletedNotifications();
+            WhatsAppNotificationService::notifyOrderCompleted($order->load(['user', 'courier']));
             
             return response()->json(['message' => 'Pesanan berhasil diselesaikan', 'order' => $order->load(['canteen', 'user', 'items.product', 'courier'])]);
         });
@@ -2213,5 +2273,104 @@ class OrderController extends Controller
             'message' => 'Catatan pesanan khusus berhasil diparsing menjadi checklist',
             'custom_items' => $customItems,
         ]);
+    }
+
+    /**
+     * Bayar satu pesanan menggunakan Saldo Higo Wallet
+     */
+    public function payWithWallet(Request $request, $id)
+    {
+        return DB::transaction(function () use ($request, $id) {
+            $user = User::where('id', $request->user()->id)->lockForUpdate()->firstOrFail();
+            $order = Order::where('id', $id)->where('user_id', $user->id)->lockForUpdate()->firstOrFail();
+
+            if ($order->payment_status === 'paid') {
+                return response()->json(['message' => 'Pesanan ini sudah lunas.'], 422);
+            }
+            if ($order->status === 'cancelled') {
+                return response()->json(['message' => 'Pesanan yang dibatalkan tidak dapat dibayar.'], 422);
+            }
+
+            $total = (float) $order->total_price;
+            if ((float) ($user->balance ?? 0) < $total) {
+                return response()->json([
+                    'message' => 'Saldo Higo Wallet tidak mencukupi. Silakan Top Up terlebih dahulu.',
+                ], 422);
+            }
+
+            $before = (float) $user->balance;
+            $after = $before - $total;
+            $user->balance = $after;
+            $user->save();
+
+            $order->update(['payment_status' => 'paid']);
+
+            WalletTransaction::create([
+                'user_id' => $user->id,
+                'type' => 'payment',
+                'amount' => $total,
+                'balance_before' => $before,
+                'balance_after' => $after,
+                'status' => 'completed',
+                'order_id' => $order->id,
+                'description' => "Pembayaran Pesanan #{$order->id}",
+            ]);
+
+            return response()->json([
+                'message' => 'Pembayaran menggunakan Higo Wallet berhasil! Pesanan kini berstatus Lunas.',
+                'balance' => $after,
+                'order' => $order->fresh(['canteen', 'items.product', 'courier']),
+            ]);
+        });
+    }
+
+    /**
+     * Bayar seluruh pesanan dalam 1 checkout_id menggunakan Saldo Higo Wallet
+     */
+    public function payCheckoutWithWallet(Request $request, $checkoutId)
+    {
+        return DB::transaction(function () use ($request, $checkoutId) {
+            $user = User::where('id', $request->user()->id)->lockForUpdate()->firstOrFail();
+            $orders = Order::where('checkout_id', $checkoutId)
+                ->where('user_id', $user->id)
+                ->where('status', '!=', 'cancelled')
+                ->where('payment_status', '!=', 'paid')
+                ->lockForUpdate()
+                ->get();
+
+            if ($orders->isEmpty()) {
+                return response()->json(['message' => 'Tidak ada tagihan yang perlu dibayar untuk checkout ini.'], 422);
+            }
+
+            $total = (float) $orders->sum('total_price');
+            if ((float) ($user->balance ?? 0) < $total) {
+                return response()->json([
+                    'message' => 'Saldo Higo Wallet tidak mencukupi. Silakan Top Up terlebih dahulu.',
+                ], 422);
+            }
+
+            $before = (float) $user->balance;
+            $after = $before - $total;
+            $user->balance = $after;
+            $user->save();
+
+            Order::whereIn('id', $orders->pluck('id'))->update(['payment_status' => 'paid']);
+
+            WalletTransaction::create([
+                'user_id' => $user->id,
+                'type' => 'payment',
+                'amount' => $total,
+                'balance_before' => $before,
+                'balance_after' => $after,
+                'status' => 'completed',
+                'order_id' => $orders->first()->id,
+                'description' => "Pembayaran Wadah Checkout {$checkoutId}",
+            ]);
+
+            return response()->json([
+                'message' => 'Seluruh tagihan dalam wadah ini berhasil dibayar menggunakan Higo Wallet!',
+                'balance' => $after,
+            ]);
+        });
     }
 }
